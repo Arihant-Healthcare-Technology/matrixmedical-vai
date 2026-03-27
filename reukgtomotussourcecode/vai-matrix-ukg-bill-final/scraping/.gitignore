@@ -1,0 +1,17 @@
+# Dependencies
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Output
+output/
+*.json
+*.csv
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,32 @@
+# Comando curl para actualizar usuario en BILL - marcar como retired (inactivo)
+# Reemplaza {apiToken} con tu token real
+
+# ============================================
+# Actualizar retired a true
+# ============================================
+curl -X PATCH \
+  "https://gateway.stage.bill.com/connect/v3/spend/users/usr_b7m8dukr2949v6cg8b5rnupd3c" \
+  -H "apiToken: {apiToken}" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "retired": true
+  }'
+
+# ============================================
+# Para producción, usa:
+# https://gateway.bill.com/connect/v3/spend/users/usr_b7m8dukr2949v6cg8b5rnupd3c
+# ============================================
+
+# ============================================
+# Para reactivar (marcar como activo):
+# ============================================
+curl -X PATCH \
+  "https://gateway.stage.bill.com/connect/v3/spend/users/usr_b7m8dukr2949v6cg8b5rnupd3c" \
+  -H "apiToken: {apiToken}" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "retired": false
+  }'
+

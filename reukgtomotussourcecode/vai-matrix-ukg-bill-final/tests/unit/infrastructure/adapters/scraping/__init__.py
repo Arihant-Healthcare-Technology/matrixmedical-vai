@@ -1,0 +1,1 @@
+"""Scraping adapter unit tests."""

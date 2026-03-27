@@ -1,0 +1,202 @@
+# BILL.com UI Selectors Configuration
+# Version: 1.0.0
+# Last Updated: 2026-03-24
+#
+# This file contains all CSS/XPath selectors used for BILL.com UI automation.
+# Organized by page/component for maintainability.
+
+# Timeouts (in milliseconds)
+timeouts:
+  default: 60000
+  short: 3000
+  medium: 10000
+  long: 30000
+  page_load: 5000
+
+# Viewport settings
+viewport:
+  width: 1920
+  height: 1080
+
+# Login Page Selectors
+login:
+  # Input fields
+  email_input:
+    - "input#email"
+    - "input[name='email']"
+    - "input[type='email']"
+
+  password_input:
+    - "input#password"
+    - "input[name='password']"
+    - "input[type='password']"
+
+  # Submit button (in priority order)
+  submit_button:
+    - "button[type='submit']"
+    - "button[name='login']"
+    - "input[type='submit']"
+    - "[data-testid*='login']"
+    - "[data-testid*='submit']"
+    - "button:has-text('Log in')"
+    - "button:has-text('Login')"
+    - "button:has-text('Sign in')"
+
+  # Error messages
+  error_message:
+    - "[data-testid*='error']"
+    - ".error-message"
+    - "[class*='error']"
+
+# Company Selection Page
+company_selection:
+  # Company list container
+  company_list:
+    - "[data-testid*='company-list']"
+    - ".company-list"
+    - "table"
+
+  # Company row/cell (use with company name)
+  company_cell:
+    - "div[data-testid*='Cell-name']"
+    - "div[class*='Cell-name']"
+
+  # XPath template for company by name (use format with company_name)
+  company_by_name_xpath: "//div[contains(text(), '{company_name}')]"
+
+# Modal/Popup Selectors
+popup:
+  # Close button selectors (in priority order)
+  close_button:
+    - "button:has(svg[data-testid='Icon-svg-Close'])"
+    - "svg[data-testid='Icon-svg-Close']"
+    - "button[class*='Modal-close']"
+    - "button[class*='close-button']"
+    - "svg[class*='Close']"
+    - "svg[class*='close']"
+    - "button[aria-label*='close' i]"
+    - "button[aria-label*='Close' i]"
+    - "button[aria-label*='dismiss' i]"
+    - "[data-testid*='close']"
+    - "[data-testid*='dismiss']"
+    - "button.close"
+    - ".close-button"
+    - "[class*='close-button']"
+    - "button:has-text('Close')"
+    - "button:has-text('X')"
+
+  # Modal container
+  modal_container:
+    - "[data-testid*='modal']"
+    - "[class*='Modal']"
+    - "[role='dialog']"
+
+# People Page Selectors
+people:
+  # Navigation
+  page_url_pattern: "/companies/{company_id}/people"
+
+  # Import People button
+  import_button:
+    - "button[data-testid*='import-people']"
+    - "button[data-testid*='Import']"
+    - "button[aria-label*='import' i]"
+    - "button[aria-label*='Import' i]"
+    - "button:has-text('Import People')"
+    - "button:has-text('Import')"
+
+  # People table
+  people_table:
+    - "[data-testid*='people-table']"
+    - "table"
+
+  # Search input
+  search_input:
+    - "input[data-testid*='search']"
+    - "input[placeholder*='Search']"
+
+# Import Page Selectors
+import:
+  # File upload
+  file_input:
+    - "input#file-input[type='file']"
+    - "input[type='file']"
+
+  file_input_label:
+    - "label[data-testid='DragAndDropTarget-FileInput-label']"
+    - "label[for='file-input']"
+
+  # Import submit button
+  submit_button:
+    - "button[data-testid='ImportPeople-import-people-BasicButton']"
+    - "button[data-testid*='import-people']"
+    - "button[data-testid*='ImportPeople']"
+    - "button:has-text('Import people')"
+    - "button:has-text('Import')"
+
+  # Preview table
+  preview_table:
+    - "[data-testid*='preview']"
+    - ".import-preview"
+    - "table"
+
+  # Error/warning messages
+  error_row:
+    - "[data-testid*='error']"
+    - ".error-row"
+    - "tr.error"
+
+  warning_row:
+    - "[data-testid*='warning']"
+    - ".warning-row"
+    - "tr.warning"
+
+  # Success message
+  success_message:
+    - "[data-testid*='success']"
+    - ".success-message"
+    - "[class*='success']"
+
+# User Details Page (for role/manager assignment)
+user_details:
+  # Role dropdown
+  role_dropdown:
+    - "select[data-testid*='role']"
+    - "[data-testid*='role-select']"
+    - "select[name='role']"
+
+  # Manager dropdown
+  manager_dropdown:
+    - "select[data-testid*='manager']"
+    - "[data-testid*='manager-select']"
+    - "input[placeholder*='Select manager']"
+
+  # Save button
+  save_button:
+    - "button[data-testid*='save']"
+    - "button:has-text('Save')"
+    - "button[type='submit']"
+
+# Common UI Elements
+common:
+  # Loading indicators
+  loading:
+    - "[data-testid*='loading']"
+    - ".loading"
+    - "[class*='spinner']"
+    - "[class*='Spinner']"
+
+  # Toast notifications
+  toast:
+    - "[data-testid*='toast']"
+    - ".toast"
+    - "[class*='Toast']"
+
+  # Buttons
+  primary_button:
+    - "button[class*='primary']"
+    - "button[data-testid*='primary']"
+
+  secondary_button:
+    - "button[class*='secondary']"
+    - "button[data-testid*='secondary']"

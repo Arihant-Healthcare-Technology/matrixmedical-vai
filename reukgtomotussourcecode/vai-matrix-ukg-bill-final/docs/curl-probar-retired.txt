@@ -1,0 +1,56 @@
+# Comandos curl para probar diferentes formas de actualizar retired
+# Reemplaza {apiToken} con tu token real
+
+USER_UUID="usr_b7m8dukr2949v6cg8b5rnupd3c"
+
+# ============================================
+# 1. Obtener usuario actual (ver todos los campos)
+# ============================================
+curl -X GET \
+  "https://gateway.stage.bill.com/connect/v3/spend/users/${USER_UUID}" \
+  -H "apiToken: {apiToken}" \
+  -H "Accept: application/json" | jq '.'
+
+# ============================================
+# 2. PATCH solo con retired (ya probado - no funciona)
+# ============================================
+curl -X PATCH \
+  "https://gateway.stage.bill.com/connect/v3/spend/users/${USER_UUID}" \
+  -H "apiToken: {apiToken}" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "retired": true
+  }'
+
+# ============================================
+# 3. PUT con todos los campos (full update)
+# ============================================
+# Primero obtener valores actuales, luego hacer PUT completo
+curl -X PUT \
+  "https://gateway.stage.bill.com/connect/v3/spend/users/${USER_UUID}" \
+  -H "apiToken: {apiToken}" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "email": "test2@example.com",
+    "firstName": "test2",
+    "lastName": "example",
+    "role": "MEMBER",
+    "retired": true
+  }'
+
+# ============================================
+# 4. Verificar DELETE endpoint (si existe)
+# ============================================
+curl -X DELETE \
+  "https://gateway.stage.bill.com/connect/v3/spend/users/${USER_UUID}" \
+  -H "apiToken: {apiToken}" \
+  -H "Accept: application/json"
+
+# ============================================
+# NOTA: Si ninguna funciona, el campo 'retired' puede no ser
+# actualizable vía API. En ese caso, usar mapeo local para
+# guardar el estado de terminationDate.
+# ============================================
+

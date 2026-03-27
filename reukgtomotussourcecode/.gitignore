@@ -1,0 +1,102 @@
+# UKG Integration Suite - Git Ignore Configuration
+# SOW Requirement 9.6 - Security Checklist
+
+# Environment files (CRITICAL - contains secrets)
+.env
+*.env
+.env.*
+!.env.example
+!.env.template
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# Data and output files
+data/
+*.csv
+*.json
+!package.json
+!package-lock.json
+*.log
+*.tmp
+*.bak
+
+# Reports (may contain PII)
+reports/
+*.html
+!templates/*.html
+
+# Credentials and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+*secret*
+*token*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+*.tar
+docker-compose.override.yml
+
+# Coverage and testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+nosetests.xml
+coverage.xml
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Playwright/Browser automation
+playwright-report/
+test-results/
+screenshots/
+
+# Local development
+.local/
+*.local

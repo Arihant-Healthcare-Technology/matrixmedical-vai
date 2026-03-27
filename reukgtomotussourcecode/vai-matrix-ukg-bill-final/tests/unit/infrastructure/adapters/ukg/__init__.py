@@ -1,0 +1,1 @@
+"""UKG adapter unit tests."""

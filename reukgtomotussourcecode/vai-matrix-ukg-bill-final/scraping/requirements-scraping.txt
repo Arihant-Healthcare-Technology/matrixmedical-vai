@@ -1,0 +1,8 @@
+# Dependencies for scraping with Playwright
+playwright>=1.40.0
+python-dotenv>=1.0.0
+
+# Note: After installing, run:
+#   playwright install chromium
+# Or to install all browsers:
+#   playwright install
