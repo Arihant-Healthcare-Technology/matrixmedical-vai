@@ -68,6 +68,42 @@ This integration automates the synchronization of employee data from UKG Pro (Ul
                     └──────────────────────┘
 ```
 
+### Self-Contained Repository
+
+This repository is **fully self-contained** with all dependencies included locally for easy Azure deployment:
+
+```
+vai-matrix-ukg-motus-final/
+├── common/                   # Shared utility modules (local copy)
+│   ├── __init__.py
+│   ├── secrets_manager.py    # SOW 2.6 - Secrets management
+│   ├── rate_limiter.py       # SOW 5.1, 5.2 - Rate limiting
+│   ├── correlation.py        # SOW 7.2 - Correlation IDs & logging
+│   ├── notifications.py      # SOW 4.6 - Email notifications
+│   ├── metrics.py            # SOW 4.7, 7.3 - Metrics collection
+│   ├── report_generator.py   # SOW 4.7, 7.3, 10.4 - Report generation
+│   ├── redaction.py          # SOW 7.4, 7.5, 9.4 - PII redaction
+│   └── validators.py         # SOW 3.6, 3.7 - Input validation
+├── build-motus-driver.py     # Build Motus driver payload from UKG
+├── upsert-motus-driver.py    # Create/update Motus driver
+├── run-motus-batch.py        # Batch orchestrator
+├── motus-get-token.py        # JWT token management
+├── Dockerfile                # Container definition
+└── requirements.txt          # Python dependencies
+```
+
+All scripts import from the local `./common/` package:
+
+```python
+from common import (
+    get_secrets_manager,
+    get_rate_limiter,
+    generate_correlation_id,
+    redact_pii,
+    # ... other imports
+)
+```
+
 ### Core Components
 
 | Component | File | Description |
@@ -76,7 +112,6 @@ This integration automates the synchronization of employee data from UKG Pro (Ul
 | API Upserter | `upsert-motus-driver.py` | Handles JWT auth, POST/PUT logic, retries |
 | Batch Orchestrator | `run-motus-batch.py` | Parallel processing, state filtering, progress tracking |
 | Token Manager | `motus-get-token.py` | JWT authentication and token refresh |
-| Notifications | `notify.py` | Alert notifications for batch completion |
 
 ---
 

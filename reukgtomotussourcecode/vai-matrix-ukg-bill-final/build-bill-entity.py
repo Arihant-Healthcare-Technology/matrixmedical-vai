@@ -28,9 +28,6 @@ from typing import Any, Dict, Optional, List
 from pathlib import Path
 import requests
 
-# Add parent directory to path for common module imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from common import (
     get_secrets_manager,
     validate_email,

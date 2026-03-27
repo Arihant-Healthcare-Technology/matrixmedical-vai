@@ -21,9 +21,6 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-# Add parent directory to path for common module imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from common import (
     # Secrets
     get_secrets_manager,

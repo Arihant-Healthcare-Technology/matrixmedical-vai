@@ -5,7 +5,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# copy code and deps
+# copy common module (self-contained)
+COPY common/ /app/common/
+
+# copy main application files
 COPY build-travelperk-user.py upsert-travelperk-user.py run-travelperk-batch.py /app/
 COPY requirements.txt /app/
 

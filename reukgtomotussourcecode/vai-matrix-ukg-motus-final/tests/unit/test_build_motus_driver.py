@@ -536,3 +536,312 @@ class TestBuildMotusDriver:
         job_code = next((v for v in custom_vars if v["name"] == "Job Code"), None)
         assert job_code is not None
         assert job_code["value"] == "4154"
+
+
+class TestGetSupervisorDetails:
+    """Tests for get_supervisor_details function."""
+
+    @responses.activate
+    def test_supervisor_found(self, monkeypatch, sample_supervisor_details):
+        """Test successful supervisor fetch."""
+        builder = get_builder_module(monkeypatch)
+
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/supervisor-details.*"),
+            json=[sample_supervisor_details],
+            status=200,
+        )
+
+        result = builder.get_supervisor_details("EMP001")
+        assert result["supervisorFirstName"] == "Jane"
+        assert result["supervisorLastName"] == "Manager"
+
+    @responses.activate
+    def test_supervisor_not_found_empty_response(self, monkeypatch):
+        """Test supervisor not found returns empty dict."""
+        builder = get_builder_module(monkeypatch)
+
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/supervisor-details.*"),
+            json=[],
+            status=200,
+        )
+
+        result = builder.get_supervisor_details("EMP001")
+        assert result == {}
+
+    @responses.activate
+    def test_supervisor_api_error_returns_empty(self, monkeypatch):
+        """Test supervisor API error handling returns empty dict."""
+        builder = get_builder_module(monkeypatch)
+
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/supervisor-details.*"),
+            json={"error": "Not found"},
+            status=404,
+        )
+
+        result = builder.get_supervisor_details("EMP001")
+        assert result == {}
+
+    @responses.activate
+    def test_supervisor_with_missing_fields(self, monkeypatch):
+        """Test supervisor with missing name fields."""
+        builder = get_builder_module(monkeypatch)
+
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/supervisor-details.*"),
+            json=[{"employeeId": "EMP001"}],  # No name fields
+            status=200,
+        )
+
+        result = builder.get_supervisor_details("EMP001")
+        assert result.get("supervisorFirstName") is None
+        assert result.get("supervisorLastName") is None
+
+    @responses.activate
+    def test_supervisor_name_formatting(
+        self, monkeypatch,
+        sample_ukg_employment_details,
+        sample_ukg_employee_employment_details,
+        sample_ukg_person_details,
+        sample_location,
+        sample_supervisor_details
+    ):
+        """Test supervisor name is properly formatted in driver payload."""
+        builder = get_builder_module(monkeypatch)
+
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/employment-details.*"),
+            json=[sample_ukg_employment_details],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/employee-employment-details.*"),
+            json=[sample_ukg_employee_employment_details],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/person-details.*"),
+            json=[sample_ukg_person_details],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/supervisor-details.*"),
+            json=[sample_supervisor_details],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/locations.*"),
+            json=sample_location,
+            status=200,
+        )
+
+        result = builder.build_motus_driver("12345", "J9A6Y")
+
+        # Check Manager Name in custom variables
+        custom_vars = result["customVariables"]
+        manager_name = next((v for v in custom_vars if v["name"] == "Manager Name"), None)
+        assert manager_name is not None
+        assert manager_name["value"] == "Jane Manager"
+
+
+class TestDetermineEmploymentStatus:
+    """Tests for determine_employment_status function."""
+
+    def test_active_employee(self, monkeypatch):
+        """Test active employee with no leave or termination."""
+        builder = get_builder_module(monkeypatch)
+
+        employment = {
+            "employeeStatusCode": "A",
+            "leaveStartDate": None,
+            "leaveEndDate": None,
+            "terminationDate": None,
+        }
+
+        result = builder.determine_employment_status(employment)
+        assert result == "A"
+
+    def test_leave_of_absence(self, monkeypatch):
+        """Test employee on leave (leaveStartDate set, no leaveEndDate)."""
+        builder = get_builder_module(monkeypatch)
+
+        employment = {
+            "employeeStatusCode": "A",
+            "leaveStartDate": "2024-01-01",
+            "leaveEndDate": None,
+            "terminationDate": None,
+        }
+
+        result = builder.determine_employment_status(employment)
+        assert result == "Leave"
+
+    def test_returned_from_leave(self, monkeypatch):
+        """Test employee returned from leave (both dates set)."""
+        builder = get_builder_module(monkeypatch)
+
+        employment = {
+            "employeeStatusCode": "A",
+            "leaveStartDate": "2024-01-01",
+            "leaveEndDate": "2024-02-01",
+            "terminationDate": None,
+        }
+
+        result = builder.determine_employment_status(employment)
+        # Should return status code since leave is complete
+        assert result == "A"
+
+    def test_terminated_employee(self, monkeypatch):
+        """Test terminated employee."""
+        builder = get_builder_module(monkeypatch)
+
+        employment = {
+            "employeeStatusCode": "T",
+            "leaveStartDate": None,
+            "leaveEndDate": None,
+            "terminationDate": "2024-03-01",
+        }
+
+        result = builder.determine_employment_status(employment)
+        assert result == "Terminated"
+
+    def test_status_code_fallback(self, monkeypatch):
+        """Test status code fallback when no special conditions."""
+        builder = get_builder_module(monkeypatch)
+
+        employment = {
+            "employeeStatusCode": "I",  # Inactive
+            "leaveStartDate": None,
+            "leaveEndDate": None,
+            "terminationDate": None,
+        }
+
+        result = builder.determine_employment_status(employment)
+        assert result == "I"
+
+    def test_empty_employment_details(self, monkeypatch):
+        """Test empty employment details defaults to Active."""
+        builder = get_builder_module(monkeypatch)
+
+        employment = {}
+
+        result = builder.determine_employment_status(employment)
+        assert result == "Active"
+
+    def test_leave_and_termination(self, monkeypatch):
+        """Test edge case: leave start and termination both set."""
+        builder = get_builder_module(monkeypatch)
+
+        employment = {
+            "employeeStatusCode": "A",
+            "leaveStartDate": "2024-01-01",
+            "leaveEndDate": None,
+            "terminationDate": "2024-02-01",
+        }
+
+        # Leave takes priority when leaveEndDate is not set
+        result = builder.determine_employment_status(employment)
+        assert result == "Leave"
+
+    def test_default_to_active(self, monkeypatch):
+        """Test default to Active when no status code."""
+        builder = get_builder_module(monkeypatch)
+
+        employment = {
+            "employeeStatusCode": "",
+            "leaveStartDate": None,
+            "leaveEndDate": None,
+            "terminationDate": None,
+        }
+
+        result = builder.determine_employment_status(employment)
+        assert result == "Active"
+
+
+class TestMainCLI:
+    """Tests for main() CLI function."""
+
+    def test_missing_arguments(self, monkeypatch):
+        """Test main() with missing arguments exits with usage message."""
+        builder = get_builder_module(monkeypatch)
+
+        # Simulate missing arguments
+        monkeypatch.setattr(sys, 'argv', ['build-motus-driver.py'])
+
+        with pytest.raises(SystemExit) as exc_info:
+            builder.main()
+        assert exc_info.value.code == 1
+
+    @responses.activate
+    def test_main_with_valid_arguments(
+        self, monkeypatch, tmp_path,
+        sample_ukg_employment_details,
+        sample_ukg_employee_employment_details,
+        sample_ukg_person_details,
+        sample_location,
+        sample_supervisor_details
+    ):
+        """Test main() with valid arguments creates output file."""
+        builder = get_builder_module(monkeypatch)
+
+        # Set up mock responses
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/employment-details.*"),
+            json=[sample_ukg_employment_details],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/employee-employment-details.*"),
+            json=[sample_ukg_employee_employment_details],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/person-details.*"),
+            json=[sample_ukg_person_details],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            re.compile(r".*/personnel/v1/supervisor-details.*"),
+            json=[sample_supervisor_details],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/locations.*"),
+            json=sample_location,
+            status=200,
+        )
+
+        # Create data directory and set arguments
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, 'argv', ['build-motus-driver.py', '12345', 'J9A6Y'])
+
+        # Run main
+        builder.main()
+
+        # Verify output file was created
+        output_file = data_dir / "motus_driver_12345.json"
+        assert output_file.exists()
+
+        import json
+        with open(output_file) as f:
+            data = json.load(f)
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["clientEmployeeId1"] == "12345"

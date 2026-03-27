@@ -24,13 +24,17 @@ from datetime import datetime
 from typing import Any, Dict, Optional, List
 import requests
 
+from common import get_secrets_manager, validate_email
+
 # ---------- config ----------
-UKG_BASE = os.getenv("UKG_BASE_URL", "https://service4.ultipro.com")
-UKG_USERNAME = os.getenv("UKG_USERNAME", "")
-UKG_PASSWORD = os.getenv("UKG_PASSWORD", "")
-UKG_BASIC_B64 = os.getenv("UKG_BASIC_B64", "")
-UKG_CUSTOMER_API_KEY = os.getenv("UKG_CUSTOMER_API_KEY", "")
-DEBUG = os.getenv("DEBUG", "0") == "1"
+_secrets = get_secrets_manager()
+
+UKG_BASE = _secrets.get_secret("UKG_BASE_URL") or "https://service4.ultipro.com"
+UKG_USERNAME = _secrets.get_secret("UKG_USERNAME") or ""
+UKG_PASSWORD = _secrets.get_secret("UKG_PASSWORD") or ""
+UKG_BASIC_B64 = _secrets.get_secret("UKG_BASIC_B64") or ""
+UKG_CUSTOMER_API_KEY = _secrets.get_secret("UKG_CUSTOMER_API_KEY") or ""
+DEBUG = (_secrets.get_secret("DEBUG") or "0") == "1"
 
 # ---------- HTTP helpers ----------
 def _get_token() -> str:

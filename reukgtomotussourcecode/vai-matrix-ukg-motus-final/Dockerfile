@@ -5,7 +5,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# copy code and deps
+# copy common module (self-contained)
+COPY common/ /app/common/
+
+# copy main application files
 COPY build-motus-driver.py upsert-motus-driver.py run-motus-batch.py motus-get-token.py /app/
 COPY requirements.txt /app/
 

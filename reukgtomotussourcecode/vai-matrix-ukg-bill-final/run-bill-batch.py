@@ -10,9 +10,6 @@ from datetime import datetime
 
 from src.infrastructure.adapters.bill.mappers import format_cost_center
 
-# Add parent directory to path for common module imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from common import (
     # Correlation IDs & Logging (SOW 7.2)
     RunContext,

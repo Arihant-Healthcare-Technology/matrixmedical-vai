@@ -5,8 +5,14 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# copy code and deps
-COPY build-bill-entity.py upsert-bill-entity.py run-bill-batch.py  /app/
+# copy common module (self-contained)
+COPY common/ /app/common/
+
+# copy main application files
+COPY build-bill-entity.py upsert-bill-entity.py run-bill-batch.py /app/
+COPY build-bill-invoice.py upsert-bill-invoice.py /app/
+COPY build-bill-vendor.py upsert-bill-vendor.py /app/
+COPY process-bill-payment.py run-ap-batch.py /app/
 COPY requirements.txt /app/
 
 RUN pip install --no-cache-dir -r requirements.txt

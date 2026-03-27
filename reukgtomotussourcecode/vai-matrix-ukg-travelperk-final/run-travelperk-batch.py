@@ -1,4 +1,4 @@
-import os, json, importlib.util, time
+import os, json, importlib.util, time, logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -6,8 +6,26 @@ import argparse
 import requests
 from dotenv import load_dotenv
 
+from common import (
+    RunContext,
+    configure_logging,
+    get_logger,
+    get_notifier,
+    ReportGenerator,
+    RedactingFilter,
+    get_secrets_manager,
+)
+
 # Load environment variables from .env file
 load_dotenv()
+
+# Initialize logging with correlation support
+configure_logging(include_module=True)
+_logger = get_logger(__name__)
+
+# Add redacting filter to all handlers
+for handler in logging.root.handlers:
+    handler.addFilter(RedactingFilter())
 
 def parse_cli():
     p = argparse.ArgumentParser(description="Run TravelPerk batch")
@@ -345,8 +363,10 @@ def build_and_upsert_users(items: List[Dict[str, Any]],
 if __name__ == "__main__":
     args = parse_cli()
 
-    # ENV fallback
-    company_id = (args.company_id or os.getenv("COMPANY_ID") or "J9A6Y").strip()
+    # ENV fallback - company_id is required
+    company_id = (args.company_id or os.getenv("COMPANY_ID", "")).strip()
+    if not company_id:
+        raise SystemExit("Error: --company-id argument or COMPANY_ID environment variable is required")
     states_env = (args.states or os.getenv("STATES", "")).strip()
     states_filter = parse_states_arg(states_env)
     

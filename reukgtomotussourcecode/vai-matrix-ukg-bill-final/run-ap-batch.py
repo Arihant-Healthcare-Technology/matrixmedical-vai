@@ -30,9 +30,6 @@ from pathlib import Path
 import argparse
 from dotenv import load_dotenv
 
-# Add parent directory to path for common module imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from common import (
     # Correlation IDs & Logging (SOW 7.2)
     RunContext,

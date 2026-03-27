@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
-import os, json, importlib.util, time
+import os, json, importlib.util, time, logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 import argparse
+
+from common import (
+    RunContext,
+    configure_logging,
+    get_logger,
+    get_notifier,
+    ReportGenerator,
+    RedactingFilter,
+    get_secrets_manager,
+)
 
 # -------- simple .env loader --------
 def load_dotenv_simple(path: str = ".env") -> None:
@@ -15,6 +25,14 @@ def load_dotenv_simple(path: str = ".env") -> None:
             os.environ.setdefault(k.strip(), v.strip())
 
 load_dotenv_simple(os.getenv("ENV_PATH", ".env"))
+
+# Initialize logging with correlation support
+configure_logging(include_module=True)
+_logger = get_logger(__name__)
+
+# Add redacting filter to all handlers
+for handler in logging.root.handlers:
+    handler.addFilter(RedactingFilter())
 
 def parse_cli():
     p = argparse.ArgumentParser(description="Run Motus batch")
@@ -62,21 +80,31 @@ def _normalize_list(data: Any) -> List[Dict[str, Any]]:
     return []
 
 # -------- Eligible Job Codes --------
-ELIGIBLE_JOB_CODES = {
-    # FAVR Program (21232)
-    "1103", "4165", "4166", "1102", "1106", "4197", "4196",
-    # CPM Program (21233)
-    "2817", "4121", "2157"
-}
+def get_eligible_job_codes() -> Set[str]:
+    """
+    Get eligible job codes from JOB_IDS environment variable.
 
-def filter_by_eligible_job_codes(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    Expected format: JOB_IDS=1103,4165,4166,1102,1106,4197,4196,2817,4121,2157
+
+    Returns:
+        Set of job codes to filter by
+
+    Raises:
+        SystemExit if JOB_IDS environment variable is not set
+    """
+    job_ids_env = os.getenv("JOB_IDS", "").strip()
+    if not job_ids_env:
+        raise SystemExit("Error: JOB_IDS environment variable is required (comma-separated list, e.g., JOB_IDS=1103,4165,4166)")
+    return {code.strip() for code in job_ids_env.split(",") if code.strip()}
+
+def filter_by_eligible_job_codes(items: List[Dict[str, Any]], eligible_job_codes: Set[str]) -> List[Dict[str, Any]]:
     """Filter employees to only those with eligible job codes."""
     eligible = []
     for item in items:
         job_code = str(item.get("primaryJobCode", "") or "").strip()
         # Also check without leading zeros
         job_code_normalized = job_code.lstrip("0")
-        if job_code in ELIGIBLE_JOB_CODES or job_code_normalized in ELIGIBLE_JOB_CODES:
+        if job_code in eligible_job_codes or job_code_normalized in eligible_job_codes:
             eligible.append(item)
         elif DEBUG:
             print(f"[DEBUG] Skipping employee {item.get('employeeNumber')} - ineligible job code: {job_code}")
@@ -119,11 +147,11 @@ def _process_employee(it: Dict[str, Any],
                       states_filter: Optional[Set[str]],
                       out_path: Path,
                       cache: Dict[str, str],
-                      default_company_id: str = "J9A6Y") -> tuple[str, str, str]:
+                      default_company_id: Optional[str] = None) -> tuple[str, str, str]:
 
     emp_number = (it.get("employeeNumber") or "").strip()
     emp_id     = (it.get("employeeID") or "").strip()
-    company_id = (it.get("companyID") or it.get("companyId") or default_company_id).strip()
+    company_id = (it.get("companyID") or it.get("companyId") or default_company_id or "").strip()
     if not emp_number or not emp_id:
         return ("", "", "skipped")
 
@@ -157,7 +185,7 @@ def _process_employee(it: Dict[str, Any],
 def build_and_save_drivers(items: List[Dict[str, Any]],
                            out_dir: str = "data/batch",
                            states_filter: Optional[Set[str]] = None,
-                           company_id: str = "J9A6Y") -> None:
+                           company_id: Optional[str] = None) -> None:
     out_path = (HERE / out_dir).resolve()
     out_path.mkdir(parents=True, exist_ok=True)
 
@@ -190,8 +218,10 @@ def build_and_save_drivers(items: List[Dict[str, Any]],
 if __name__ == "__main__":
     args = parse_cli()
 
-    # ENV fallback
-    company_id = (args.company_id or os.getenv("COMPANY_ID") or "J9A6Y").strip()
+    # ENV fallback - company_id is required
+    company_id = (args.company_id or os.getenv("COMPANY_ID", "")).strip()
+    if not company_id:
+        raise SystemExit("Error: --company-id argument or COMPANY_ID environment variable is required")
     states_env = (args.states or os.getenv("STATES", "")).strip()
     states_filter = parse_states_arg(states_env)
 
@@ -210,12 +240,16 @@ if __name__ == "__main__":
     has_jwt = bool(os.getenv("MOTUS_JWT"))
     print(f"[CFG] companyID={company_id} | states={states_env or 'ALL'} | workers={os.getenv('WORKERS','12')} | dry_run={os.getenv('DRY_RUN','0')} | probe={os.getenv('PROBE','0')} | save_local={os.getenv('SAVE_LOCAL','0')} | MOTUS_JWT={'SET' if has_jwt else 'MISSING'}")
 
+    # Get eligible job codes from environment
+    eligible_job_codes = get_eligible_job_codes()
+    print(f"[CFG] JOB_IDS (from env): {','.join(sorted(eligible_job_codes))}")
+
     # Fetch all employees from UKG
     items = get_employee_employment_details_by_company(company_id)
     print(f"[INFO] Total employees from UKG: {len(items)}")
 
     # Filter by eligible job codes
-    items = filter_by_eligible_job_codes(items)
+    items = filter_by_eligible_job_codes(items, eligible_job_codes)
     print(f"[INFO] Eligible employees (by job code): {len(items)}")
 
     build_and_save_drivers(items, out_dir, states_filter=states_filter, company_id=company_id)

@@ -18,43 +18,31 @@ import os
 import sys
 import json
 import time
-import uuid
-import re
 from typing import Any, Dict, Optional, List
 import requests
 from dotenv import load_dotenv
 
+from common import (
+    get_secrets_manager,
+    get_rate_limiter,
+    generate_correlation_id,
+    get_correlation_id,
+    set_correlation_id,
+    redact_pii,
+)
+
 # Load environment variables from .env file
 load_dotenv()
 
-TRAVELPERK_API_BASE = os.getenv("TRAVELPERK_API_BASE", "https://app.sandbox-travelperk.com")
-TRAVELPERK_API_KEY = os.getenv("TRAVELPERK_API_KEY", "")
-DEBUG = os.getenv("DEBUG", "0") == "1"
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
+_secrets = get_secrets_manager()
 
-# -------- Rate Limiting --------
-RATE_LIMIT_CALLS_PER_MINUTE = int(os.getenv("RATE_LIMIT_CALLS_PER_MINUTE", "60"))
+TRAVELPERK_API_BASE = _secrets.get_secret("TRAVELPERK_API_BASE") or "https://app.sandbox-travelperk.com"
+TRAVELPERK_API_KEY = _secrets.get_secret("TRAVELPERK_API_KEY") or ""
+DEBUG = (_secrets.get_secret("DEBUG") or "0") == "1"
+MAX_RETRIES = int(_secrets.get_secret("MAX_RETRIES") or "2")
 
-
-class RateLimiter:
-    """Simple rate limiter using token bucket algorithm."""
-
-    def __init__(self, calls_per_minute: int = 60):
-        self.calls_per_minute = calls_per_minute
-        self.interval = 60.0 / calls_per_minute
-        self.last_call = 0.0
-
-    def acquire(self) -> None:
-        """Wait if necessary to respect rate limit."""
-        now = time.time()
-        elapsed = now - self.last_call
-        if elapsed < self.interval:
-            time.sleep(self.interval - elapsed)
-        self.last_call = time.time()
-
-
-# Global rate limiter instance
-_rate_limiter = RateLimiter(RATE_LIMIT_CALLS_PER_MINUTE)
+# -------- Rate Limiting (using common module) --------
+_rate_limiter = get_rate_limiter("travelperk")
 
 
 def handle_rate_limit(resp: requests.Response) -> int:
@@ -72,53 +60,6 @@ def handle_rate_limit(resp: requests.Response) -> int:
     return 60
 
 
-# -------- Correlation ID --------
-_current_correlation_id: str = ""
-
-
-def generate_correlation_id() -> str:
-    """Generate a unique correlation ID for request tracing."""
-    return str(uuid.uuid4())
-
-
-def set_correlation_id(correlation_id: str) -> None:
-    """Set the current correlation ID for logging."""
-    global _current_correlation_id
-    _current_correlation_id = correlation_id
-
-
-def get_correlation_id() -> str:
-    """Get the current correlation ID."""
-    return _current_correlation_id
-
-
-# -------- PII Redaction --------
-REDACT_PII = os.getenv("REDACT_PII", "1") == "1"
-
-
-def redact_email(email: str) -> str:
-    """Redact email address for logging."""
-    if not email or '@' not in email:
-        return "***"
-    local, domain = email.split('@', 1)
-    if len(local) <= 2:
-        return f"***@{domain}"
-    return f"{local[:2]}***@{domain}"
-
-
-def _redact_log_message(msg: str) -> str:
-    """Redact common PII patterns from log message."""
-    if not REDACT_PII:
-        return msg
-    # Redact email addresses
-    msg = re.sub(
-        r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-        lambda m: redact_email(m.group()),
-        msg
-    )
-    return msg
-
-
 # ---------------- utils & config ----------------
 
 def headers() -> Dict[str, str]:
@@ -132,9 +73,10 @@ def headers() -> Dict[str, str]:
 
 def _log(msg: str) -> None:
     if DEBUG:
-        cid = f"[{_current_correlation_id}] " if _current_correlation_id else ""
-        msg = _redact_log_message(msg)
-        print(f"[DEBUG] {cid}{msg}")
+        cid = get_correlation_id()
+        cid_prefix = f"[{cid}] " if cid else ""
+        msg = redact_pii(msg)
+        print(f"[DEBUG] {cid_prefix}{msg}")
 
 def safe_json(resp: requests.Response):
     try:

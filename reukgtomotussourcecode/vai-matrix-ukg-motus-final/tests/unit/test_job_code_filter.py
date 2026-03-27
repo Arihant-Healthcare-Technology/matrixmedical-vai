@@ -1,33 +1,47 @@
 """
 Unit tests for job code eligibility filtering.
-Tests the ELIGIBLE_JOB_CODES and filter_by_eligible_job_codes directly.
+Tests the filter_by_eligible_job_codes logic directly.
+
+Note: Job codes are now read from JOB_IDS environment variable in production.
+These tests use a test fixture with the expected job codes.
 """
+import os
 import sys
 import pytest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# Import the constants and function directly by extracting them
-# (The batch module has side effects on import, so we define the test versions here)
-
-# Eligible job codes for Motus sync (same as in run-motus-batch.py)
-ELIGIBLE_JOB_CODES = {
+# Test job codes: FAVR + CPM programs (same as expected in production JOB_IDS env var)
+TEST_JOB_IDS = {
     # FAVR Program (21232)
     "1103", "4165", "4166", "1102", "1106", "4197", "4196",
     # CPM Program (21233)
     "2817", "4121", "2157"
 }
 
-def filter_by_eligible_job_codes(items: List[Dict[str, Any]], debug: bool = False) -> List[Dict[str, Any]]:
+
+def get_eligible_job_codes_from_env() -> Set[str]:
+    """Get eligible job codes from JOB_IDS environment variable."""
+    job_ids_env = os.getenv("JOB_IDS", "").strip()
+    if not job_ids_env:
+        raise SystemExit("Error: JOB_IDS environment variable is required")
+    return {code.strip() for code in job_ids_env.split(",") if code.strip()}
+
+
+def filter_by_eligible_job_codes(
+    items: List[Dict[str, Any]],
+    eligible_job_codes: Set[str],
+    debug: bool = False
+) -> List[Dict[str, Any]]:
     """Filter employees to only those with eligible job codes."""
     eligible = []
     for item in items:
         job_code = str(item.get("primaryJobCode", "") or "").strip()
         # Also check without leading zeros
         job_code_normalized = job_code.lstrip("0")
-        if job_code in ELIGIBLE_JOB_CODES or job_code_normalized in ELIGIBLE_JOB_CODES:
+        if job_code in eligible_job_codes or job_code_normalized in eligible_job_codes:
             eligible.append(item)
         elif debug:
             print(f"[DEBUG] Skipping employee {item.get('employeeNumber')} - ineligible job code: {job_code}")
@@ -35,31 +49,43 @@ def filter_by_eligible_job_codes(items: List[Dict[str, Any]], debug: bool = Fals
 
 
 class TestEligibleJobCodes:
-    """Tests for ELIGIBLE_JOB_CODES constant."""
+    """Tests for TEST_JOB_IDS fixture (expected job codes)."""
 
     def test_favr_job_codes_included(self):
         """Test FAVR job codes are in eligible list."""
         favr_codes = {"1103", "4165", "4166", "1102", "1106", "4197", "4196"}
 
         for code in favr_codes:
-            assert code in ELIGIBLE_JOB_CODES, f"FAVR code {code} missing"
+            assert code in TEST_JOB_IDS, f"FAVR code {code} missing"
 
     def test_cpm_job_codes_included(self):
         """Test CPM job codes are in eligible list."""
         cpm_codes = {"2817", "4121", "2157"}
 
         for code in cpm_codes:
-            assert code in ELIGIBLE_JOB_CODES, f"CPM code {code} missing"
+            assert code in TEST_JOB_IDS, f"CPM code {code} missing"
 
     def test_ineligible_codes_not_included(self):
         """Test random codes are not eligible."""
-        assert "9999" not in ELIGIBLE_JOB_CODES
-        assert "0000" not in ELIGIBLE_JOB_CODES
+        assert "9999" not in TEST_JOB_IDS
+        assert "0000" not in TEST_JOB_IDS
 
     def test_total_eligible_codes_count(self):
         """Test total count of eligible job codes."""
         # Should have 10 eligible codes total (7 FAVR + 3 CPM)
-        assert len(ELIGIBLE_JOB_CODES) == 10
+        assert len(TEST_JOB_IDS) == 10
+
+    def test_get_eligible_job_codes_from_env(self, monkeypatch):
+        """Test get_eligible_job_codes_from_env parses env var."""
+        monkeypatch.setenv("JOB_IDS", "1103,4165,2817")
+        codes = get_eligible_job_codes_from_env()
+        assert codes == {"1103", "4165", "2817"}
+
+    def test_get_eligible_job_codes_missing_env_raises(self, monkeypatch):
+        """Test get_eligible_job_codes_from_env raises if env not set."""
+        monkeypatch.delenv("JOB_IDS", raising=False)
+        with pytest.raises(SystemExit):
+            get_eligible_job_codes_from_env()
 
 
 class TestFilterByEligibleJobCodes:
@@ -73,7 +99,7 @@ class TestFilterByEligibleJobCodes:
             {"employeeNumber": "003", "primaryJobCode": "2817"},  # CPM - eligible
         ]
 
-        result = filter_by_eligible_job_codes(items)
+        result = filter_by_eligible_job_codes(items, TEST_JOB_IDS)
 
         assert len(result) == 2
         assert result[0]["employeeNumber"] == "001"
@@ -86,7 +112,7 @@ class TestFilterByEligibleJobCodes:
             {"employeeNumber": "002", "primaryJobCode": None},
         ]
 
-        result = filter_by_eligible_job_codes(items)
+        result = filter_by_eligible_job_codes(items, TEST_JOB_IDS)
 
         assert len(result) == 0
 
@@ -96,7 +122,7 @@ class TestFilterByEligibleJobCodes:
             {"employeeNumber": "001", "primaryJobCode": "01103"},  # Leading zero
         ]
 
-        result = filter_by_eligible_job_codes(items)
+        result = filter_by_eligible_job_codes(items, TEST_JOB_IDS)
 
         # Should match after stripping leading zeros
         assert len(result) == 1
@@ -108,7 +134,7 @@ class TestFilterByEligibleJobCodes:
             {"employeeNumber": "002", "primaryJobCode": "7777"},
         ]
 
-        result = filter_by_eligible_job_codes(items)
+        result = filter_by_eligible_job_codes(items, TEST_JOB_IDS)
 
         assert len(result) == 0
 
@@ -124,7 +150,7 @@ class TestFilterByEligibleJobCodes:
             }
         ]
 
-        result = filter_by_eligible_job_codes(items)
+        result = filter_by_eligible_job_codes(items, TEST_JOB_IDS)
 
         assert result[0]["firstName"] == "John"
         assert result[0]["lastName"] == "Doe"
@@ -136,13 +162,13 @@ class TestFilterByEligibleJobCodes:
             {"employeeNumber": "001"},  # No primaryJobCode
         ]
 
-        result = filter_by_eligible_job_codes(items)
+        result = filter_by_eligible_job_codes(items, TEST_JOB_IDS)
 
         assert len(result) == 0
 
     def test_handles_empty_list(self):
         """Test handles empty input list."""
-        result = filter_by_eligible_job_codes([])
+        result = filter_by_eligible_job_codes([], TEST_JOB_IDS)
 
         assert result == []
 
@@ -153,7 +179,7 @@ class TestFilterByEligibleJobCodes:
             for i, code in enumerate(["1103", "4165", "4166", "1102", "1106", "4197", "4196"])
         ]
 
-        result = filter_by_eligible_job_codes(favr_items)
+        result = filter_by_eligible_job_codes(favr_items, TEST_JOB_IDS)
 
         assert len(result) == 7
 
@@ -164,7 +190,7 @@ class TestFilterByEligibleJobCodes:
             for i, code in enumerate(["2817", "4121", "2157"])
         ]
 
-        result = filter_by_eligible_job_codes(cpm_items)
+        result = filter_by_eligible_job_codes(cpm_items, TEST_JOB_IDS)
 
         assert len(result) == 3
 
@@ -178,10 +204,23 @@ class TestFilterByEligibleJobCodes:
             {"employeeNumber": "005", "primaryJobCode": "4165"},   # FAVR - eligible
         ]
 
-        result = filter_by_eligible_job_codes(items)
+        result = filter_by_eligible_job_codes(items, TEST_JOB_IDS)
 
         assert len(result) == 3
         emp_numbers = [e["employeeNumber"] for e in result]
         assert "001" in emp_numbers
         assert "003" in emp_numbers
         assert "005" in emp_numbers
+
+    def test_custom_job_codes(self):
+        """Test filter works with custom job code set."""
+        custom_codes = {"1234", "5678"}
+        items = [
+            {"employeeNumber": "001", "primaryJobCode": "1234"},
+            {"employeeNumber": "002", "primaryJobCode": "9999"},
+        ]
+
+        result = filter_by_eligible_job_codes(items, custom_codes)
+
+        assert len(result) == 1
+        assert result[0]["employeeNumber"] == "001"

@@ -149,6 +149,18 @@ def sample_location() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def sample_supervisor_details() -> Dict[str, Any]:
+    """Sample UKG supervisor-details response."""
+    return {
+        "employeeId": "EMP001",
+        "supervisorFirstName": "Jane",
+        "supervisorLastName": "Manager",
+        "supervisorEmployeeId": "MGR001",
+        "supervisorEmployeeNumber": "99999",
+    }
+
+
+@pytest.fixture
 def mock_ukg_responses(
     sample_ukg_employment_details,
     sample_ukg_employee_employment_details,
