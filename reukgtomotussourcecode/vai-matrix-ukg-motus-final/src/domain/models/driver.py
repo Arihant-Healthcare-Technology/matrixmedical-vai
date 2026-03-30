@@ -46,10 +46,10 @@ class MotusDriver:
         postal_code: Postal/ZIP code
         phone: Primary phone number
         alternate_phone: Alternate phone number
-        start_date: Employment start date (MM/DD/YYYY)
-        end_date: Employment end date (MM/DD/YYYY)
-        leave_start_date: Leave start date (MM/DD/YYYY)
-        leave_end_date: Leave end date (MM/DD/YYYY)
+        start_date: Employment start date (YYYY-MM-DD)
+        end_date: Employment end date (YYYY-MM-DD)
+        leave_start_date: Leave start date (YYYY-MM-DD)
+        leave_end_date: Leave end date (YYYY-MM-DD)
         annual_business_miles: Estimated annual business miles
         commute_deduction_type: Commute deduction type
         commute_deduction_cap: Commute deduction cap
@@ -76,7 +76,7 @@ class MotusDriver:
     phone: Optional[str] = None
     alternate_phone: Optional[str] = None
 
-    # Dates (MM/DD/YYYY format)
+    # Dates (YYYY-MM-DD format per Motus API spec)
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     leave_start_date: Optional[str] = None
@@ -118,8 +118,8 @@ class MotusDriver:
         return phone
 
     @staticmethod
-    def _to_us_date(date_str: Optional[str]) -> str:
-        """Convert ISO date to MM/DD/YYYY format."""
+    def _to_iso_date(date_str: Optional[str]) -> str:
+        """Convert date to YYYY-MM-DD format as required by Motus API."""
         if not date_str:
             return ""
         try:
@@ -129,7 +129,7 @@ class MotusDriver:
                 dt = datetime.strptime(date_str, "%Y-%m-%d")
             except Exception:
                 return date_str
-        return dt.strftime("%m/%d/%Y")
+        return dt.strftime("%Y-%m-%d")
 
     @property
     def full_name(self) -> str:
@@ -146,13 +146,14 @@ class MotusDriver:
 
     def validate(self) -> List[str]:
         """
-        Validate driver data.
+        Validate driver data per Motus API specification.
 
         Returns:
             List of validation error messages (empty if valid)
         """
         errors = []
 
+        # Required fields per Motus API spec (driverapi.yaml)
         if not self.client_employee_id1:
             errors.append("client_employee_id1 is required")
 
@@ -169,6 +170,22 @@ class MotusDriver:
             errors.append("email is required")
         elif "@" not in self.email:
             errors.append(f"Invalid email format: {self.email}")
+
+        # Additional required fields per API spec
+        if not self.address1:
+            errors.append("address1 is required")
+
+        if not self.city:
+            errors.append("city is required")
+
+        if not self.state_province:
+            errors.append("stateProvince is required")
+
+        if not self.postal_code:
+            errors.append("postalCode is required")
+
+        if not self.start_date:
+            errors.append("startDate is required")
 
         return errors
 
@@ -330,11 +347,11 @@ class MotusDriver:
             # Important dates
             CustomVariable(
                 name="Last Hire",
-                value=cls._to_us_date(employment_details.get("lastHireDate"))
+                value=cls._to_iso_date(employment_details.get("lastHireDate"))
             ),
             CustomVariable(
                 name="Termination Date",
-                value=cls._to_us_date(employment_details.get("terminationDate"))
+                value=cls._to_iso_date(employment_details.get("terminationDate"))
             ),
 
             # Manager/supervisor
@@ -358,9 +375,9 @@ class MotusDriver:
             postal_code=person.get("addressZipCode"),
             phone=person.get("homePhone", ""),
             alternate_phone=person.get("mobilePhone", "") or "",
-            start_date=cls._to_us_date(employment_details.get("startDate")),
-            end_date=cls._to_us_date(employment_details.get("terminationDate")),
-            leave_start_date=cls._to_us_date(employment_details.get("leaveStartDate")),
-            leave_end_date=cls._to_us_date(employment_details.get("leaveEndDate")),
+            start_date=cls._to_iso_date(employment_details.get("startDate")),
+            end_date=cls._to_iso_date(employment_details.get("terminationDate")),
+            leave_start_date=cls._to_iso_date(employment_details.get("leaveStartDate")),
+            leave_end_date=cls._to_iso_date(employment_details.get("leaveEndDate")),
             custom_variables=custom_variables,
         )

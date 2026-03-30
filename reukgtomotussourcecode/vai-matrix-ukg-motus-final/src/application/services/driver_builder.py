@@ -55,6 +55,14 @@ class DriverBuilderService:
         employment_details = self.ukg_client.get_employment_details(
             employee_number, company_id
         )
+        self._log(f"Employee {employee_number}: === EMPLOYMENT DETAILS ===")
+        self._log(f"Employee {employee_number}: employment_details keys: {list(employment_details.keys())}")
+        self._log(f"Employee {employee_number}: terminationDate = {employment_details.get('terminationDate')}")
+        self._log(f"Employee {employee_number}: leaveStartDate = {employment_details.get('leaveStartDate')}")
+        self._log(f"Employee {employee_number}: leaveEndDate = {employment_details.get('leaveEndDate')}")
+        self._log(f"Employee {employee_number}: employeeStatusCode = {employment_details.get('employeeStatusCode')}")
+        self._log(f"Employee {employee_number}: startDate = {employment_details.get('startDate')}")
+        self._log(f"Employee {employee_number}: primaryJobCode = {employment_details.get('primaryJobCode')}")
         if not employment_details:
             raise EmployeeNotFoundError(
                 f"No employment details found for employeeNumber={employee_number} "
@@ -67,6 +75,10 @@ class DriverBuilderService:
         employee_employment = self.ukg_client.get_employee_employment_details(
             employee_number, company_id
         )
+        self._log(f"Employee {employee_number}: === EMPLOYEE EMPLOYMENT DETAILS ===")
+        self._log(f"Employee {employee_number}: employee_employment keys: {list(employee_employment.keys())}")
+        self._log(f"Employee {employee_number}: primaryProjectCode = {employee_employment.get('primaryProjectCode')}")
+        self._log(f"Employee {employee_number}: primaryProjectDescription = {employee_employment.get('primaryProjectDescription')}")
 
         # 3) Resolve employee ID
         employee_id = (
@@ -85,6 +97,15 @@ class DriverBuilderService:
 
         # 4) Get person details
         person = self.ukg_client.get_person_details(employee_id)
+        self._log(f"Employee {employee_number}: === PERSON DETAILS ===")
+        self._log(f"Employee {employee_number}: person keys: {list(person.keys())}")
+        self._log(f"Employee {employee_number}: firstName = {person.get('firstName')}")
+        self._log(f"Employee {employee_number}: lastName = {person.get('lastName')}")
+        self._log(f"Employee {employee_number}: emailAddress = {person.get('emailAddress')}")
+        self._log(f"Employee {employee_number}: addressLine1 = {person.get('addressLine1')}")
+        self._log(f"Employee {employee_number}: addressCity = {person.get('addressCity')}")
+        self._log(f"Employee {employee_number}: addressState = {person.get('addressState')}")
+        self._log(f"Employee {employee_number}: addressZipCode = {person.get('addressZipCode')}")
 
         # 5) Get supervisor details
         supervisor = self.ukg_client.get_supervisor_details(employee_id)
@@ -93,9 +114,18 @@ class DriverBuilderService:
             sup_first = supervisor.get("supervisorFirstName", "") or ""
             sup_last = supervisor.get("supervisorLastName", "") or ""
             supervisor_name = f"{sup_first} {sup_last}".strip()
+        self._log(f"Employee {employee_number}: === SUPERVISOR DETAILS ===")
+        self._log(f"Employee {employee_number}: supervisor keys: {list(supervisor.keys()) if supervisor else []}")
+        self._log(f"Employee {employee_number}: supervisor_name = {supervisor_name}")
 
         # 6) Determine employment status
         derived_status = determine_employment_status_from_dict(employment_details)
+        self._log(f"Employee {employee_number}: === STATUS DETERMINATION ===")
+        self._log(f"Employee {employee_number}: Input - employeeStatusCode = {employment_details.get('employeeStatusCode')}")
+        self._log(f"Employee {employee_number}: Input - leaveStartDate = {employment_details.get('leaveStartDate')}")
+        self._log(f"Employee {employee_number}: Input - leaveEndDate = {employment_details.get('leaveEndDate')}")
+        self._log(f"Employee {employee_number}: Input - terminationDate = {employment_details.get('terminationDate')}")
+        self._log(f"Employee {employee_number}: Output - derived_status = {derived_status.value}")
 
         # 7) Get location
         location: Dict[str, Any] = {}
@@ -119,7 +149,14 @@ class DriverBuilderService:
             )
 
         # 10) Build driver
-        return MotusDriver.from_ukg_data(
+        self._log(f"Employee {employee_number}: === BUILDING DRIVER ===")
+        self._log(f"Employee {employee_number}: project_code = {project_code}")
+        self._log(f"Employee {employee_number}: project_label = {project_label}")
+        self._log(f"Employee {employee_number}: program_id = {program_id}")
+        self._log(f"Employee {employee_number}: job_code = {job_code}")
+        self._log(f"Employee {employee_number}: location = {location}")
+
+        driver = MotusDriver.from_ukg_data(
             employee_number=employee_number,
             program_id=program_id,
             person=person,
@@ -130,3 +167,15 @@ class DriverBuilderService:
             project_label=project_label,
             derived_status=derived_status.value,
         )
+
+        self._log(f"Employee {employee_number}: === FINAL DRIVER PAYLOAD SUMMARY ===")
+        self._log(f"Employee {employee_number}: client_employee_id1 = {driver.client_employee_id1}")
+        self._log(f"Employee {employee_number}: program_id = {driver.program_id}")
+        self._log(f"Employee {employee_number}: start_date = {driver.start_date}")
+        self._log(f"Employee {employee_number}: end_date = {driver.end_date}")
+        self._log(f"Employee {employee_number}: leave_start_date = {driver.leave_start_date}")
+        self._log(f"Employee {employee_number}: leave_end_date = {driver.leave_end_date}")
+        for cv in driver.custom_variables:
+            self._log(f"Employee {employee_number}: CV[{cv.name}] = {cv.value}")
+
+        return driver

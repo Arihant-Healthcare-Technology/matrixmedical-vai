@@ -74,9 +74,22 @@ class UKGClient:
             data = response.json()
             if self.debug:
                 if isinstance(data, list):
-                    print(f"[DEBUG] list len={len(data)}; first keys={list(data[0].keys())[:12] if data else []}")
+                    print(f"[DEBUG] UKG Response: list len={len(data)}; first keys={list(data[0].keys()) if data else []}")
+                    if data and len(data) > 0:
+                        # Log critical fields from first item for debugging
+                        first = data[0]
+                        print(f"[DEBUG] UKG Response: First item - terminationDate={first.get('terminationDate')}")
+                        print(f"[DEBUG] UKG Response: First item - leaveStartDate={first.get('leaveStartDate')}")
+                        print(f"[DEBUG] UKG Response: First item - employeeStatusCode={first.get('employeeStatusCode')}")
+                        print(f"[DEBUG] UKG Response: First item - primaryProjectCode={first.get('primaryProjectCode')}")
+                        print(f"[DEBUG] UKG Response: First item - primaryProjectDescription={first.get('primaryProjectDescription')}")
                 elif isinstance(data, dict):
-                    print(f"[DEBUG] dict keys={list(data.keys())[:12]}")
+                    print(f"[DEBUG] UKG Response: dict keys={list(data.keys())}")
+                    print(f"[DEBUG] UKG Response: terminationDate={data.get('terminationDate')}")
+                    print(f"[DEBUG] UKG Response: leaveStartDate={data.get('leaveStartDate')}")
+                    print(f"[DEBUG] UKG Response: employeeStatusCode={data.get('employeeStatusCode')}")
+                    print(f"[DEBUG] UKG Response: primaryProjectCode={data.get('primaryProjectCode')}")
+                    print(f"[DEBUG] UKG Response: primaryProjectDescription={data.get('primaryProjectDescription')}")
             return data
         except ValueError as e:
             raise UkgApiError(f"JSON parse error from {url}: {e}", endpoint=path)
@@ -101,6 +114,8 @@ class UKGClient:
         Returns:
             Employment details dict
         """
+        if self.debug:
+            print(f"[DEBUG] UKG get_employment_details: Fetching for employeeNumber={employee_number}, companyID={company_id}")
         params = {"employeeNumber": employee_number, "companyID": company_id}
         data = self._get("/personnel/v1/employment-details", params)
 
@@ -108,11 +123,23 @@ class UKGClient:
             data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
         )
 
+        if self.debug:
+            print(f"[DEBUG] UKG get_employment_details: Total items returned: {len(items)}")
+
         for item in items:
             if str(item.get("employeeNumber")) == str(employee_number):
                 comp = item.get("companyID") or item.get("companyId")
                 if str(comp) == str(company_id):
+                    if self.debug:
+                        print(f"[DEBUG] UKG get_employment_details: MATCHED! All keys: {list(item.keys())}")
+                        print(f"[DEBUG] UKG get_employment_details: terminationDate = {item.get('terminationDate')}")
+                        print(f"[DEBUG] UKG get_employment_details: leaveStartDate = {item.get('leaveStartDate')}")
+                        print(f"[DEBUG] UKG get_employment_details: leaveEndDate = {item.get('leaveEndDate')}")
+                        print(f"[DEBUG] UKG get_employment_details: employeeStatusCode = {item.get('employeeStatusCode')}")
+                        print(f"[DEBUG] UKG get_employment_details: startDate = {item.get('startDate')}")
                     return item
+        if self.debug:
+            print(f"[DEBUG] UKG get_employment_details: NO MATCH FOUND for employeeNumber={employee_number}")
         return {}
 
     def get_employee_employment_details(
@@ -128,6 +155,8 @@ class UKGClient:
         Returns:
             Employee employment details dict
         """
+        if self.debug:
+            print(f"[DEBUG] UKG get_employee_employment_details: Fetching for employeeNumber={employee_number}, companyID={company_id}")
         params = {"employeeNumber": employee_number, "companyID": company_id}
         data = self._get("/personnel/v1/employee-employment-details", params)
 
@@ -135,11 +164,20 @@ class UKGClient:
             data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
         )
 
+        if self.debug:
+            print(f"[DEBUG] UKG get_employee_employment_details: Total items returned: {len(items)}")
+
         for item in items:
             if str(item.get("employeeNumber")) == str(employee_number):
                 comp = item.get("companyID") or item.get("companyId")
                 if str(comp) == str(company_id):
+                    if self.debug:
+                        print(f"[DEBUG] UKG get_employee_employment_details: MATCHED! All keys: {list(item.keys())}")
+                        print(f"[DEBUG] UKG get_employee_employment_details: primaryProjectCode = {item.get('primaryProjectCode')}")
+                        print(f"[DEBUG] UKG get_employee_employment_details: primaryProjectDescription = {item.get('primaryProjectDescription')}")
                     return item
+        if self.debug:
+            print(f"[DEBUG] UKG get_employee_employment_details: NO MATCH FOUND for employeeNumber={employee_number}")
         return {}
 
     def get_person_details(self, employee_id: str) -> Dict[str, Any]:
