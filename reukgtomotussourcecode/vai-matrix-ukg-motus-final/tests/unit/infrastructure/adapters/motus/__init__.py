@@ -1,0 +1,1 @@
+"""Motus adapter unit tests."""

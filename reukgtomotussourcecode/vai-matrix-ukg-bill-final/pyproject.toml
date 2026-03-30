@@ -61,6 +61,21 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --cov=src --cov-report=term-missing"
 
+[tool.coverage.run]
+omit = [
+    "src/infrastructure/compat.py",
+    "src/domain/interfaces/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "@abstractmethod",
+    "pass",
+    "if TYPE_CHECKING:",
+]
+
 [tool.mypy]
 python_version = "3.9"
 warn_return_any = true

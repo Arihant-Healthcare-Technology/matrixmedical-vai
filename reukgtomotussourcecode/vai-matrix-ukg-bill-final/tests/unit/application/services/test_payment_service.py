@@ -421,3 +421,291 @@ class TestGetPendingPayments:
 
         assert len(result) == 1
         assert result[0].status == PaymentStatus.PENDING
+
+
+class TestRateLimiter:
+    """Tests for rate limiter integration."""
+
+    def test_calls_rate_limiter(
+        self,
+        mock_payment_repo,
+        mock_invoice_repo,
+        sample_invoice,
+    ):
+        """Should call rate limiter when provided."""
+        rate_limiter = MagicMock()
+        service = PaymentService(
+            payment_repository=mock_payment_repo,
+            invoice_repository=mock_invoice_repo,
+            default_funding_account_id="DEFAULT_ACCOUNT",
+            rate_limiter=rate_limiter,
+        )
+
+        mock_payment_repo.create.return_value = Payment(
+            id="PAY001",
+            bill_id="INV001",
+            vendor_id="VND001",
+            amount=Decimal("1000.00"),
+            status=PaymentStatus.PENDING,
+            process_date=date.today(),
+        )
+
+        service.create_payment(sample_invoice)
+
+        rate_limiter.assert_called_once()
+
+
+class TestExceptionHandling:
+    """Tests for exception handling in payment service."""
+
+    def test_handles_create_exception(
+        self,
+        mock_payment_repo,
+        mock_invoice_repo,
+        sample_invoice,
+    ):
+        """Should handle exception during payment creation."""
+        service = PaymentService(
+            payment_repository=mock_payment_repo,
+            invoice_repository=mock_invoice_repo,
+            default_funding_account_id="DEFAULT_ACCOUNT",
+        )
+
+        mock_payment_repo.create.side_effect = Exception("Payment API error")
+
+        result = service.create_payment(sample_invoice)
+
+        assert result.success is False
+        assert result.action == "error"
+
+
+class TestValidation:
+    """Tests for payment validation."""
+
+    def test_error_missing_invoice_id(
+        self,
+        payment_service,
+    ):
+        """Should return error when invoice has no ID."""
+        invoice = Invoice(
+            id=None,  # Missing ID
+            invoice_number="INV-2024-001",
+            vendor_id="VND001",
+            invoice_date=date(2024, 3, 1),
+            due_date=date(2024, 4, 1),
+            status=BillStatus.APPROVED,
+            line_items=[
+                InvoiceLineItem(description="Service", amount=Decimal("1000.00")),
+            ],
+            total_amount=Decimal("1000.00"),
+        )
+
+        result = payment_service.create_payment(invoice)
+
+        assert result.success is False
+
+    def test_error_zero_amount(
+        self,
+        payment_service,
+        sample_invoice,
+    ):
+        """Should return error for zero amount."""
+        result = payment_service.create_payment(sample_invoice, amount=0.00)
+
+        assert result.success is False
+        assert "positive" in result.message.lower()
+
+
+class TestExternalPaymentEdgeCases:
+    """Tests for record_external_payment edge cases."""
+
+    def test_handles_record_exception(
+        self,
+        payment_service,
+        mock_payment_repo,
+    ):
+        """Should handle exception during external payment recording."""
+        mock_payment_repo.record_external.side_effect = Exception("Record failed")
+
+        result = payment_service.record_external_payment(
+            bill_id="INV001",
+            amount=1000.00,
+            payment_date="2024-03-15",
+        )
+
+        assert result.success is False
+        assert result.action == "error"
+
+    def test_with_reference(self, payment_service, mock_payment_repo):
+        """Should handle payment with reference."""
+        mock_payment_repo.record_external.return_value = Payment(
+            id="EXT001",
+            bill_id="INV001",
+            amount=Decimal("1000.00"),
+            status=PaymentStatus.COMPLETED,
+            process_date=date(2024, 3, 15),
+        )
+
+        result = payment_service.record_external_payment(
+            bill_id="INV001",
+            amount=1000.00,
+            payment_date="2024-03-15",
+            reference="WIRE-12345",
+        )
+
+        assert result.success is True
+
+
+class TestValidationDetails:
+    """Tests for payment validation edge cases."""
+
+    def test_error_missing_vendor_id(
+        self,
+        payment_service,
+    ):
+        """Should return error when vendor ID is missing."""
+        invoice = Invoice(
+            id="INV001",
+            invoice_number="INV-2024-001",
+            vendor_id=None,  # Missing vendor
+            invoice_date=date(2024, 3, 1),
+            due_date=date(2024, 4, 1),
+            status=BillStatus.APPROVED,
+            line_items=[
+                InvoiceLineItem(description="Service", amount=Decimal("1000.00")),
+            ],
+            total_amount=Decimal("1000.00"),
+        )
+
+        result = payment_service.create_payment(invoice)
+
+        assert result.success is False
+        assert "vendor" in result.message.lower()
+
+
+class TestUpdateInvoiceStatus:
+    """Tests for _update_invoice_status method."""
+
+    def test_handles_update_exception(
+        self,
+        mock_payment_repo,
+        mock_invoice_repo,
+        sample_invoice,
+    ):
+        """Should handle exception when updating invoice status."""
+        service = PaymentService(
+            payment_repository=mock_payment_repo,
+            invoice_repository=mock_invoice_repo,
+            default_funding_account_id="DEFAULT_ACCOUNT",
+        )
+
+        mock_invoice_repo.get_by_id.return_value = sample_invoice
+        mock_invoice_repo.update.side_effect = Exception("Update failed")
+
+        # Should not raise, just log warning
+        service._update_invoice_status("INV001", BillStatus.SCHEDULED)
+
+        mock_invoice_repo.update.assert_called_once()
+
+
+class TestBulkPaymentValidation:
+    """Tests for bulk payment validation."""
+
+    def test_bulk_payments_with_validation_errors(
+        self,
+        mock_payment_repo,
+        mock_invoice_repo,
+    ):
+        """Should handle invoices with validation errors in bulk."""
+        service = PaymentService(
+            payment_repository=mock_payment_repo,
+            invoice_repository=mock_invoice_repo,
+            default_funding_account_id="DEFAULT_ACCOUNT",
+        )
+
+        invoices = [
+            Invoice(
+                id=None,  # Invalid - no ID
+                invoice_number="INV-1",
+                vendor_id="VND001",
+                invoice_date=date(2024, 3, 1),
+                due_date=date(2024, 4, 1),
+                status=BillStatus.APPROVED,
+                line_items=[InvoiceLineItem(description="Svc", amount=Decimal("100.00"))],
+                total_amount=Decimal("100.00"),
+            ),
+            Invoice(
+                id="INV2",
+                invoice_number="INV-2",
+                vendor_id="VND001",
+                invoice_date=date(2024, 3, 1),
+                due_date=date(2024, 4, 1),
+                status=BillStatus.APPROVED,
+                line_items=[InvoiceLineItem(description="Svc", amount=Decimal("100.00"))],
+                total_amount=Decimal("100.00"),
+            ),
+        ]
+
+        mock_payment_repo.create_bulk.return_value = [
+            Payment(
+                id="PAY2",
+                bill_id="INV2",
+                amount=Decimal("100.00"),
+                status=PaymentStatus.PENDING,
+                process_date=date.today(),
+            ),
+        ]
+
+        result = service.create_bulk_payments(invoices)
+
+        assert result.total == 2
+        assert result.errors == 1  # First invoice has validation error
+        assert result.created == 1
+
+
+class TestBulkPaymentFallback:
+    """Tests for bulk payment fallback to individual."""
+
+    def test_bulk_fallback_with_errors(
+        self,
+        mock_payment_repo,
+        mock_invoice_repo,
+    ):
+        """Should handle individual payment errors in fallback."""
+        service = PaymentService(
+            payment_repository=mock_payment_repo,
+            invoice_repository=mock_invoice_repo,
+            default_funding_account_id="DEFAULT_ACCOUNT",
+        )
+
+        invoices = [
+            Invoice(
+                id=f"INV{i}",
+                invoice_number=f"INV-{i}",
+                vendor_id="VND001",
+                invoice_date=date(2024, 3, 1),
+                due_date=date(2024, 4, 1),
+                status=BillStatus.APPROVED,
+                line_items=[InvoiceLineItem(description="Svc", amount=Decimal("100.00"))],
+                total_amount=Decimal("100.00"),
+            )
+            for i in range(2)
+        ]
+
+        mock_payment_repo.create_bulk.side_effect = NotImplementedError()
+        mock_payment_repo.create.side_effect = [
+            Payment(
+                id="PAY0",
+                bill_id="INV0",
+                amount=Decimal("100.00"),
+                status=PaymentStatus.PENDING,
+                process_date=date.today(),
+            ),
+            Exception("Payment failed"),
+        ]
+
+        result = service.create_bulk_payments(invoices)
+
+        assert result.total == 2
+        assert result.created == 1
+        assert result.errors == 1

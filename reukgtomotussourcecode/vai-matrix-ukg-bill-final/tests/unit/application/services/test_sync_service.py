@@ -375,3 +375,132 @@ class TestResolveSupervisorEmail:
         assert result == "cached@example.com"
         # Should not call repository because it's in cache
         mock_employee_repo.get_by_id.assert_not_called()
+
+
+class TestSyncEmployeeExceptions:
+    """Tests for exception handling in sync_employee."""
+
+    def test_handles_get_by_email_exception(
+        self,
+        sync_service,
+        mock_bill_user_repo,
+        sample_employee,
+    ):
+        """Should handle exception when looking up user."""
+        mock_bill_user_repo.get_by_email.side_effect = Exception("Database error")
+
+        result = sync_service.sync_employee(sample_employee)
+
+        assert result.success is False
+        assert result.action == "error"
+        assert "Database error" in result.message
+
+    def test_handles_update_exception(
+        self,
+        sync_service,
+        mock_bill_user_repo,
+        sample_employee,
+        sample_bill_user,
+    ):
+        """Should handle exception when updating user."""
+        # Existing user with different name to trigger update
+        sample_bill_user.first_name = "Different"
+        mock_bill_user_repo.get_by_email.return_value = sample_bill_user
+        mock_bill_user_repo.update.side_effect = Exception("Update failed")
+
+        result = sync_service.sync_employee(sample_employee)
+
+        assert result.success is False
+        assert result.action == "error"
+        assert "Update failed" in result.message
+
+
+class TestSyncBatchCounters:
+    """Tests for batch sync counter aggregation."""
+
+    def test_batch_counts_all_action_types(
+        self,
+        sync_service,
+        mock_bill_user_repo,
+    ):
+        """Should correctly count creates, updates, skips, and errors."""
+        employees = [
+            Employee(
+                employee_id=f"EMP{i}",
+                employee_number=str(i),
+                email=f"emp{i}@example.com" if i < 4 else None,  # 5th has no email
+                first_name="Test",
+                last_name=f"User{i}",
+                status=EmployeeStatus.ACTIVE,
+            )
+            for i in range(5)
+        ]
+
+        # Set up returns: create, update, skip, create (fails), error (no email)
+        existing_user = BillUser(
+            id="EXIST1",
+            email="emp1@example.com",
+            first_name="Different",  # Different to trigger update
+            last_name="Name",
+            role=BillRole.MEMBER,
+        )
+        unchanged_user = BillUser(
+            id="EXIST2",
+            email="emp2@example.com",
+            first_name="Test",  # Same as employee
+            last_name="User2",  # Same as employee
+            role=BillRole.MEMBER,
+        )
+
+        mock_bill_user_repo.get_by_email.side_effect = [
+            None,  # emp0 - create
+            existing_user,  # emp1 - update
+            unchanged_user,  # emp2 - skip
+            None,  # emp3 - create (will fail)
+        ]
+        mock_bill_user_repo.create.side_effect = [
+            BillUser(id="NEW0", email="emp0@example.com", first_name="Test", last_name="User0", role=BillRole.MEMBER),
+            Exception("Create failed"),  # emp3 fails
+        ]
+        mock_bill_user_repo.update.return_value = existing_user
+
+        result = sync_service.sync_batch(employees, workers=1)
+
+        assert result.total == 5
+        assert result.created == 1  # emp0
+        assert result.updated == 1  # emp1
+        assert result.skipped == 1  # emp2
+        assert result.errors == 2  # emp3 (create failed) + emp4 (no email)
+
+    def test_batch_parallel_execution(
+        self,
+        sync_service,
+        mock_bill_user_repo,
+    ):
+        """Should handle parallel execution."""
+        employees = [
+            Employee(
+                employee_id=f"EMP{i}",
+                employee_number=str(i),
+                email=f"emp{i}@example.com",
+                first_name="Test",
+                last_name=f"User{i}",
+                status=EmployeeStatus.ACTIVE,
+            )
+            for i in range(3)
+        ]
+
+        mock_bill_user_repo.get_by_email.return_value = None
+        mock_bill_user_repo.create.return_value = BillUser(
+            id="NEW",
+            email="test@example.com",
+            first_name="Test",
+            last_name="User",
+            role=BillRole.MEMBER,
+        )
+
+        # Use multiple workers
+        result = sync_service.sync_batch(employees, workers=2)
+
+        assert result.total == 3
+        assert result.created == 3

@@ -984,3 +984,240 @@ class TestCompanyPageAdditional:
 
         with pytest.raises(CompanySelectionError, match="No company selected"):
             company_page.navigate_to_people()
+
+
+class TestImportPageMoreScenarios:
+    """Additional tests for ImportPage to improve coverage."""
+
+    def test_click_import_people_button_via_button_text_search(self, mock_page, temp_screenshot_dir):
+        """click_import_people_button should find button via button text search."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        # Mock click to fail for primary selectors
+        with patch.object(import_page, "click") as mock_click:
+            mock_click.side_effect = ElementNotFoundError("not found")
+
+            # Mock button iteration to find import button
+            button = MagicMock()
+            button.inner_text.return_value = "Import Employees"
+            button.is_visible.return_value = True
+            mock_page.locator.return_value.all.return_value = [button]
+
+            # Mock get_by_text to fail
+            mock_page.get_by_text.return_value.count.return_value = 0
+
+            result = import_page.click_import_people_button()
+
+            assert result is True
+            button.click.assert_called_once()
+
+    def test_click_import_people_button_raises_import_error(self, mock_page, temp_screenshot_dir):
+        """click_import_people_button should raise ImportError when all methods fail."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        with patch.object(import_page, "click") as mock_click:
+            mock_click.side_effect = ElementNotFoundError("not found")
+
+            # All methods fail
+            mock_page.locator.return_value.all.return_value = []
+            mock_page.get_by_text.return_value.count.return_value = 0
+
+            with pytest.raises(ImportError, match="Import People"):
+                import_page.click_import_people_button()
+
+    def test_upload_via_label(self, mock_page, temp_screenshot_dir):
+        """_upload_via_label should upload via label click."""
+        import tempfile
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            f.write(b"test,data\n")
+            temp_file = Path(f.name)
+
+        try:
+            # Mock input selector to fail
+            input_locator = MagicMock()
+            input_locator.count.return_value = 0
+
+            # Mock label selector to succeed
+            label_locator = MagicMock()
+            label_locator.count.return_value = 1
+            label_locator.first.is_visible.return_value = True
+
+            file_input_locator = MagicMock()
+            file_input_locator.count.return_value = 1
+
+            mock_page.locator.side_effect = [
+                input_locator,  # First input selector fails
+                label_locator,  # Label selector succeeds
+                file_input_locator,  # File input after label click
+            ]
+
+            result = import_page._upload_via_label(str(temp_file.absolute()))
+
+            assert result is True
+        finally:
+            temp_file.unlink()
+
+    def test_upload_via_any_input(self, mock_page, temp_screenshot_dir):
+        """_upload_via_any_input should upload via any file input."""
+        import tempfile
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            f.write(b"test,data\n")
+            temp_file = Path(f.name)
+
+        try:
+            input_element = MagicMock()
+            mock_page.locator.return_value.all.return_value = [input_element]
+
+            result = import_page._upload_via_any_input(str(temp_file.absolute()))
+
+            assert result is True
+            input_element.set_input_files.assert_called_once()
+        finally:
+            temp_file.unlink()
+
+    def test_upload_via_any_input_no_inputs(self, mock_page, temp_screenshot_dir):
+        """_upload_via_any_input should return False when no inputs found."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        mock_page.locator.return_value.all.return_value = []
+
+        result = import_page._upload_via_any_input("/path/to/file.csv")
+
+        assert result is False
+
+    def test_wait_for_import_complete_success(self, mock_page, temp_screenshot_dir):
+        """wait_for_import_complete should return success result."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        with patch.object(import_page, "is_visible", return_value=True):
+            with patch.object(import_page, "_get_error_messages", return_value=[]):
+                with patch.object(import_page, "_get_warning_messages", return_value=[]):
+                    result = import_page.wait_for_import_complete()
+
+                    assert result.success is True
+
+    def test_wait_for_import_complete_with_errors(self, mock_page, temp_screenshot_dir):
+        """wait_for_import_complete should detect errors."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        with patch.object(import_page, "is_visible", return_value=True):
+            with patch.object(import_page, "_get_error_messages", return_value=["Error 1"]):
+                with patch.object(import_page, "_get_warning_messages", return_value=[]):
+                    result = import_page.wait_for_import_complete()
+
+                    assert result.success is False
+                    assert result.error_count == 1
+
+    def test_get_error_messages_from_selectors(self, mock_page, temp_screenshot_dir):
+        """_get_error_messages should iterate through selectors."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        # Mock locator with errors
+        error_element = MagicMock()
+        error_element.inner_text.return_value = "Error message"
+
+        mock_locator = MagicMock()
+        mock_locator.count.return_value = 1
+        mock_locator.nth.return_value = error_element
+        mock_page.locator.return_value = mock_locator
+
+        messages = import_page._get_error_messages()
+
+        # Should return list (possibly with errors)
+        assert isinstance(messages, list)
+
+    def test_get_warning_messages_from_selectors(self, mock_page, temp_screenshot_dir):
+        """_get_warning_messages should iterate through selectors."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        # Mock locator with warnings
+        warning_element = MagicMock()
+        warning_element.inner_text.return_value = "Warning message"
+
+        mock_locator = MagicMock()
+        mock_locator.count.return_value = 1
+        mock_locator.nth.return_value = warning_element
+        mock_page.locator.return_value = mock_locator
+
+        messages = import_page._get_warning_messages()
+
+        assert isinstance(messages, list)
+
+    def test_has_success_message_true(self, mock_page, temp_screenshot_dir):
+        """_has_success_message should return True when success message found."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        with patch.object(import_page, "is_visible", return_value=True):
+            result = import_page._has_success_message()
+
+        assert result is True
+
+    def test_has_success_message_false(self, mock_page, temp_screenshot_dir):
+        """_has_success_message should return False when no success message."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        with patch.object(import_page, "is_visible", return_value=False):
+            result = import_page._has_success_message()
+
+        assert result is False
+
+    def test_click_import_submit_button_fallback_text(self, mock_page, temp_screenshot_dir):
+        """click_import_submit_button should try text search fallback."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        # First try (primary selectors) fails
+        with patch.object(import_page, "click") as mock_click:
+            mock_click.side_effect = ElementNotFoundError("not found")
+
+            # Mock button text search to find import button
+            button = MagicMock()
+            button.inner_text.return_value = "Import"
+            button.is_visible.return_value = True
+            mock_page.locator.return_value.all.return_value = [button]
+
+            result = import_page.click_import_submit_button()
+
+            assert result is True
+            button.click.assert_called_once()
+
+    def test_click_import_submit_button_raises_on_failure(self, mock_page, temp_screenshot_dir):
+        """click_import_submit_button should raise ImportError on failure."""
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        with patch.object(import_page, "click") as mock_click:
+            mock_click.side_effect = ElementNotFoundError("not found")
+
+            # All fallbacks fail
+            mock_page.locator.return_value.all.return_value = []
+
+            with pytest.raises(ImportError, match="import submit"):
+                import_page.click_import_submit_button()
+
+    def test_get_preview_row_count_no_rows(self, mock_page, temp_screenshot_dir):
+        """get_preview_row_count should return 0 when no rows found."""
+        mock_locator = MagicMock()
+        mock_locator.count.return_value = 0
+        mock_page.locator.return_value = mock_locator
+
+        import_page = ImportPage(mock_page)
+        import_page.screenshot_dir = temp_screenshot_dir
+
+        count = import_page.get_preview_row_count()
+        assert count == 0

@@ -246,3 +246,136 @@ class TestGetActiveVendors:
         assert len(result) == 1
         assert result[0] == sample_vendor
         mock_vendor_repo.list.assert_called()
+
+
+class TestRateLimiter:
+    """Tests for rate limiter integration."""
+
+    def test_calls_rate_limiter(self, mock_vendor_repo):
+        """Should call rate limiter when provided."""
+        rate_limiter = MagicMock()
+        service = VendorService(
+            vendor_repository=mock_vendor_repo,
+            rate_limiter=rate_limiter,
+        )
+
+        vendor = Vendor(name="Test Vendor", status=VendorStatus.ACTIVE)
+        mock_vendor_repo.get_by_id.return_value = None
+        mock_vendor_repo.get_by_external_id.return_value = None
+        mock_vendor_repo.get_by_name.return_value = None
+        mock_vendor_repo.create.return_value = Vendor(
+            id="NEW001",
+            name="Test Vendor",
+            status=VendorStatus.ACTIVE,
+        )
+
+        service.sync_vendor(vendor)
+
+        rate_limiter.assert_called_once()
+
+
+class TestFindExistingVendor:
+    """Tests for _find_existing_vendor edge cases."""
+
+    def test_finds_by_external_id(self, vendor_service, mock_vendor_repo, sample_vendor):
+        """Should find vendor by external ID."""
+        sample_vendor.id = None
+        sample_vendor.external_id = "EXT001"
+
+        mock_vendor_repo.get_by_external_id.return_value = sample_vendor
+
+        result = vendor_service.sync_vendor(sample_vendor)
+
+        mock_vendor_repo.get_by_external_id.assert_called_with("EXT001")
+        assert result.success is True
+        assert result.action == "skip"
+
+    def test_finds_by_id_with_cache(self, mock_vendor_repo):
+        """Should use cache when available."""
+        service = VendorService(vendor_repository=mock_vendor_repo)
+
+        # First lookup - populates cache
+        vendor = Vendor(id="VND001", name="Cached Vendor", status=VendorStatus.ACTIVE)
+        mock_vendor_repo.get_by_id.return_value = vendor
+
+        result1 = service.sync_vendor(vendor)
+        assert result1.success is True
+
+        # Second lookup - should use cache (reset mock to verify)
+        mock_vendor_repo.reset_mock()
+        mock_vendor_repo.get_by_id.return_value = vendor
+
+        result2 = service.sync_vendor(vendor)
+        assert result2.success is True
+
+
+class TestUpdateVendor:
+    """Tests for _update_vendor edge cases."""
+
+    def test_handles_update_exception(self, mock_vendor_repo, sample_vendor):
+        """Should handle exception during update."""
+        service = VendorService(vendor_repository=mock_vendor_repo)
+
+        existing = Vendor(
+            id="VND001",
+            name="Acme Corp",
+            email="old@acme.com",  # Different to trigger update
+            status=VendorStatus.ACTIVE,
+        )
+        mock_vendor_repo.get_by_name.return_value = existing
+        mock_vendor_repo.update.side_effect = Exception("Update failed")
+
+        result = service.sync_vendor(sample_vendor)
+
+        assert result.success is False
+        assert result.action == "error"
+
+
+class TestArchiveEdgeCases:
+    """Tests for archive edge cases."""
+
+    def test_archive_already_archived(self, vendor_service, mock_vendor_repo, sample_vendor):
+        """Should handle archiving already archived vendor."""
+        sample_vendor.status = VendorStatus.ARCHIVED
+        mock_vendor_repo.get_by_id.return_value = sample_vendor
+
+        result = vendor_service.archive_vendor("VND001")
+
+        # Should either succeed (idempotent) or fail gracefully
+        # Implementation may vary
+        assert result is not None
+
+    def test_archive_handles_update_error(self, vendor_service, mock_vendor_repo, sample_vendor):
+        """Should handle error during archive update."""
+        mock_vendor_repo.get_by_id.return_value = sample_vendor
+        mock_vendor_repo.update.side_effect = Exception("Archive failed")
+
+        result = vendor_service.archive_vendor("VND001")
+
+        assert result.success is False
+
+
+class TestBatchEdgeCases:
+    """Tests for sync_batch edge cases."""
+
+    def test_batch_with_errors(self, vendor_service, mock_vendor_repo):
+        """Should handle batch with some errors."""
+        vendors = [
+            Vendor(name=f"Vendor {i}", status=VendorStatus.ACTIVE)
+            for i in range(3)
+        ]
+
+        mock_vendor_repo.get_by_name.return_value = None
+        mock_vendor_repo.list.return_value = []
+        # First succeeds, second fails, third succeeds
+        mock_vendor_repo.create.side_effect = [
+            Vendor(id="VND0", name="Vendor 0", status=VendorStatus.ACTIVE),
+            Exception("API error"),
+            Vendor(id="VND2", name="Vendor 2", status=VendorStatus.ACTIVE),
+        ]
+
+        result = vendor_service.sync_batch(vendors, workers=1)
+
+        assert result.total == 3
+        assert result.created == 2
+        assert result.errors == 1

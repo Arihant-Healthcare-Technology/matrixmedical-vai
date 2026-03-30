@@ -1,0 +1,26 @@
+# MatrixMedical VAI - Consolidated Development Dependencies
+
+# Include production dependencies
+-r requirements.txt
+
+# Testing Framework
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+pytest-asyncio>=0.21.0
+
+# HTTP Mocking
+responses>=0.24.0
+
+# Test Data Generation
+faker>=21.0.0
+
+# Type Checking
+mypy>=1.0.0
+
+# Linting and Formatting
+ruff>=0.1.0
+black>=23.0.0
+
+# Pre-commit Hooks
+pre-commit>=3.0.0

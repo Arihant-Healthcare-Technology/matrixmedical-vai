@@ -45,6 +45,7 @@ from .notifications import (
     SMTPNotifier,
     AWSESNotifier,
     SendGridNotifier,
+    NoOpNotifier,
     get_notifier,
 )
 
@@ -123,6 +124,7 @@ __all__ = [
     "SMTPNotifier",
     "AWSESNotifier",
     "SendGridNotifier",
+    "NoOpNotifier",
     "get_notifier",
     # Metrics
     "MetricsCollector",
