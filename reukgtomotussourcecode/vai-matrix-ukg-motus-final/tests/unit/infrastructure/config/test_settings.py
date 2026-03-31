@@ -334,3 +334,66 @@ class TestBatchSettings:
             settings.validate()
 
         assert "JOB_IDS is required" in str(exc_info.value)
+
+
+# ============ validate_or_exit Tests ============
+
+class TestUKGSettingsValidateOrExit:
+    """Tests for UKGSettings.validate_or_exit method."""
+
+    def test_validate_or_exit_missing_api_key(self, monkeypatch):
+        """Test validate_or_exit exits when API key missing."""
+        settings = UKGSettings(basic_b64="token")
+
+        with pytest.raises(SystemExit) as exc_info:
+            settings.validate_or_exit()
+
+        assert exc_info.value.code == 1
+
+    def test_validate_or_exit_missing_auth(self, monkeypatch):
+        """Test validate_or_exit exits when auth missing."""
+        settings = UKGSettings(customer_api_key="api-key")
+
+        with pytest.raises(SystemExit) as exc_info:
+            settings.validate_or_exit()
+
+        assert exc_info.value.code == 1
+
+    def test_validate_or_exit_success(self):
+        """Test validate_or_exit passes with valid settings."""
+        settings = UKGSettings(
+            customer_api_key="api-key",
+            basic_b64="auth-token",
+        )
+
+        # Should not raise
+        settings.validate_or_exit()
+
+
+class TestMotusSettingsValidateOrExit:
+    """Tests for MotusSettings.validate_or_exit method."""
+
+    def test_validate_or_exit_missing_jwt(self):
+        """Test validate_or_exit exits when JWT missing."""
+        settings = MotusSettings()
+
+        with pytest.raises(SystemExit) as exc_info:
+            settings.validate_or_exit()
+
+        assert exc_info.value.code == 1
+
+    def test_validate_or_exit_invalid_jwt_format(self):
+        """Test validate_or_exit exits when JWT has invalid format."""
+        settings = MotusSettings(jwt="invalid-jwt-without-dots")
+
+        with pytest.raises(SystemExit) as exc_info:
+            settings.validate_or_exit()
+
+        assert exc_info.value.code == 1
+
+    def test_validate_or_exit_success(self):
+        """Test validate_or_exit passes with valid JWT format."""
+        settings = MotusSettings(jwt="header.payload.signature")
+
+        # Should not raise
+        settings.validate_or_exit()
