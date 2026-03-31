@@ -198,9 +198,11 @@ class MotusDriver:
         Convert to Motus API payload format.
 
         Returns:
-            Dictionary suitable for POST/PUT to Motus API
+            Dictionary suitable for POST/PUT to Motus API.
+            Null/empty values are excluded from the payload.
         """
-        payload: Dict[str, Any] = {
+        # Build initial payload with all fields
+        raw_payload: Dict[str, Any] = {
             "clientEmployeeId1": self.client_employee_id1,
             "clientEmployeeId2": self.client_employee_id2,
             "programId": self.program_id,
@@ -214,7 +216,7 @@ class MotusDriver:
             "postalCode": self.postal_code,
             "email": self.email,
             "phone": self.phone,
-            "alternatePhone": self.alternate_phone or "",
+            "alternatePhone": self.alternate_phone,
             "startDate": self.start_date,
             "endDate": self.end_date,
             "leaveStartDate": self.leave_start_date,
@@ -222,8 +224,30 @@ class MotusDriver:
             "annualBusinessMiles": self.annual_business_miles,
             "commuteDeductionType": self.commute_deduction_type,
             "commuteDeductionCap": self.commute_deduction_cap,
-            "customVariables": [cv.to_dict() for cv in self.custom_variables],
         }
+
+        # Filter out None, empty string, and zero values
+        # Note: annualBusinessMiles=0 is excluded (Motus will use program default)
+        def is_empty(v: Any) -> bool:
+            if v is None:
+                return True
+            if isinstance(v, str) and v.strip() == "":
+                return True
+            if isinstance(v, int) and v == 0:
+                return True
+            return False
+
+        payload = {k: v for k, v in raw_payload.items() if not is_empty(v)}
+
+        # Filter custom variables - only include those with non-empty values
+        filtered_custom_vars = [
+            cv.to_dict() for cv in self.custom_variables
+            if cv.value is not None and cv.value.strip() != ""
+        ]
+
+        # Only include customVariables if there are any with values
+        if filtered_custom_vars:
+            payload["customVariables"] = filtered_custom_vars
 
         return payload
 

@@ -126,6 +126,79 @@ class TestMotusDriver:
         assert payload["customVariables"][0]["name"] == "Job Code"
         assert payload["customVariables"][0]["value"] == "4154"
 
+    def test_to_api_payload_excludes_empty_values(self, valid_driver_data):
+        """Test API payload excludes null and empty values."""
+        valid_driver_data["address2"] = None
+        valid_driver_data["alternate_phone"] = ""
+        valid_driver_data["end_date"] = None
+        valid_driver_data["client_employee_id2"] = None
+        driver = MotusDriver(**valid_driver_data)
+
+        payload = driver.to_api_payload()
+
+        # These should NOT be in the payload
+        assert "address2" not in payload
+        assert "alternatePhone" not in payload
+        assert "endDate" not in payload
+        assert "clientEmployeeId2" not in payload
+
+        # Required fields should still be present
+        assert "clientEmployeeId1" in payload
+        assert "firstName" in payload
+        assert "email" in payload
+
+    def test_to_api_payload_excludes_zero_annual_miles(self, valid_driver_data):
+        """Test API payload excludes annualBusinessMiles when 0."""
+        valid_driver_data["annual_business_miles"] = 0
+        driver = MotusDriver(**valid_driver_data)
+
+        payload = driver.to_api_payload()
+
+        # annualBusinessMiles=0 should be excluded (Motus uses program default)
+        assert "annualBusinessMiles" not in payload
+
+    def test_to_api_payload_includes_nonzero_annual_miles(self, valid_driver_data):
+        """Test API payload includes annualBusinessMiles when non-zero."""
+        valid_driver_data["annual_business_miles"] = 15000
+        driver = MotusDriver(**valid_driver_data)
+
+        payload = driver.to_api_payload()
+
+        assert "annualBusinessMiles" in payload
+        assert payload["annualBusinessMiles"] == 15000
+
+    def test_to_api_payload_excludes_empty_custom_variables(self, sample_driver):
+        """Test API payload excludes custom variables with empty values."""
+        sample_driver.custom_variables = [
+            CustomVariable(name="Job Code", value="4154"),
+            CustomVariable(name="Empty Var", value=""),
+            CustomVariable(name="Whitespace Var", value="   "),
+            CustomVariable(name="Project", value="PROJ001"),
+        ]
+
+        payload = sample_driver.to_api_payload()
+
+        # Should only have 2 custom variables (non-empty ones)
+        assert "customVariables" in payload
+        assert len(payload["customVariables"]) == 2
+        names = [cv["name"] for cv in payload["customVariables"]]
+        assert "Job Code" in names
+        assert "Project" in names
+        assert "Empty Var" not in names
+        assert "Whitespace Var" not in names
+
+    def test_to_api_payload_no_custom_variables_when_all_empty(self, sample_driver):
+        """Test API payload excludes customVariables key when all are empty."""
+        sample_driver.custom_variables = [
+            CustomVariable(name="Empty1", value=""),
+            CustomVariable(name="Empty2", value="   "),
+        ]
+
+        payload = sample_driver.to_api_payload()
+
+        # customVariables key should not be present when all values are empty
+        assert "customVariables" not in payload
+
     def test_from_ukg_data(self):
         """Test creating driver from UKG API data."""
         person = {
