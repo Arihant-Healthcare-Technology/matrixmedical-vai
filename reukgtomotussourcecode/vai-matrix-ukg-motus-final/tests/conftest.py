@@ -14,6 +14,11 @@ from unittest.mock import MagicMock
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Import new fixture modules
+from tests.fixtures.mock_data import UKGMockDataFactory, MotusMockDataFactory
+from tests.fixtures.ukg_mocks import UKGMockServer
+from tests.fixtures.motus_mocks import MotusMockServer
+
 
 @pytest.fixture(autouse=True)
 def setup_test_env(monkeypatch):
@@ -42,10 +47,10 @@ def sample_ukg_employment_details() -> Dict[str, Any]:
         "employeeStatusCode": "A",
         "primaryJobCode": "4154",
         "jobDescription": "Field Technician",
-        "startDate": "2020-01-15T00:00:00Z",
-        "terminationDate": None,
-        "leaveStartDate": None,
-        "leaveEndDate": None,
+        "originalHireDate": "2020-01-15T00:00:00Z",
+        "dateOfTermination": None,
+        "employeeStatusStartDate": None,
+        "employeeStatusExpectedEndDate": None,
         "lastHireDate": "2020-01-15T00:00:00Z",
         "fullTimeOrPartTimeCode": "F",
         "employeeTypeCode": "FTC",
@@ -296,3 +301,95 @@ def get_token_module(monkeypatch):
     token = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(token)
     return token
+
+
+# ============================================================================
+# NEW FIXTURE FACTORIES
+# ============================================================================
+
+@pytest.fixture
+def ukg_factory() -> UKGMockDataFactory:
+    """Get UKG mock data factory."""
+    return UKGMockDataFactory()
+
+
+@pytest.fixture
+def motus_factory() -> MotusMockDataFactory:
+    """Get Motus mock data factory."""
+    return MotusMockDataFactory()
+
+
+@pytest.fixture
+def ukg_mock() -> UKGMockServer:
+    """Get UKG mock server."""
+    return UKGMockServer()
+
+
+@pytest.fixture
+def motus_mock() -> MotusMockServer:
+    """Get Motus mock server."""
+    return MotusMockServer()
+
+
+# ============================================================================
+# COMPOSITE FIXTURES FOR COMMON SCENARIOS
+# ============================================================================
+
+@pytest.fixture
+def ukg_complete_employee(ukg_factory) -> Dict[str, Dict]:
+    """Complete UKG employee data across all endpoints."""
+    return ukg_factory.active_employee()
+
+
+@pytest.fixture
+def terminated_employee_data(ukg_factory) -> Dict[str, Any]:
+    """Terminated employee employment details."""
+    return ukg_factory.employment_details(
+        status_code="T",
+        termination_date="2024-03-01T00:00:00Z",
+    )
+
+
+@pytest.fixture
+def leave_employee_data(ukg_factory) -> Dict[str, Any]:
+    """Employee on leave of absence (indefinite)."""
+    return ukg_factory.employment_details(
+        status_code="A",
+        leave_start_date="2024-02-01T00:00:00Z",
+        leave_end_date=None,
+    )
+
+
+@pytest.fixture
+def favr_employee_data(ukg_factory) -> Dict[str, Any]:
+    """FAVR program employee (job code 1103)."""
+    return ukg_factory.employment_details(job_code="1103")
+
+
+@pytest.fixture
+def cpm_employee_data(ukg_factory) -> Dict[str, Any]:
+    """CPM program employee (job code 4154)."""
+    return ukg_factory.employment_details(job_code="4154")
+
+
+@pytest.fixture
+def motus_driver_payload(motus_factory) -> Dict[str, Any]:
+    """Sample Motus driver payload with custom variables."""
+    return motus_factory.driver_with_custom_variables()
+
+
+@pytest.fixture
+def motus_terminated_driver(motus_factory) -> Dict[str, Any]:
+    """Motus driver with termination end date."""
+    return motus_factory.driver(
+        end_date="2024-03-01",
+    )
+
+
+@pytest.fixture
+def motus_leave_driver(motus_factory) -> Dict[str, Any]:
+    """Motus driver on leave of absence."""
+    return motus_factory.driver(
+        leave_start_date="2024-02-01",
+        leave_end_date=None,
+    )

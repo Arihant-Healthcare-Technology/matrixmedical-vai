@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import logging
 import os
 import sys
 import json
@@ -15,7 +16,12 @@ from common import (
     get_correlation_id,
     set_correlation_id,
     redact_pii,
+    configure_logging,
 )
+
+# Initialize logging
+configure_logging()
+logger = logging.getLogger(__name__)
 
 # -------- ENV / paths --------
 _secrets = get_secrets_manager()
@@ -48,7 +54,7 @@ def _log(msg: str) -> None:
         cid = get_correlation_id()
         cid_prefix = f"[{cid}] " if cid else ""
         msg = redact_pii(msg)
-        print(f"[DEBUG] {cid_prefix}{msg}")
+        logger.debug(f"{cid_prefix}{msg}")
 
 def _today_ymd() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -313,6 +319,16 @@ def main():
     if len(sys.argv) < 2:
         print("usage: python upsert-motus-driver.py <employeeNumber> [--dry-run] [--probe]")
         sys.exit(1)
+
+    # Validate Motus JWT token at startup (fail-fast if missing or invalid)
+    # Note: This script has auto-refresh capability, but we validate upfront for consistency
+    from src.infrastructure.config.settings import MotusSettings
+
+    logger.info("Validating Motus API credentials...")
+    motus_settings = MotusSettings.from_env()
+    motus_settings.validate_or_exit()
+    logger.info("Motus JWT token validated successfully.")
+
     employee_number = sys.argv[1]
     dry = "--dry-run" in sys.argv
     if "--probe" in sys.argv:

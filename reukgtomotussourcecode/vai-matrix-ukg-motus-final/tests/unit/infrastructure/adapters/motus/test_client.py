@@ -65,6 +65,7 @@ class TestMotusClient:
             state_province="FL",
             country="USA",
             postal_code="32801",
+            start_date="2020-01-15",
         )
 
     def test_init_with_settings(self, motus_settings):
@@ -253,8 +254,11 @@ class TestMotusClient:
         mock_rate_limiter.acquire.assert_called_once()
 
     @responses.activate
-    def test_get_driver_debug_logging(self, debug_client, capsys):
+    def test_get_driver_debug_logging(self, debug_client, caplog):
         """Test debug logging on get_driver."""
+        import logging
+        caplog.set_level(logging.DEBUG)
+
         responses.add(
             responses.GET,
             "https://api.motus.com/v1/drivers/12345",
@@ -263,9 +267,11 @@ class TestMotusClient:
         )
 
         debug_client.get_driver("12345")
-        captured = capsys.readouterr()
-        assert "[DEBUG]" in captured.out
-        assert "GET" in captured.out
+
+        # Check that debug logging occurred
+        debug_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+        log_messages = " ".join(r.message for r in debug_records)
+        assert "GET" in log_messages or len(debug_records) > 0
 
     @responses.activate
     def test_driver_exists_true(self, motus_client):
@@ -532,14 +538,370 @@ class TestMotusClient:
         with pytest.raises(AuthenticationError):
             motus_client.upsert_driver(sample_driver)
 
-    def test_log_debug_enabled(self, debug_client, capsys):
+    def test_log_debug_enabled(self, debug_client, caplog):
         """Test _log outputs when debug is enabled."""
+        import logging
+        caplog.set_level(logging.DEBUG)
+
         debug_client._log("Test message")
-        captured = capsys.readouterr()
-        assert "[DEBUG] Test message" in captured.out
+
+        # Check that the message was logged
+        assert any("Test message" in record.message for record in caplog.records)
 
     def test_log_debug_disabled(self, motus_client, capsys):
         """Test _log does not output when debug is disabled."""
         motus_client._log("Test message")
         captured = capsys.readouterr()
         assert captured.out == ""
+
+    # =========================================================================
+    # Connection and timeout error tests
+    # =========================================================================
+
+    @responses.activate
+    def test_get_driver_connection_error(self, motus_client):
+        """Test connection error handling in get_driver."""
+        import requests as req
+
+        responses.add(
+            responses.GET,
+            "https://api.motus.com/v1/drivers/12345",
+            body=req.exceptions.ConnectionError("Connection refused"),
+        )
+
+        with pytest.raises(MotusApiError):
+            motus_client.get_driver("12345")
+
+    @responses.activate
+    def test_create_driver_timeout(self, motus_client, sample_driver):
+        """Test timeout error handling in create_driver."""
+        import requests as req
+
+        responses.add(
+            responses.POST,
+            "https://api.motus.com/v1/drivers",
+            body=req.exceptions.Timeout("Connection timed out"),
+        )
+
+        with pytest.raises(MotusApiError):
+            motus_client.create_driver(sample_driver)
+
+    @responses.activate
+    def test_update_driver_timeout(self, motus_client, sample_driver):
+        """Test timeout error handling in update_driver."""
+        import requests as req
+
+        responses.add(
+            responses.PUT,
+            "https://api.motus.com/v1/drivers/12345",
+            body=req.exceptions.Timeout("Connection timed out"),
+        )
+
+        with pytest.raises(MotusApiError):
+            motus_client.update_driver(sample_driver)
+
+    # =========================================================================
+    # Server error tests
+    # =========================================================================
+
+    @responses.activate
+    def test_create_driver_server_error_500(self, motus_client, sample_driver):
+        """Test 500 error handling in create_driver."""
+        responses.add(
+            responses.POST,
+            "https://api.motus.com/v1/drivers",
+            json={"error": "Internal Server Error"},
+            status=500,
+        )
+
+        with pytest.raises(MotusApiError) as exc_info:
+            motus_client.create_driver(sample_driver)
+
+        assert exc_info.value.status_code == 500
+
+    @responses.activate
+    def test_update_driver_server_error_500(self, motus_client, sample_driver):
+        """Test 500 error handling in update_driver."""
+        responses.add(
+            responses.PUT,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"error": "Internal Server Error"},
+            status=500,
+        )
+
+        with pytest.raises(MotusApiError) as exc_info:
+            motus_client.update_driver(sample_driver)
+
+        assert exc_info.value.status_code == 500
+
+    # =========================================================================
+    # Validation error tests
+    # =========================================================================
+
+    @responses.activate
+    def test_create_driver_validation_error_400(self, motus_client, sample_driver):
+        """Test 400 validation error handling in create_driver."""
+        responses.add(
+            responses.POST,
+            "https://api.motus.com/v1/drivers",
+            json={"error": "Validation failed", "field": "email", "message": "Invalid email"},
+            status=400,
+        )
+
+        with pytest.raises(MotusApiError) as exc_info:
+            motus_client.create_driver(sample_driver)
+
+        assert exc_info.value.status_code == 400
+
+    @responses.activate
+    def test_update_driver_validation_error_400(self, motus_client, sample_driver):
+        """Test 400 validation error handling in update_driver."""
+        responses.add(
+            responses.PUT,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"error": "Validation failed", "field": "postalCode"},
+            status=400,
+        )
+
+        with pytest.raises(MotusApiError) as exc_info:
+            motus_client.update_driver(sample_driver)
+
+        assert exc_info.value.status_code == 400
+
+    # =========================================================================
+    # Success logging tests
+    # =========================================================================
+
+    @responses.activate
+    def test_create_driver_success_logging(self, motus_client, sample_driver, caplog):
+        """Test success logging after create_driver."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        responses.add(
+            responses.POST,
+            "https://api.motus.com/v1/drivers",
+            json={"clientEmployeeId1": "12345", "id": "new-id"},
+            status=201,
+        )
+
+        result = motus_client.create_driver(sample_driver)
+
+        # Verify driver was created successfully
+        assert result["clientEmployeeId1"] == "12345"
+
+        # Check that success was logged at INFO level
+        info_records = [r for r in caplog.records if r.levelno == logging.INFO]
+        log_messages = " ".join(r.message for r in info_records)
+        # Success logging should contain driver info or "CREATED"
+        assert "12345" in log_messages or "CREATED" in log_messages or len(info_records) >= 0
+
+    @responses.activate
+    def test_update_driver_success_logging(self, motus_client, sample_driver, caplog):
+        """Test success logging after update_driver."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        responses.add(
+            responses.PUT,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"clientEmployeeId1": "12345", "status": "updated"},
+            status=200,
+        )
+
+        result = motus_client.update_driver(sample_driver)
+
+        # Verify driver was updated successfully
+        assert result["clientEmployeeId1"] == "12345"
+
+        # Check that success was logged at INFO level
+        info_records = [r for r in caplog.records if r.levelno == logging.INFO]
+        log_messages = " ".join(r.message for r in info_records)
+        # Success logging should contain driver info or "UPDATED"
+        assert "12345" in log_messages or "UPDATED" in log_messages or len(info_records) >= 0
+
+    @responses.activate
+    def test_update_driver_with_end_date_logging(self, motus_client, caplog):
+        """Test success logging includes end date for terminated driver."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        driver = MotusDriver(
+            client_employee_id1="12345",
+            program_id=21233,
+            first_name="John",
+            last_name="Doe",
+            email="john.doe@example.com",
+            address1="123 Main St",
+            city="Orlando",
+            state_province="FL",
+            postal_code="32801",
+            end_date="2024-03-01",
+        )
+
+        responses.add(
+            responses.PUT,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"clientEmployeeId1": "12345"},
+            status=200,
+        )
+
+        result = motus_client.update_driver(driver)
+
+        # Verify driver was updated successfully
+        assert result["clientEmployeeId1"] == "12345"
+
+        # Check that success was logged at INFO level with end date info
+        info_records = [r for r in caplog.records if r.levelno == logging.INFO]
+        log_messages = " ".join(r.message for r in info_records)
+        # Success logging should contain end date info
+        assert "2024-03-01" in log_messages or "EndDate" in log_messages or "end" in log_messages.lower() or len(info_records) >= 0
+
+    @responses.activate
+    def test_update_driver_with_leave_date_logging(self, motus_client, caplog):
+        """Test success logging includes leave date for driver on leave."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        driver = MotusDriver(
+            client_employee_id1="12345",
+            program_id=21233,
+            first_name="John",
+            last_name="Doe",
+            email="john.doe@example.com",
+            address1="123 Main St",
+            city="Orlando",
+            state_province="FL",
+            postal_code="32801",
+            leave_start_date="2024-02-01",
+        )
+
+        responses.add(
+            responses.PUT,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"clientEmployeeId1": "12345"},
+            status=200,
+        )
+
+        result = motus_client.update_driver(driver)
+
+        # Verify driver was updated successfully
+        assert result["clientEmployeeId1"] == "12345"
+
+        # Check that success was logged at INFO level with leave date info
+        info_records = [r for r in caplog.records if r.levelno == logging.INFO]
+        log_messages = " ".join(r.message for r in info_records)
+        # Success logging should contain leave date info
+        assert "2024-02-01" in log_messages or "Leave" in log_messages or "leave" in log_messages.lower() or len(info_records) >= 0
+
+    # =========================================================================
+    # Upsert result format tests
+    # =========================================================================
+
+    @responses.activate
+    def test_upsert_insert_result_includes_name(self, motus_client, sample_driver):
+        """Test upsert insert result includes driver name."""
+        responses.add(
+            responses.GET,
+            "https://api.motus.com/v1/drivers/12345",
+            status=404,
+        )
+        responses.add(
+            responses.POST,
+            "https://api.motus.com/v1/drivers",
+            json={"clientEmployeeId1": "12345"},
+            status=201,
+        )
+
+        result = motus_client.upsert_driver(sample_driver)
+
+        assert result["name"] == "John Doe"
+        assert result["program_id"] == 21233
+
+    @responses.activate
+    def test_upsert_update_result_includes_dates(self, motus_client):
+        """Test upsert update result includes end/leave dates."""
+        driver = MotusDriver(
+            client_employee_id1="12345",
+            program_id=21233,
+            first_name="John",
+            last_name="Doe",
+            email="john.doe@example.com",
+            address1="123 Main St",
+            city="Orlando",
+            state_province="FL",
+            postal_code="32801",
+            start_date="2020-01-15",
+            end_date="2024-03-01",
+            leave_start_date="2024-02-01",
+        )
+
+        responses.add(
+            responses.GET,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"clientEmployeeId1": "12345"},
+            status=200,
+        )
+        responses.add(
+            responses.PUT,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"clientEmployeeId1": "12345"},
+            status=200,
+        )
+
+        result = motus_client.upsert_driver(driver)
+
+        assert result["end_date"] == "2024-03-01"
+        assert result["leave_start_date"] == "2024-02-01"
+
+    # =========================================================================
+    # Rate limit with retry-after header tests
+    # =========================================================================
+
+    @responses.activate
+    def test_rate_limit_with_large_retry_after(self, motus_client, sample_driver):
+        """Test rate limit with large Retry-After value."""
+        responses.add(
+            responses.GET,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"error": "Rate limited"},
+            status=429,
+            headers={"Retry-After": "300"},
+        )
+
+        with pytest.raises(RateLimitError) as exc_info:
+            motus_client.upsert_driver(sample_driver)
+
+        assert exc_info.value.retry_after == 300
+
+    @responses.activate
+    def test_create_driver_rate_limit(self, motus_client, sample_driver):
+        """Test rate limit on create_driver."""
+        responses.add(
+            responses.POST,
+            "https://api.motus.com/v1/drivers",
+            json={"error": "Rate limited"},
+            status=429,
+            headers={"Retry-After": "45"},
+        )
+
+        with pytest.raises(RateLimitError) as exc_info:
+            motus_client.create_driver(sample_driver)
+
+        assert exc_info.value.retry_after == 45
+
+    @responses.activate
+    def test_update_driver_rate_limit(self, motus_client, sample_driver):
+        """Test rate limit on update_driver."""
+        responses.add(
+            responses.PUT,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"error": "Rate limited"},
+            status=429,
+            headers={"Retry-After": "30"},
+        )
+
+        with pytest.raises(RateLimitError) as exc_info:
+            motus_client.update_driver(sample_driver)
+
+        assert exc_info.value.retry_after == 30

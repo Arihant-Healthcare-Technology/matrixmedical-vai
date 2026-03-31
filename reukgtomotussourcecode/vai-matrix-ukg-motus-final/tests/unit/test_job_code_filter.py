@@ -5,11 +5,14 @@ Tests the filter_by_eligible_job_codes logic directly.
 Note: Job codes are now read from JOB_IDS environment variable in production.
 These tests use a test fixture with the expected job codes.
 """
+import logging
 import os
 import sys
 import pytest
 from pathlib import Path
 from typing import Any, Dict, List, Set
+
+logger = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -44,7 +47,7 @@ def filter_by_eligible_job_codes(
         if job_code in eligible_job_codes or job_code_normalized in eligible_job_codes:
             eligible.append(item)
         elif debug:
-            print(f"[DEBUG] Skipping employee {item.get('employeeNumber')} - ineligible job code: {job_code}")
+            logger.debug(f"Skipping employee {item.get('employeeNumber')} - ineligible job code: {job_code}")
     return eligible
 
 

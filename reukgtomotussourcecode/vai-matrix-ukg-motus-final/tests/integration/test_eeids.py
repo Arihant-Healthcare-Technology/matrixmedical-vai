@@ -43,10 +43,10 @@ class TestNewHireProcessing:
                 "employeeId": "EMP28190",
                 "companyID": "J9A6Y",
                 "primaryJobCode": "1103",  # Eligible FAVR code
-                "startDate": "2024-03-15",
-                "terminationDate": None,
-                "leaveStartDate": None,
-                "leaveEndDate": None,
+                "originalHireDate": "2024-03-15",
+                "dateOfTermination": None,
+                "employeeStatusStartDate": None,
+                "employeeStatusExpectedEndDate": None,
                 "employeeStatusCode": "A"
             },
             "employee_employment": {
@@ -84,7 +84,7 @@ class TestNewHireProcessing:
         with patch.object(builder, 'get_data', side_effect=mock_get_data):
             result = builder.build_motus_driver("28190", "J9A6Y")
 
-        assert result["startDate"] == "03/15/2024"
+        assert result["startDate"] == "2024-03-15"
 
     def test_new_hire_has_eligible_program_id(self, monkeypatch, new_hire_data):
         """Test new hires with eligible job codes get correct program ID."""
@@ -120,10 +120,10 @@ class TestTerminationProcessing:
                 "employeeId": "EMP26737",
                 "companyID": "J9A6Y",
                 "primaryJobCode": "1103",
-                "startDate": "2020-01-15",
-                "terminationDate": "2024-03-01",
-                "leaveStartDate": None,
-                "leaveEndDate": None,
+                "originalHireDate": "2020-01-15",
+                "dateOfTermination": "2024-03-01",
+                "employeeStatusStartDate": None,
+                "employeeStatusExpectedEndDate": None,
                 "employeeStatusCode": "T"
             },
             "employee_employment": {
@@ -156,7 +156,7 @@ class TestTerminationProcessing:
         with patch.object(builder, 'get_data', side_effect=mock_get_data):
             result = builder.build_motus_driver("26737", "J9A6Y")
 
-        assert result["endDate"] == "03/01/2024"
+        assert result["endDate"] == "2024-03-01"
 
     def test_termination_date_in_custom_variables(self, monkeypatch, terminated_data):
         """Test termination date appears in customVariables."""
@@ -181,7 +181,7 @@ class TestTerminationProcessing:
             None
         )
         assert term_var is not None
-        assert term_var["value"] == "03/01/2024"
+        assert term_var["value"] == "2024-03-01"
 
     def test_derived_status_is_terminated(self, monkeypatch, terminated_data):
         """Test derived status is Terminated for terminated employee."""
@@ -221,7 +221,7 @@ class TestManagerChanges:
                 "employeeId": "EMP28195",
                 "companyID": "J9A6Y",
                 "primaryJobCode": "1103",
-                "startDate": "2022-06-01"
+                "originalHireDate": "2022-06-01"
             },
             "employee_employment": {
                 "employeeNumber": "28195",
@@ -278,7 +278,7 @@ class TestAddressPhoneUpdates:
                 "employeeId": "EMP25336",
                 "companyID": "J9A6Y",
                 "primaryJobCode": "2817",  # CPM code
-                "startDate": "2021-09-01"
+                "originalHireDate": "2021-09-01"
             },
             "employee_employment": {
                 "employeeNumber": "25336",

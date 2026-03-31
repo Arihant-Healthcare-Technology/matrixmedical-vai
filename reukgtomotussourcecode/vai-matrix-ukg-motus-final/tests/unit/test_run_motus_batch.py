@@ -480,6 +480,8 @@ class TestFilterByEligibleJobCodes:
         """Test get_eligible_job_codes raises if JOB_IDS not set."""
         monkeypatch.delenv("JOB_IDS", raising=False)
         batch = get_batch_module(monkeypatch)
+        # Also delete after module load since load_dotenv_simple may have set it
+        monkeypatch.delenv("JOB_IDS", raising=False)
         with pytest.raises(SystemExit) as exc_info:
             batch.get_eligible_job_codes()
         assert "JOB_IDS" in str(exc_info.value)

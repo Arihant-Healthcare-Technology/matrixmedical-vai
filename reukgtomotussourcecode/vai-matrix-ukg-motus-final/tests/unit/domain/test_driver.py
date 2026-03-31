@@ -22,6 +22,7 @@ class TestMotusDriver:
             "state_province": "FL",
             "country": "USA",
             "postal_code": "32801",
+            "start_date": "2020-01-15",
         }
 
     @pytest.fixture
@@ -144,8 +145,8 @@ class TestMotusDriver:
             "primaryJobCode": "4154",
             "jobDescription": "Field Tech",
             "employeeStatusCode": "A",
-            "startDate": "2020-01-15T00:00:00Z",
-            "terminationDate": None,
+            "originalHireDate": "2020-01-15T00:00:00Z",
+            "dateOfTermination": None,
         }
 
         driver = MotusDriver.from_ukg_data(
@@ -171,7 +172,7 @@ class TestMotusDriver:
         }
         employment_details = {
             "primaryJobCode": "4154",
-            "startDate": "2020-01-15T00:00:00Z",
+            "originalHireDate": "2020-01-15T00:00:00Z",
         }
 
         driver = MotusDriver.from_ukg_data(
@@ -199,10 +200,11 @@ class TestMotusDriver:
         }
         employment_details = {
             "primaryJobCode": "4154",
+            "primaryWorkLocationCode": "LOC001",
         }
         location = {
-            "description": "LOC001",
-            "state": "Florida",
+            "description": "Florida Office",
+            "state": "FL",
         }
 
         driver = MotusDriver.from_ukg_data(

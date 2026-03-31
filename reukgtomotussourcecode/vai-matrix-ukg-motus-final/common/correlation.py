@@ -20,8 +20,10 @@ Usage:
         # All logs will include the correlation ID
 """
 
+import os
 import uuid
 import logging
+import sys
 import threading
 import contextvars
 from typing import Optional, Dict, Any, Callable
@@ -190,18 +192,51 @@ class CorrelationLogFormatter(logging.Formatter):
 
 
 def configure_logging(
-    level: int = logging.INFO,
+    level: Optional[int] = None,
     include_module: bool = True,
     log_file: Optional[str] = None
 ) -> None:
     """
-    Configure logging with correlation ID support.
+    Configure logging with correlation ID support and environment variable control.
+
+    Environment Variables:
+        LOG_LEVEL: Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        DEBUG: If "1" or "true", enables DEBUG level
+        VERBOSE: If "1" or "true", enables DEBUG level
+        LOGGING_DISABLED: If "1" or "true", disables all logging
 
     Args:
-        level: Logging level
+        level: Logging level (overridden by environment variables if not set)
         include_module: Include module name in log format
         log_file: Optional file path for file logging
     """
+    # Check if logging is disabled via environment
+    logging_disabled = os.getenv("LOGGING_DISABLED", "0").lower() in ("1", "true", "yes")
+    if logging_disabled:
+        logging.disable(logging.CRITICAL)
+        return
+
+    # Determine log level from environment if not explicitly passed
+    if level is None:
+        # Check DEBUG and VERBOSE flags first
+        debug_mode = os.getenv("DEBUG", "0").lower() in ("1", "true", "yes")
+        verbose = os.getenv("VERBOSE", "0").lower() in ("1", "true", "yes")
+
+        if debug_mode or verbose:
+            level = logging.DEBUG
+        else:
+            # Get LOG_LEVEL from environment
+            log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+            valid_levels = {
+                "DEBUG": logging.DEBUG,
+                "INFO": logging.INFO,
+                "WARNING": logging.WARNING,
+                "WARN": logging.WARNING,
+                "ERROR": logging.ERROR,
+                "CRITICAL": logging.CRITICAL,
+            }
+            level = valid_levels.get(log_level_str, logging.INFO)
+
     # Create formatter
     formatter = CorrelationLogFormatter(include_module=include_module)
 
@@ -214,7 +249,7 @@ def configure_logging(
         root_logger.removeHandler(handler)
 
     # Console handler
-    console_handler = logging.StreamHandler()
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     console_handler.addFilter(CorrelationLogFilter())
     root_logger.addHandler(console_handler)
@@ -225,6 +260,11 @@ def configure_logging(
         file_handler.setFormatter(formatter)
         file_handler.addFilter(CorrelationLogFilter())
         root_logger.addHandler(file_handler)
+
+    # Reduce noise from third-party libraries
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:

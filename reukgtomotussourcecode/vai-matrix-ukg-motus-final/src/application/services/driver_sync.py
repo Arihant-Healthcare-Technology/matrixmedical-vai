@@ -5,6 +5,7 @@ Orchestrates synchronization of drivers between UKG and Motus.
 """
 
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -16,6 +17,8 @@ from src.infrastructure.adapters.ukg import UKGClient
 from src.infrastructure.config.settings import BatchSettings
 
 from .driver_builder import DriverBuilderService
+
+logger = logging.getLogger(__name__)
 
 
 class DriverSyncService:
@@ -43,7 +46,7 @@ class DriverSyncService:
     def _log(self, message: str) -> None:
         """Log debug message."""
         if self.debug:
-            print(f"[DEBUG] {message}")
+            logger.debug(message)
 
     def get_person_state(
         self,
@@ -140,10 +143,10 @@ class DriverSyncService:
             return (employee_number, state, action)
 
         except (EmployeeNotFoundError, ProgramNotFoundError) as e:
-            print(f"[WARN] employeeNumber={employee_number} skipped: {e}")
+            logger.warning(f"employeeNumber={employee_number} skipped: {e}")
             return (employee_number, state, "skipped")
         except Exception as e:
-            print(f"[WARN] employeeNumber={employee_number} error: {repr(e)}")
+            logger.warning(f"employeeNumber={employee_number} error: {repr(e)}")
             return (employee_number, state, "error")
 
     def sync_batch(
@@ -199,14 +202,14 @@ class DriverSyncService:
 
                 processed += 1
                 if processed % 100 == 0 or processed == total:
-                    print(
-                        f"[INFO] progress: {processed}/{total} | "
+                    logger.info(
+                        f"progress: {processed}/{total} | "
                         f"saved={stats['saved']} skipped={stats['skipped']} "
                         f"errors={stats['errors']}"
                     )
 
-        print(
-            f"[INFO] done: total={total} | saved={stats['saved']} | "
+        logger.info(
+            f"done: total={total} | saved={stats['saved']} | "
             f"skipped={stats['skipped']} | errors={stats['errors']}"
         )
 

@@ -4,6 +4,7 @@ Motus API client.
 Provides client for interacting with Motus driver APIs.
 """
 
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -13,6 +14,8 @@ import requests
 from src.domain.exceptions import AuthenticationError, MotusApiError, RateLimitError
 from src.domain.models import MotusDriver
 from src.infrastructure.config.settings import MotusSettings
+
+logger = logging.getLogger(__name__)
 
 
 class MotusClient:
@@ -39,7 +42,7 @@ class MotusClient:
     def _log(self, message: str) -> None:
         """Log debug message."""
         if self.debug:
-            print(f"[DEBUG] {message}")
+            logger.debug(message)
 
     def _headers(self) -> Dict[str, str]:
         """Get request headers."""
@@ -127,7 +130,15 @@ class MotusClient:
         url = f"{self.settings.api_base}/drivers/{client_employee_id1}"
         self._log(f"GET {url}")
 
-        response = requests.get(url, headers=self._headers(), timeout=45)
+        try:
+            response = requests.get(url, headers=self._headers(), timeout=45)
+        except requests.exceptions.RequestException as e:
+            raise MotusApiError(
+                f"Request failed: {str(e)}",
+                status_code=0,
+                response_body={"error": str(e)},
+                driver_id=client_employee_id1,
+            ) from e
 
         if response.status_code == 404:
             return None
@@ -168,14 +179,30 @@ class MotusClient:
         url = f"{self.settings.api_base}/drivers"
         self._log(f"POST {url}")
 
-        response = requests.post(
-            url,
-            headers=self._headers(),
-            json=payload,
-            timeout=60,
-        )
+        try:
+            response = requests.post(
+                url,
+                headers=self._headers(),
+                json=payload,
+                timeout=60,
+            )
+        except requests.exceptions.RequestException as e:
+            raise MotusApiError(
+                f"Request failed: {str(e)}",
+                status_code=0,
+                response_body={"error": str(e)},
+                driver_id=driver.client_employee_id1,
+            ) from e
 
-        return self._handle_response(response, driver_id=driver.client_employee_id1)
+        result = self._handle_response(response, driver_id=driver.client_employee_id1)
+
+        # Log success response
+        logger.info(f"Driver CREATED: {driver.client_employee_id1} | "
+                    f"Name: {driver.first_name} {driver.last_name} | "
+                    f"Status: {response.status_code} | "
+                    f"Program: {driver.program_id}")
+
+        return result
 
     def update_driver(self, driver: MotusDriver) -> Dict[str, Any]:
         """
@@ -199,14 +226,32 @@ class MotusClient:
         url = f"{self.settings.api_base}/drivers/{driver.client_employee_id1}"
         self._log(f"PUT {url}")
 
-        response = requests.put(
-            url,
-            headers=self._headers(),
-            json=payload,
-            timeout=60,
-        )
+        try:
+            response = requests.put(
+                url,
+                headers=self._headers(),
+                json=payload,
+                timeout=60,
+            )
+        except requests.exceptions.RequestException as e:
+            raise MotusApiError(
+                f"Request failed: {str(e)}",
+                status_code=0,
+                response_body={"error": str(e)},
+                driver_id=driver.client_employee_id1,
+            ) from e
 
-        return self._handle_response(response, driver_id=driver.client_employee_id1)
+        result = self._handle_response(response, driver_id=driver.client_employee_id1)
+
+        # Log success response
+        end_date_info = f" | EndDate: {driver.end_date}" if driver.end_date else ""
+        leave_info = f" | Leave: {driver.leave_start_date}" if driver.leave_start_date else ""
+        logger.info(f"Driver UPDATED: {driver.client_employee_id1} | "
+                    f"Name: {driver.first_name} {driver.last_name} | "
+                    f"Status: {response.status_code} | "
+                    f"Program: {driver.program_id}{end_date_info}{leave_info}")
+
+        return result
 
     def upsert_driver(
         self,
@@ -262,6 +307,10 @@ class MotusClient:
                 "success": True,
                 "action": "update",
                 "id": driver.client_employee_id1,
+                "name": f"{driver.first_name} {driver.last_name}",
+                "program_id": driver.program_id,
+                "end_date": driver.end_date,
+                "leave_start_date": driver.leave_start_date,
                 "data": result,
             }
         else:
@@ -270,5 +319,7 @@ class MotusClient:
                 "success": True,
                 "action": "insert",
                 "id": driver.client_employee_id1,
+                "name": f"{driver.first_name} {driver.last_name}",
+                "program_id": driver.program_id,
                 "data": result,
             }

@@ -305,11 +305,11 @@ class MotusDriver:
             # Location
             CustomVariable(
                 name="Location Code",
-                value=str(location.get("description", "") or "")
+                value=str(employment_details.get("primaryWorkLocationCode", "") or "")
             ),
             CustomVariable(
                 name="Location",
-                value=str(location.get("state", "") or "")
+                value=str(location.get("description", "") or "")
             ),
 
             # Organizational structure
@@ -351,7 +351,7 @@ class MotusDriver:
             ),
             CustomVariable(
                 name="Termination Date",
-                value=cls._to_iso_date(employment_details.get("terminationDate"))
+                value=cls._to_iso_date(employment_details.get("dateOfTermination"))
             ),
 
             # Manager/supervisor
@@ -374,10 +374,10 @@ class MotusDriver:
             country=person.get("addressCountry"),
             postal_code=person.get("addressZipCode"),
             phone=person.get("homePhone", ""),
-            alternate_phone=person.get("mobilePhone", "") or "",
-            start_date=cls._to_iso_date(employment_details.get("startDate")),
-            end_date=cls._to_iso_date(employment_details.get("terminationDate")),
-            leave_start_date=cls._to_iso_date(employment_details.get("leaveStartDate")),
-            leave_end_date=cls._to_iso_date(employment_details.get("leaveEndDate")),
+            alternate_phone=person.get("mobilePhone") or employment_details.get("workPhoneNumber") or "",
+            start_date=cls._to_iso_date(employment_details.get("originalHireDate")),
+            end_date=cls._to_iso_date(employment_details.get("dateOfTermination")),
+            leave_start_date=cls._to_iso_date(employment_details.get("employeeStatusStartDate")),
+            leave_end_date=cls._to_iso_date(employment_details.get("employeeStatusExpectedEndDate")),
             custom_variables=custom_variables,
         )

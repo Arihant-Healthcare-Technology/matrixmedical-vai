@@ -5,7 +5,7 @@ Defines employment status types for driver synchronization.
 """
 
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 
 class EmploymentStatus(Enum):
@@ -17,6 +17,16 @@ class EmploymentStatus(Enum):
     UNKNOWN = "Unknown"
 
 
+# UKG employment status codes that indicate termination
+TERMINATED_STATUS_CODES: Set[str] = {"T", "TERM", "TERMINATED", "I", "INACTIVE"}
+
+# UKG employment status codes that indicate leave of absence
+LEAVE_STATUS_CODES: Set[str] = {"L", "LOA", "LEAVE"}
+
+# UKG employment status codes that indicate active employment
+ACTIVE_STATUS_CODES: Set[str] = {"A", "ACTIVE", "F", "FULLTIME", "P", "PARTTIME"}
+
+
 def determine_employment_status(
     status_code: Optional[str] = None,
     leave_start_date: Optional[str] = None,
@@ -26,8 +36,16 @@ def determine_employment_status(
     """
     Determine employment status from employment details.
 
+    Priority order:
+    1. Termination date present -> TERMINATED
+    2. Status code indicates terminated -> TERMINATED
+    3. Leave start date without end date -> LEAVE
+    4. Status code indicates leave -> LEAVE
+    5. Status code indicates active -> ACTIVE
+    6. Default -> ACTIVE
+
     Args:
-        status_code: Employment status code from UKG
+        status_code: Employment status code from UKG (e.g., 'A', 'T', 'L')
         leave_start_date: Leave start date
         leave_end_date: Leave end date
         termination_date: Termination date
@@ -35,15 +53,30 @@ def determine_employment_status(
     Returns:
         EmploymentStatus enum value
     """
-    # Check for active leave of absence
-    if leave_start_date and not leave_end_date:
-        return EmploymentStatus.LEAVE
+    # Normalize status code for comparison
+    normalized_status = status_code.upper().strip() if status_code else ""
 
-    # Check for terminated
+    # Check for terminated - termination date takes highest priority
     if termination_date:
         return EmploymentStatus.TERMINATED
 
-    # Default to Active if status code exists
+    # Check for terminated via status code
+    if normalized_status in TERMINATED_STATUS_CODES:
+        return EmploymentStatus.TERMINATED
+
+    # Check for active leave of absence (has start date but no end date)
+    if leave_start_date and not leave_end_date:
+        return EmploymentStatus.LEAVE
+
+    # Check for leave via status code
+    if normalized_status in LEAVE_STATUS_CODES:
+        return EmploymentStatus.LEAVE
+
+    # Check for active via status code
+    if normalized_status in ACTIVE_STATUS_CODES:
+        return EmploymentStatus.ACTIVE
+
+    # Default to Active if any status code exists
     if status_code:
         return EmploymentStatus.ACTIVE
 
@@ -64,7 +97,7 @@ def determine_employment_status_from_dict(
     """
     return determine_employment_status(
         status_code=employment_details.get("employeeStatusCode"),
-        leave_start_date=employment_details.get("leaveStartDate"),
-        leave_end_date=employment_details.get("leaveEndDate"),
-        termination_date=employment_details.get("terminationDate"),
+        leave_start_date=employment_details.get("employeeStatusStartDate"),
+        leave_end_date=employment_details.get("employeeStatusExpectedEndDate"),
+        termination_date=employment_details.get("dateOfTermination"),
     )

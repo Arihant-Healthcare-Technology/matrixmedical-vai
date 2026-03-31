@@ -113,7 +113,7 @@ class TestBuildMotusDriverManagerField:
                 "employeeId": "EMP001",
                 "companyID": "J9A6Y",
                 "primaryJobCode": "1103",
-                "startDate": "2024-01-15"
+                "originalHireDate": "2024-01-15"
             },
             "employee_employment": {
                 "employeeNumber": "12345",

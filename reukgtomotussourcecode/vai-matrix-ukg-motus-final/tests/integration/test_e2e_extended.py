@@ -124,10 +124,10 @@ class TestEmployeeStatusScenarios:
             "companyID": "J9A6Y",
             "employeeStatusCode": "T",
             "primaryJobCode": "4154",
-            "startDate": "2020-01-15T00:00:00Z",
-            "terminationDate": "2024-03-01T00:00:00Z",
-            "leaveStartDate": None,
-            "leaveEndDate": None,
+            "originalHireDate": "2020-01-15T00:00:00Z",
+            "dateOfTermination": "2024-03-01T00:00:00Z",
+            "employeeStatusStartDate": None,
+            "employeeStatusExpectedEndDate": None,
         }
 
         responses.add(
@@ -187,10 +187,10 @@ class TestEmployeeStatusScenarios:
             "companyID": "J9A6Y",
             "employeeStatusCode": "A",
             "primaryJobCode": "4154",
-            "startDate": "2020-01-15T00:00:00Z",
-            "terminationDate": None,
-            "leaveStartDate": "2024-02-01T00:00:00Z",
-            "leaveEndDate": None,  # Still on leave
+            "originalHireDate": "2020-01-15T00:00:00Z",
+            "dateOfTermination": None,
+            "employeeStatusStartDate": "2024-02-01T00:00:00Z",
+            "employeeStatusExpectedEndDate": None,  # Still on leave
         }
 
         responses.add(
@@ -254,7 +254,7 @@ class TestProgramAssignment:
             "companyID": "J9A6Y",
             "employeeStatusCode": "A",
             "primaryJobCode": "1103",  # FAVR job code
-            "startDate": "2020-01-15T00:00:00Z",
+            "originalHireDate": "2020-01-15T00:00:00Z",
         }
 
         responses.add(
@@ -310,7 +310,7 @@ class TestProgramAssignment:
             "companyID": "J9A6Y",
             "employeeStatusCode": "A",
             "primaryJobCode": "2817",  # CPM job code
-            "startDate": "2020-01-15T00:00:00Z",
+            "originalHireDate": "2020-01-15T00:00:00Z",
         }
 
         responses.add(
@@ -686,7 +686,7 @@ class TestConcurrentProcessing:
             "companyID": "J9A6Y",
             "employeeStatusCode": "A",
             "primaryJobCode": "4154",
-            "startDate": "2020-01-15T00:00:00Z",
+            "originalHireDate": "2020-01-15T00:00:00Z",
         }
 
         # Terminated employee
@@ -696,8 +696,8 @@ class TestConcurrentProcessing:
             "companyID": "J9A6Y",
             "employeeStatusCode": "T",
             "primaryJobCode": "4154",
-            "terminationDate": "2024-01-01T00:00:00Z",
-            "startDate": "2020-01-15T00:00:00Z",
+            "dateOfTermination": "2024-01-01T00:00:00Z",
+            "originalHireDate": "2020-01-15T00:00:00Z",
         }
 
         # Set up alternating mocks

@@ -107,14 +107,14 @@ def filter_by_eligible_job_codes(items: List[Dict[str, Any]], eligible_job_codes
         if job_code in eligible_job_codes or job_code_normalized in eligible_job_codes:
             eligible.append(item)
         elif DEBUG:
-            print(f"[DEBUG] Skipping employee {item.get('employeeNumber')} - ineligible job code: {job_code}")
+            _logger.debug(f"Skipping employee {item.get('employeeNumber')} - ineligible job code: {job_code}")
     return eligible
 
 def get_employee_employment_details_by_company(company_id: str) -> List[Dict[str, Any]]:
     params = {"companyID": company_id, "per_Page": 2147483647}
     data = get_data("/personnel/v1/employee-employment-details", params)
     items = _normalize_list(data)
-    print(f"[INFO] companyID={company_id} -> total records retrieved: {len(items)}")
+    _logger.info(f"companyID={company_id} -> total records retrieved: {len(items)}")
     return items
 
 def parse_states_arg(states_arg: Optional[str]) -> Optional[Set[str]]:
@@ -159,7 +159,7 @@ def _process_employee(it: Dict[str, Any],
 
     if states_filter and state not in states_filter:
         if DEBUG:
-            print(f"[DEBUG] skip emp={emp_number} state={state}")
+            _logger.debug(f"skip emp={emp_number} state={state}")
         return (emp_number, state, "skipped")
 
     try:
@@ -176,10 +176,10 @@ def _process_employee(it: Dict[str, Any],
         return (emp_number, state, "saved" if not dry else "dry_run")
 
     except SystemExit as se:
-        print(f"[WARN] employeeNumber={emp_number} skipped: {se}")
+        _logger.warning(f"employeeNumber={emp_number} skipped: {se}")
         return (emp_number, state, "skipped")
     except Exception as e:
-        print(f"[WARN] employeeNumber={emp_number} error: {repr(e)}")
+        _logger.warning(f"employeeNumber={emp_number} error: {repr(e)}")
         return (emp_number, state, "error")
 
 def build_and_save_drivers(items: List[Dict[str, Any]],
@@ -211,9 +211,9 @@ def build_and_save_drivers(items: List[Dict[str, Any]],
 
             printed += 1
             if printed % 100 == 0 or printed == total:
-                print(f"[INFO] progress: {printed}/{total} | saved={saved} skipped={skipped} errors={errors}")
+                _logger.info(f"progress: {printed}/{total} | saved={saved} skipped={skipped} errors={errors}")
 
-    print(f"[INFO] done: total={total} | saved={saved} | skipped={skipped} | errors={errors} | out_dir={out_path}")
+    _logger.info(f"done: total={total} | saved={saved} | skipped={skipped} | errors={errors} | out_dir={out_path}")
 
 if __name__ == "__main__":
     args = parse_cli()
@@ -222,6 +222,20 @@ if __name__ == "__main__":
     company_id = (args.company_id or os.getenv("COMPANY_ID", "")).strip()
     if not company_id:
         raise SystemExit("Error: --company-id argument or COMPANY_ID environment variable is required")
+
+    # Validate API credentials at startup (fail-fast if missing or invalid)
+    from src.infrastructure.config.settings import MotusSettings, UKGSettings
+
+    _logger.info("Validating API credentials...")
+
+    ukg_settings = UKGSettings.from_env()
+    ukg_settings.validate_or_exit()
+    _logger.info("UKG credentials validated successfully.")
+
+    motus_settings = MotusSettings.from_env()
+    motus_settings.validate_or_exit()
+    _logger.info("Motus JWT token validated successfully.")
+
     states_env = (args.states or os.getenv("STATES", "")).strip()
     states_filter = parse_states_arg(states_env)
 
@@ -237,19 +251,18 @@ if __name__ == "__main__":
     if args.probe:
         os.environ["PROBE"] = "1"
 
-    has_jwt = bool(os.getenv("MOTUS_JWT"))
-    print(f"[CFG] companyID={company_id} | states={states_env or 'ALL'} | workers={os.getenv('WORKERS','12')} | dry_run={os.getenv('DRY_RUN','0')} | probe={os.getenv('PROBE','0')} | save_local={os.getenv('SAVE_LOCAL','0')} | MOTUS_JWT={'SET' if has_jwt else 'MISSING'}")
+    _logger.info(f"Config: companyID={company_id} | states={states_env or 'ALL'} | workers={os.getenv('WORKERS','12')} | dry_run={os.getenv('DRY_RUN','0')} | probe={os.getenv('PROBE','0')} | save_local={os.getenv('SAVE_LOCAL','0')} | MOTUS_JWT=SET")
 
     # Get eligible job codes from environment
     eligible_job_codes = get_eligible_job_codes()
-    print(f"[CFG] JOB_IDS (from env): {','.join(sorted(eligible_job_codes))}")
+    _logger.info(f"JOB_IDS (from env): {','.join(sorted(eligible_job_codes))}")
 
     # Fetch all employees from UKG
     items = get_employee_employment_details_by_company(company_id)
-    print(f"[INFO] Total employees from UKG: {len(items)}")
+    _logger.info(f"Total employees from UKG: {len(items)}")
 
     # Filter by eligible job codes
     items = filter_by_eligible_job_codes(items, eligible_job_codes)
-    print(f"[INFO] Eligible employees (by job code): {len(items)}")
+    _logger.info(f"Eligible employees (by job code): {len(items)}")
 
     build_and_save_drivers(items, out_dir, states_filter=states_filter, company_id=company_id)

@@ -30,9 +30,9 @@ class TestDetermineEmploymentStatus:
 
         employment = {
             "employeeStatusCode": "A",
-            "leaveStartDate": "2024-03-01",
-            "leaveEndDate": None,
-            "terminationDate": None
+            "employeeStatusStartDate": "2024-03-01",
+            "employeeStatusExpectedEndDate": None,
+            "dateOfTermination": None
         }
 
         result = builder.determine_employment_status(employment)
@@ -45,9 +45,9 @@ class TestDetermineEmploymentStatus:
 
         employment = {
             "employeeStatusCode": "A",
-            "leaveStartDate": "2024-01-01",
-            "leaveEndDate": "2024-02-01",
-            "terminationDate": None
+            "employeeStatusStartDate": "2024-01-01",
+            "employeeStatusExpectedEndDate": "2024-02-01",
+            "dateOfTermination": None
         }
 
         result = builder.determine_employment_status(employment)
@@ -60,9 +60,9 @@ class TestDetermineEmploymentStatus:
 
         employment = {
             "employeeStatusCode": "T",
-            "leaveStartDate": None,
-            "leaveEndDate": None,
-            "terminationDate": "2024-03-15"
+            "employeeStatusStartDate": None,
+            "employeeStatusExpectedEndDate": None,
+            "dateOfTermination": "2024-03-15"
         }
 
         result = builder.determine_employment_status(employment)
@@ -75,9 +75,9 @@ class TestDetermineEmploymentStatus:
 
         employment = {
             "employeeStatusCode": "A",
-            "leaveStartDate": None,
-            "leaveEndDate": None,
-            "terminationDate": None
+            "employeeStatusStartDate": None,
+            "employeeStatusExpectedEndDate": None,
+            "dateOfTermination": None
         }
 
         result = builder.determine_employment_status(employment)
@@ -90,9 +90,9 @@ class TestDetermineEmploymentStatus:
 
         employment = {
             "employeeStatusCode": "",
-            "leaveStartDate": None,
-            "leaveEndDate": None,
-            "terminationDate": None
+            "employeeStatusStartDate": None,
+            "employeeStatusExpectedEndDate": None,
+            "dateOfTermination": None
         }
 
         result = builder.determine_employment_status(employment)
@@ -115,9 +115,9 @@ class TestDetermineEmploymentStatus:
 
         employment = {
             "employeeStatusCode": "A",  # Active status code
-            "leaveStartDate": "2024-03-01",
-            "leaveEndDate": None,  # Still on leave
-            "terminationDate": None
+            "employeeStatusStartDate": "2024-03-01",
+            "employeeStatusExpectedEndDate": None,  # Still on leave
+            "dateOfTermination": None
         }
 
         result = builder.determine_employment_status(employment)
@@ -130,9 +130,9 @@ class TestDetermineEmploymentStatus:
 
         employment = {
             "employeeStatusCode": "A",
-            "leaveStartDate": None,
-            "leaveEndDate": None,
-            "terminationDate": "2024-03-15T00:00:00Z"  # ISO format
+            "employeeStatusStartDate": None,
+            "employeeStatusExpectedEndDate": None,
+            "dateOfTermination": "2024-03-15T00:00:00Z"  # ISO format
         }
 
         result = builder.determine_employment_status(employment)
@@ -145,9 +145,9 @@ class TestDetermineEmploymentStatus:
 
         employment = {
             "employeeStatusCode": "A",
-            "leaveStartDate": "",  # Empty string
-            "leaveEndDate": None,
-            "terminationDate": None
+            "employeeStatusStartDate": "",  # Empty string
+            "employeeStatusExpectedEndDate": None,
+            "dateOfTermination": None
         }
 
         result = builder.determine_employment_status(employment)
@@ -167,9 +167,9 @@ class TestLeaveStatusInPayload:
                 "employeeId": "EMP001",
                 "companyID": "J9A6Y",
                 "primaryJobCode": "1103",
-                "leaveStartDate": "2024-03-01",
-                "leaveEndDate": None,
-                "terminationDate": None,
+                "employeeStatusStartDate": "2024-03-01",
+                "employeeStatusExpectedEndDate": None,
+                "dateOfTermination": None,
                 "employeeStatusCode": "A"
             },
             "employee_employment": {
@@ -226,8 +226,8 @@ class TestLeaveStatusInPayload:
         builder = get_builder_module(monkeypatch)
 
         # Remove leave dates
-        mock_api_responses["employment_details"]["leaveStartDate"] = None
-        mock_api_responses["employment_details"]["leaveEndDate"] = None
+        mock_api_responses["employment_details"]["employeeStatusStartDate"] = None
+        mock_api_responses["employment_details"]["employeeStatusExpectedEndDate"] = None
 
         def mock_get_data(path, params=None):
             if "employment-details" in path and "employee-" not in path:
@@ -258,8 +258,8 @@ class TestLeaveStatusInPayload:
         builder = get_builder_module(monkeypatch)
 
         # Set termination date
-        mock_api_responses["employment_details"]["leaveStartDate"] = None
-        mock_api_responses["employment_details"]["terminationDate"] = "2024-03-15"
+        mock_api_responses["employment_details"]["employeeStatusStartDate"] = None
+        mock_api_responses["employment_details"]["dateOfTermination"] = "2024-03-15"
 
         def mock_get_data(path, params=None):
             if "employment-details" in path and "employee-" not in path:

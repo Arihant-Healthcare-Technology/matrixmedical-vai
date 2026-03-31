@@ -20,6 +20,7 @@ environment (.env example):
 optional:
   DEBUG=1 # prints requested URLs and brief response info
 """
+import logging
 import os
 import re
 import sys
@@ -29,7 +30,11 @@ from datetime import datetime
 from typing import Any, Dict, Optional, List
 import requests
 
-from common import get_secrets_manager
+from common import get_secrets_manager, configure_logging
+
+# Initialize logging
+configure_logging()
+logger = logging.getLogger(__name__)
 
 # ---------- config ----------
 _secrets = get_secrets_manager()
@@ -83,7 +88,7 @@ def get_data(path: str, params: Optional[Dict[str, Any]]=None) -> Any:
     try:
         r = requests.get(url, headers=headers(), params=params, timeout=45)
         if DEBUG:
-            print(f"[DEBUG] GET {r.url} -> {r.status_code}")
+            logger.debug(f"GET {r.url} -> {r.status_code}")
         r.raise_for_status()
     except requests.RequestException as e:
         raise SystemExit(f"HTTP error fetching {url}: {e}")
@@ -92,9 +97,9 @@ def get_data(path: str, params: Optional[Dict[str, Any]]=None) -> Any:
         data = r.json()
         if DEBUG:
             if isinstance(data, list):
-                print(f"[DEBUG] list len={len(data)}; first keys={list(data[0].keys())[:12] if data else []}")
+                logger.debug(f"list len={len(data)}; first keys={list(data[0].keys())[:12] if data else []}")
             elif isinstance(data, dict):
-                print(f"[DEBUG] dict keys={list(data.keys())[:12]}")
+                logger.debug(f"dict keys={list(data.keys())[:12]}")
         return data
     except ValueError as e:
         raise SystemExit(f"JSON parse error from {url}: {e}")
@@ -182,7 +187,7 @@ def get_supervisor_details(employee_id: str) -> Dict[str, Any]:
         return items[0] if items else {}
     except SystemExit:
         if DEBUG:
-            print(f"[WARN] No supervisor found for employeeId={employee_id}")
+            logger.warning(f"No supervisor found for employeeId={employee_id}")
         return {}
 
 def determine_employment_status(employment_details: Dict[str, Any]) -> str:
@@ -191,9 +196,9 @@ def determine_employment_status(employment_details: Dict[str, Any]) -> str:
     Returns: 'Active', 'Leave', 'Terminated', etc.
     """
     status_code = employment_details.get("employeeStatusCode", "")
-    leave_start = employment_details.get("leaveStartDate")
-    leave_end = employment_details.get("leaveEndDate")
-    termination_date = employment_details.get("terminationDate")
+    leave_start = employment_details.get("employeeStatusStartDate")
+    leave_end = employment_details.get("employeeStatusExpectedEndDate")
+    termination_date = employment_details.get("dateOfTermination")
 
     # Check for active leave of absence
     if leave_start and not leave_end:
@@ -218,31 +223,31 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
     # 1) employment-details (strict by company)
     employment_details = get_employment_details(employee_number, company_id)
     if DEBUG:
-        print(f"[DEBUG] Employee {employee_number}: === EMPLOYMENT DETAILS ===")
-        print(f"[DEBUG] Employee {employee_number}: employment_details keys: {list(employment_details.keys())}")
-        print(f"[DEBUG] Employee {employee_number}: terminationDate = {employment_details.get('terminationDate')}")
-        print(f"[DEBUG] Employee {employee_number}: leaveStartDate = {employment_details.get('leaveStartDate')}")
-        print(f"[DEBUG] Employee {employee_number}: leaveEndDate = {employment_details.get('leaveEndDate')}")
-        print(f"[DEBUG] Employee {employee_number}: employeeStatusCode = {employment_details.get('employeeStatusCode')}")
-        print(f"[DEBUG] Employee {employee_number}: startDate = {employment_details.get('startDate')}")
-        print(f"[DEBUG] Employee {employee_number}: primaryJobCode = {employment_details.get('primaryJobCode')}")
-        print(f"[DEBUG] Employee {employee_number}: jobDescription = {employment_details.get('jobDescription')}")
-        print("[DEBUG] employment-details full response:")
-        print(json.dumps(employment_details, indent=2))
+        logger.debug(f"Employee {employee_number}: === EMPLOYMENT DETAILS ===")
+        logger.debug(f"Employee {employee_number}: employment_details keys: {list(employment_details.keys())}")
+        logger.debug(f"Employee {employee_number}: dateOfTermination = {employment_details.get('terminationDate')}")
+        logger.debug(f"Employee {employee_number}: employeeStatusStartDate = {employment_details.get('employeeStatusStartDate')}")
+        logger.debug(f"Employee {employee_number}: employeeStatusExpectedEndDate = {employment_details.get('employeeStatusExpectedEndDate')}")
+        logger.debug(f"Employee {employee_number}: employeeStatusCode = {employment_details.get('employeeStatusCode')}")
+        logger.debug(f"Employee {employee_number}: originalHireDate = {employment_details.get('originalHireDate')}")
+        logger.debug(f"Employee {employee_number}: primaryJobCode = {employment_details.get('primaryJobCode')}")
+        logger.debug(f"Employee {employee_number}: jobDescription = {employment_details.get('jobDescription')}")
+        logger.debug("employment-details full response:")
+        logger.debug(json.dumps(employment_details, indent=2))
     if not employment_details:
         raise SystemExit(f"no employment details found for employeeNumber={employee_number} companyID={company_id}")
 
     # 2) employee-employment-details (strict by company) - for primaryProjectCode and fallback employeeId
     employee_employment = get_employee_employment_details(employee_number, company_id)
     if DEBUG:
-        print(f"[DEBUG] Employee {employee_number}: === EMPLOYEE EMPLOYMENT DETAILS ===")
-        print(f"[DEBUG] Employee {employee_number}: employee_employment keys: {list(employee_employment.keys())}")
-        print(f"[DEBUG] Employee {employee_number}: primaryProjectCode = {employee_employment.get('primaryProjectCode')}")
-        print(f"[DEBUG] Employee {employee_number}: primaryProjectDescription = {employee_employment.get('primaryProjectDescription')}")
-        print(f"[DEBUG] Employee {employee_number}: employeeId = {employee_employment.get('employeeId')}")
-        print(f"[DEBUG] Employee {employee_number}: employeeID = {employee_employment.get('employeeID')}")
-        print("[DEBUG] employee-employment-details full response:")
-        print(json.dumps(employee_employment, indent=2))
+        logger.debug(f"Employee {employee_number}: === EMPLOYEE EMPLOYMENT DETAILS ===")
+        logger.debug(f"Employee {employee_number}: employee_employment keys: {list(employee_employment.keys())}")
+        logger.debug(f"Employee {employee_number}: primaryProjectCode = {employee_employment.get('primaryProjectCode')}")
+        logger.debug(f"Employee {employee_number}: primaryProjectDescription = {employee_employment.get('primaryProjectDescription')}")
+        logger.debug(f"Employee {employee_number}: employeeId = {employee_employment.get('employeeId')}")
+        logger.debug(f"Employee {employee_number}: employeeID = {employee_employment.get('employeeID')}")
+        logger.debug("employee-employment-details full response:")
+        logger.debug(json.dumps(employee_employment, indent=2))
 
     # 3) resolve employeeId (covers employeeId / employeeID with fallback)
     employee_id = (
@@ -257,15 +262,15 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
     # 4) person (requires employeeId)
     person = get_person_details(employee_id)
     if DEBUG:
-        print(f"[DEBUG] Employee {employee_number}: === PERSON DETAILS ===")
-        print(f"[DEBUG] Employee {employee_number}: person keys: {list(person.keys())}")
-        print(f"[DEBUG] Employee {employee_number}: firstName = {person.get('firstName')}")
-        print(f"[DEBUG] Employee {employee_number}: lastName = {person.get('lastName')}")
-        print(f"[DEBUG] Employee {employee_number}: emailAddress = {person.get('emailAddress')}")
-        print(f"[DEBUG] Employee {employee_number}: addressLine1 = {person.get('addressLine1')}")
-        print(f"[DEBUG] Employee {employee_number}: addressCity = {person.get('addressCity')}")
-        print(f"[DEBUG] Employee {employee_number}: addressState = {person.get('addressState')}")
-        print(f"[DEBUG] Employee {employee_number}: addressZipCode = {person.get('addressZipCode')}")
+        logger.debug(f"Employee {employee_number}: === PERSON DETAILS ===")
+        logger.debug(f"Employee {employee_number}: person keys: {list(person.keys())}")
+        logger.debug(f"Employee {employee_number}: firstName = {person.get('firstName')}")
+        logger.debug(f"Employee {employee_number}: lastName = {person.get('lastName')}")
+        logger.debug(f"Employee {employee_number}: emailAddress = {person.get('emailAddress')}")
+        logger.debug(f"Employee {employee_number}: addressLine1 = {person.get('addressLine1')}")
+        logger.debug(f"Employee {employee_number}: addressCity = {person.get('addressCity')}")
+        logger.debug(f"Employee {employee_number}: addressState = {person.get('addressState')}")
+        logger.debug(f"Employee {employee_number}: addressZipCode = {person.get('addressZipCode')}")
 
     # 4b) supervisor/manager details
     supervisor = get_supervisor_details(employee_id)
@@ -275,26 +280,26 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
         sup_last = supervisor.get("supervisorLastName", "") or ""
         supervisor_name = f"{sup_first} {sup_last}".strip()
     if DEBUG:
-        print(f"[DEBUG] Employee {employee_number}: === SUPERVISOR DETAILS ===")
-        print(f"[DEBUG] Employee {employee_number}: supervisor keys: {list(supervisor.keys()) if supervisor else []}")
-        print(f"[DEBUG] Employee {employee_number}: supervisor_name = {supervisor_name}")
+        logger.debug(f"Employee {employee_number}: === SUPERVISOR DETAILS ===")
+        logger.debug(f"Employee {employee_number}: supervisor keys: {list(supervisor.keys()) if supervisor else []}")
+        logger.debug(f"Employee {employee_number}: supervisor_name = {supervisor_name}")
 
     # 4c) determine derived employment status
     derived_status = determine_employment_status(employment_details)
     if DEBUG:
-        print(f"[DEBUG] Employee {employee_number}: === STATUS DETERMINATION ===")
-        print(f"[DEBUG] Employee {employee_number}: Input - employeeStatusCode = {employment_details.get('employeeStatusCode')}")
-        print(f"[DEBUG] Employee {employee_number}: Input - leaveStartDate = {employment_details.get('leaveStartDate')}")
-        print(f"[DEBUG] Employee {employee_number}: Input - leaveEndDate = {employment_details.get('leaveEndDate')}")
-        print(f"[DEBUG] Employee {employee_number}: Input - terminationDate = {employment_details.get('terminationDate')}")
-        print(f"[DEBUG] Employee {employee_number}: Output - derived_status = {derived_status}")
+        logger.debug(f"Employee {employee_number}: === STATUS DETERMINATION ===")
+        logger.debug(f"Employee {employee_number}: Input - employeeStatusCode = {employment_details.get('employeeStatusCode')}")
+        logger.debug(f"Employee {employee_number}: Input - employeeStatusStartDate = {employment_details.get('employeeStatusStartDate')}")
+        logger.debug(f"Employee {employee_number}: Input - employeeStatusExpectedEndDate = {employment_details.get('employeeStatusExpectedEndDate')}")
+        logger.debug(f"Employee {employee_number}: Input - dateOfTermination = {employment_details.get('dateOfTermination')}")
+        logger.debug(f"Employee {employee_number}: Output - derived_status = {derived_status}")
 
     # 5) location for primaryWorkLocationCode
     location = {}
     loc_code = employment_details.get("primaryWorkLocationCode")
     if loc_code:
         if DEBUG:
-            print(f"[DEBUG] primaryWorkLocationCode = {loc_code}")
+            logger.debug(f"primaryWorkLocationCode = {loc_code}")
         try:
             location = get_first_item(get_data(f"/configuration/v1/locations/{loc_code}"))
         except SystemExit:
@@ -302,11 +307,11 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
                 location = get_first_item(get_data("/configuration/v1/locations", {"locationCode": loc_code}))
             except SystemExit as e:
                 if DEBUG:
-                    print(f"[WARN] Location fetch failed for {loc_code}: {e}")
+                    logger.warning(f"Location fetch failed for {loc_code}: {e}")
                 location = {}
         if DEBUG:
-            print("[DEBUG] location full object:")
-            print(json.dumps(location, indent=2))
+            logger.debug("location full object:")
+            logger.debug(json.dumps(location, indent=2))
 
     # 6) project
     primary_project_code = employee_employment.get("primaryProjectCode") or ""
@@ -335,12 +340,12 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
 
         "email": person.get("emailAddress", ""),
         "phone": normalize_phone(person.get("homePhone", "")),
-        "alternatePhone": person.get("mobilePhone", "") or "",
+        "alternatePhone": person.get("mobilePhone") or employment_details.get("workPhoneNumber") or "",
 
-        "startDate": to_iso_date(employment_details.get("startDate")),
-        "endDate": to_iso_date(employment_details.get("terminationDate")),
-        "leaveStartDate": to_iso_date(employment_details.get("leaveStartDate")),
-        "leaveEndDate": to_iso_date(employment_details.get("leaveEndDate")),
+        "startDate": to_iso_date(employment_details.get("originalHireDate")),
+        "endDate": to_iso_date(employment_details.get("dateOfTermination")),
+        "leaveStartDate": to_iso_date(employment_details.get("employeeStatusStartDate")),
+        "leaveEndDate": to_iso_date(employment_details.get("employeeStatusExpectedEndDate")),
 
         "annualBusinessMiles": 0,
         "commuteDeductionType": None,
@@ -356,8 +361,8 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
             {"name": "Job",      "value": employment_details.get("jobDescription", "") or ""},
 
             # location
-            {"name": "Location Code", "value": location.get("description", "") or ""},
-            {"name": "Location",      "value": location.get("state", "") or ""},
+            {"name": "Location Code", "value": employment_details.get("primaryWorkLocationCode", "") or ""},
+            {"name": "Location",      "value": location.get("description", "") or ""},
 
             # organizational structure
             {"name": "Org Level 1 Code", "value": employment_details.get("orgLevel1Code", "") or ""},
@@ -372,7 +377,7 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
 
             # important dates (MM/DD/YYYY)
             {"name": "Last Hire",        "value": to_iso_date(employment_details.get("lastHireDate"))},
-            {"name": "Termination Date", "value": to_iso_date(employment_details.get("terminationDate"))},
+            {"name": "Termination Date", "value": to_iso_date(employment_details.get("dateOfTermination"))},
 
             # manager/supervisor
             {"name": "Manager Name", "value": supervisor_name},
@@ -383,23 +388,23 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
     }
 
     if DEBUG:
-        print(f"[DEBUG] Employee {employee_number}: === FINAL DRIVER PAYLOAD SUMMARY ===")
-        print(f"[DEBUG] Employee {employee_number}: clientEmployeeId1 = {driver['clientEmployeeId1']}")
-        print(f"[DEBUG] Employee {employee_number}: programId = {driver['programId']}")
-        print(f"[DEBUG] Employee {employee_number}: firstName = {driver['firstName']}")
-        print(f"[DEBUG] Employee {employee_number}: lastName = {driver['lastName']}")
-        print(f"[DEBUG] Employee {employee_number}: email = {driver['email']}")
-        print(f"[DEBUG] Employee {employee_number}: address1 = {driver['address1']}")
-        print(f"[DEBUG] Employee {employee_number}: city = {driver['city']}")
-        print(f"[DEBUG] Employee {employee_number}: stateProvince = {driver['stateProvince']}")
-        print(f"[DEBUG] Employee {employee_number}: postalCode = {driver['postalCode']}")
-        print(f"[DEBUG] Employee {employee_number}: startDate = {driver['startDate']}")
-        print(f"[DEBUG] Employee {employee_number}: endDate = {driver['endDate']}")
-        print(f"[DEBUG] Employee {employee_number}: leaveStartDate = {driver['leaveStartDate']}")
-        print(f"[DEBUG] Employee {employee_number}: leaveEndDate = {driver['leaveEndDate']}")
+        logger.debug(f"Employee {employee_number}: === FINAL DRIVER PAYLOAD SUMMARY ===")
+        logger.debug(f"Employee {employee_number}: clientEmployeeId1 = {driver['clientEmployeeId1']}")
+        logger.debug(f"Employee {employee_number}: programId = {driver['programId']}")
+        logger.debug(f"Employee {employee_number}: firstName = {driver['firstName']}")
+        logger.debug(f"Employee {employee_number}: lastName = {driver['lastName']}")
+        logger.debug(f"Employee {employee_number}: email = {driver['email']}")
+        logger.debug(f"Employee {employee_number}: address1 = {driver['address1']}")
+        logger.debug(f"Employee {employee_number}: city = {driver['city']}")
+        logger.debug(f"Employee {employee_number}: stateProvince = {driver['stateProvince']}")
+        logger.debug(f"Employee {employee_number}: postalCode = {driver['postalCode']}")
+        logger.debug(f"Employee {employee_number}: startDate = {driver['startDate']}")
+        logger.debug(f"Employee {employee_number}: endDate = {driver['endDate']}")
+        logger.debug(f"Employee {employee_number}: leaveStartDate = {driver['leaveStartDate']}")
+        logger.debug(f"Employee {employee_number}: leaveEndDate = {driver['leaveEndDate']}")
         # Log custom variables
         for cv in driver['customVariables']:
-            print(f"[DEBUG] Employee {employee_number}: CV[{cv['name']}] = {cv['value']}")
+            logger.debug(f"Employee {employee_number}: CV[{cv['name']}] = {cv['value']}")
 
     return driver
 

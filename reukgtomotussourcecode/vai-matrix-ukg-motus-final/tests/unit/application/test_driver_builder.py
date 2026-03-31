@@ -34,8 +34,8 @@ class TestDriverBuilderService:
             "primaryJobCode": "4154",
             "jobDescription": "Field Tech",
             "employeeStatusCode": "A",
-            "startDate": "2020-01-15T00:00:00Z",
-            "terminationDate": None,
+            "originalHireDate": "2020-01-15T00:00:00Z",
+            "dateOfTermination": None,
         }
 
     @pytest.fixture

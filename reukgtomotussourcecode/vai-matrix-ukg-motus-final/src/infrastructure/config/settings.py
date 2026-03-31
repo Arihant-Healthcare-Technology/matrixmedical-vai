@@ -5,9 +5,12 @@ Provides environment-based configuration for UKG and Motus APIs.
 """
 
 import base64
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from .constants import (
     DEFAULT_MAX_RETRIES,
@@ -57,6 +60,22 @@ class UKGSettings:
         # Validate we can get auth token
         self.get_auth_token()
 
+    def validate_or_exit(self) -> None:
+        """
+        Validate UKG settings and exit if credentials are missing or invalid.
+        Logs an error message with instructions.
+        """
+        if not self.customer_api_key:
+            logger.error("UKG_CUSTOMER_API_KEY is not set or is empty. Cannot connect to UKG API.")
+            logger.error("Please set UKG_CUSTOMER_API_KEY in your .env file.")
+            raise SystemExit(1)
+
+        # Check for authentication credentials
+        if not self.basic_b64 and (not self.username or not self.password):
+            logger.error("UKG authentication credentials are missing.")
+            logger.error("Please set either UKG_BASIC_B64 or both UKG_USERNAME and UKG_PASSWORD in your .env file.")
+            raise SystemExit(1)
+
 
 @dataclass
 class MotusSettings:
@@ -83,6 +102,22 @@ class MotusSettings:
         """Validate settings."""
         if not self.jwt:
             raise ValueError("Missing MOTUS_JWT")
+
+    def validate_or_exit(self) -> None:
+        """
+        Validate Motus settings and exit if JWT is missing or invalid.
+        Logs an error message with instructions for generating a token.
+        """
+        if not self.jwt:
+            logger.error("MOTUS_JWT is not set or is empty. Cannot connect to Motus API.")
+            logger.error("To generate a token, run: python3 motus-get-token.py --write-env")
+            raise SystemExit(1)
+
+        # Validate JWT format (should have 3 parts separated by dots)
+        if len(self.jwt.split(".")) != 3:
+            logger.error("MOTUS_JWT appears to be invalid (not a valid JWT format).")
+            logger.error("To regenerate the token, run: python3 motus-get-token.py --write-env --force")
+            raise SystemExit(1)
 
 
 @dataclass

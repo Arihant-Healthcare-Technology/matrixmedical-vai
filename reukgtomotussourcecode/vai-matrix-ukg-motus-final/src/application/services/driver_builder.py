@@ -4,6 +4,7 @@ Driver builder service.
 Builds Motus driver payloads from UKG data.
 """
 
+import logging
 from typing import Any, Dict, Optional
 
 from src.domain.exceptions import EmployeeNotFoundError, ProgramNotFoundError
@@ -11,6 +12,8 @@ from src.domain.models import MotusDriver
 from src.domain.models.employment_status import determine_employment_status_from_dict
 from src.domain.models.program import resolve_program_id_from_job_code
 from src.infrastructure.adapters.ukg import UKGClient
+
+logger = logging.getLogger(__name__)
 
 
 class DriverBuilderService:
@@ -30,7 +33,7 @@ class DriverBuilderService:
     def _log(self, message: str) -> None:
         """Log debug message."""
         if self.debug:
-            print(f"[DEBUG] {message}")
+            logger.debug(message)
 
     def build_driver(
         self,
@@ -57,11 +60,11 @@ class DriverBuilderService:
         )
         self._log(f"Employee {employee_number}: === EMPLOYMENT DETAILS ===")
         self._log(f"Employee {employee_number}: employment_details keys: {list(employment_details.keys())}")
-        self._log(f"Employee {employee_number}: terminationDate = {employment_details.get('terminationDate')}")
-        self._log(f"Employee {employee_number}: leaveStartDate = {employment_details.get('leaveStartDate')}")
-        self._log(f"Employee {employee_number}: leaveEndDate = {employment_details.get('leaveEndDate')}")
+        self._log(f"Employee {employee_number}: dateOfTermination = {employment_details.get('dateOfTermination')}")
+        self._log(f"Employee {employee_number}: employeeStatusStartDate = {employment_details.get('employeeStatusStartDate')}")
+        self._log(f"Employee {employee_number}: employeeStatusExpectedEndDate = {employment_details.get('employeeStatusExpectedEndDate')}")
         self._log(f"Employee {employee_number}: employeeStatusCode = {employment_details.get('employeeStatusCode')}")
-        self._log(f"Employee {employee_number}: startDate = {employment_details.get('startDate')}")
+        self._log(f"Employee {employee_number}: originalHireDate = {employment_details.get('originalHireDate')}")
         self._log(f"Employee {employee_number}: primaryJobCode = {employment_details.get('primaryJobCode')}")
         if not employment_details:
             raise EmployeeNotFoundError(
@@ -122,9 +125,9 @@ class DriverBuilderService:
         derived_status = determine_employment_status_from_dict(employment_details)
         self._log(f"Employee {employee_number}: === STATUS DETERMINATION ===")
         self._log(f"Employee {employee_number}: Input - employeeStatusCode = {employment_details.get('employeeStatusCode')}")
-        self._log(f"Employee {employee_number}: Input - leaveStartDate = {employment_details.get('leaveStartDate')}")
-        self._log(f"Employee {employee_number}: Input - leaveEndDate = {employment_details.get('leaveEndDate')}")
-        self._log(f"Employee {employee_number}: Input - terminationDate = {employment_details.get('terminationDate')}")
+        self._log(f"Employee {employee_number}: Input - employeeStatusStartDate = {employment_details.get('employeeStatusStartDate')}")
+        self._log(f"Employee {employee_number}: Input - employeeStatusExpectedEndDate = {employment_details.get('employeeStatusExpectedEndDate')}")
+        self._log(f"Employee {employee_number}: Input - dateOfTermination = {employment_details.get('dateOfTermination')}")
         self._log(f"Employee {employee_number}: Output - derived_status = {derived_status.value}")
 
         # 7) Get location

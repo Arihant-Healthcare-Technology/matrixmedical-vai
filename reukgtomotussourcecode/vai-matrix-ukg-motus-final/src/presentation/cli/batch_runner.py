@@ -5,6 +5,7 @@ Entry point for running Motus batch synchronization.
 """
 
 import argparse
+import logging
 import os
 from typing import Optional, Set
 
@@ -12,6 +13,8 @@ from src.application.services import DriverSyncService
 from src.infrastructure.adapters.motus import MotusClient
 from src.infrastructure.adapters.ukg import UKGClient
 from src.infrastructure.config.settings import BatchSettings, MotusSettings, UKGSettings
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -85,8 +88,8 @@ def filter_by_eligible_job_codes(
         if job_code in eligible_job_codes or job_code_normalized in eligible_job_codes:
             eligible.append(item)
         elif debug:
-            print(
-                f"[DEBUG] Skipping employee {item.get('employeeNumber')} - "
+            logger.debug(
+                f"Skipping employee {item.get('employeeNumber')} - "
                 f"ineligible job code: {job_code}"
             )
     return eligible
@@ -121,13 +124,24 @@ def main() -> None:
             "Error: --company-id argument or COMPANY_ID environment variable is required"
         )
 
+    # Validate API credentials at startup (fail-fast if missing or invalid)
+    logger.info("Validating API credentials...")
+
+    ukg_settings = UKGSettings.from_env()
+    ukg_settings.validate_or_exit()
+    logger.info("UKG credentials validated successfully.")
+
+    motus_settings = MotusSettings.from_env()
+    motus_settings.validate_or_exit()
+    logger.info("Motus JWT token validated successfully.")
+
     states_filter = parse_states(batch_settings.states_filter)
     debug = os.getenv("DEBUG", "0") == "1"
 
-    # Print config
-    has_jwt = bool(os.getenv("MOTUS_JWT"))
-    print(
-        f"[CFG] companyID={batch_settings.company_id} | "
+    # Log config
+    has_jwt = True  # Already validated above
+    logger.info(
+        f"Config: companyID={batch_settings.company_id} | "
         f"states={batch_settings.states_filter or 'ALL'} | "
         f"workers={batch_settings.workers} | "
         f"dry_run={batch_settings.dry_run} | "
@@ -138,21 +152,21 @@ def main() -> None:
 
     # Get eligible job codes
     eligible_job_codes = get_eligible_job_codes()
-    print(f"[CFG] JOB_IDS (from env): {','.join(sorted(eligible_job_codes))}")
+    logger.info(f"JOB_IDS (from env): {','.join(sorted(eligible_job_codes))}")
 
-    # Initialize clients
-    ukg_client = UKGClient(debug=debug)
-    motus_client = MotusClient(debug=debug)
+    # Initialize clients with validated settings
+    ukg_client = UKGClient(settings=ukg_settings, debug=debug)
+    motus_client = MotusClient(settings=motus_settings, debug=debug)
 
     # Fetch employees from UKG
     employees = ukg_client.get_all_employment_details_by_company(
         batch_settings.company_id
     )
-    print(f"[INFO] Total employees from UKG: {len(employees)}")
+    logger.info(f"Total employees from UKG: {len(employees)}")
 
     # Filter by job codes
     employees = filter_by_eligible_job_codes(employees, eligible_job_codes, debug)
-    print(f"[INFO] Eligible employees (by job code): {len(employees)}")
+    logger.info(f"Eligible employees (by job code): {len(employees)}")
 
     # Sync
     sync_service = DriverSyncService(ukg_client, motus_client, debug=debug)

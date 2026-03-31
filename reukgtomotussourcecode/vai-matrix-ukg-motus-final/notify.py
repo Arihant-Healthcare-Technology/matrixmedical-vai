@@ -2,12 +2,15 @@
 Notification module for batch operation alerts.
 Supports SMTP and AWS SES.
 """
+import logging
 import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -142,7 +145,7 @@ Details:
                 server.send_message(msg)
             return True
         except Exception as e:
-            print(f"[ERROR] Failed to send SMTP notification: {e}")
+            logger.error(f"Failed to send SMTP notification: {e}")
             return False
 
     def _send_ses(self, subject: str, body: str) -> bool:
@@ -160,7 +163,7 @@ Details:
             )
             return True
         except Exception as e:
-            print(f"[ERROR] Failed to send SES notification: {e}")
+            logger.error(f"Failed to send SES notification: {e}")
             return False
 
 

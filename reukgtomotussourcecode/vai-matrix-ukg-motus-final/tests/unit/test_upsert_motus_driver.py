@@ -787,6 +787,9 @@ class TestMainCLI:
 
     def test_probe_flag_sets_env(self, monkeypatch, tmp_path, sample_motus_driver_payload):
         """Test --probe flag sets PROBE env var."""
+        # Set valid MOTUS_JWT for validation
+        monkeypatch.setenv("MOTUS_JWT", "header.payload.signature")
+
         upserter = get_upserter_module(monkeypatch)
 
         # Create test file
