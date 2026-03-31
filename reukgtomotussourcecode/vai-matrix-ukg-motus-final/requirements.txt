@@ -1,5 +1,23 @@
 # Motus Integration - References consolidated requirements
--r ../requirements.txt
+# MatrixMedical VAI - Consolidated Production Dependencies
+# Supports: Bill.com, Motus, TravelPerk integrations
+
+# Core HTTP & API
+requests>=2.31.0,<3.0.0
+
+# Configuration & Environment
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Resilience & Retry
+tenacity>=8.0.0
+
+# Structured Logging
+structlog>=23.0.0
+
+# Browser Automation (Bill.com scraping)
+playwright>=1.40.0
 
 # Debug API (FastAPI)
 fastapi>=0.109.0
