@@ -31,6 +31,7 @@ from typing import Any, Dict, Optional, List
 import requests
 
 from common import get_secrets_manager, configure_logging
+from common.correlation import correlation_context, get_correlation_id
 
 # Initialize logging
 configure_logging()
@@ -131,6 +132,35 @@ def normalize_phone(val: Optional[str]) -> str:
         return f"{digits[0:3]}-{digits[3:6]}-{digits[6:10]}"
     return val
 
+
+def filter_empty_values(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Filter out null, empty string, and zero values from payload.
+    Motus API doesn't need empty values - they cause issues.
+    """
+    def is_empty(v: Any) -> bool:
+        if v is None:
+            return True
+        if isinstance(v, str) and v.strip() == "":
+            return True
+        if isinstance(v, int) and v == 0:
+            return True
+        return False
+
+    # Filter main payload fields (except customVariables)
+    filtered = {k: v for k, v in payload.items() if k != "customVariables" and not is_empty(v)}
+
+    # Filter custom variables - only include those with non-empty values
+    if "customVariables" in payload:
+        filtered_cvs = [
+            cv for cv in payload["customVariables"]
+            if cv.get("value") is not None and str(cv.get("value", "")).strip() != ""
+        ]
+        if filtered_cvs:
+            filtered["customVariables"] = filtered_cvs
+
+    return filtered
+
 # ---------- UKG fetchers (strict by employeeNumber + companyID) ----------
 def get_employee_employment_details(employee_number: str, company_id: str) -> Dict[str, Any]:
     """
@@ -220,33 +250,47 @@ def resolve_program_id_from_job_code(primary_job_code: Any, default_program_id: 
 
 # ---------- builder ----------
 def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
+    correlation_id = get_correlation_id()
+
+    logger.info(
+        f"[{correlation_id}] BUILD START | "
+        f"Employee: {employee_number} | Company: {company_id}"
+    )
+
     # 1) employment-details (strict by company)
+    logger.info(f"[{correlation_id}] UKG FETCH employment-details | Employee: {employee_number}")
     employment_details = get_employment_details(employee_number, company_id)
     if DEBUG:
-        logger.debug(f"Employee {employee_number}: === EMPLOYMENT DETAILS ===")
-        logger.debug(f"Employee {employee_number}: employment_details keys: {list(employment_details.keys())}")
-        logger.debug(f"Employee {employee_number}: dateOfTermination = {employment_details.get('terminationDate')}")
-        logger.debug(f"Employee {employee_number}: employeeStatusStartDate = {employment_details.get('employeeStatusStartDate')}")
-        logger.debug(f"Employee {employee_number}: employeeStatusExpectedEndDate = {employment_details.get('employeeStatusExpectedEndDate')}")
-        logger.debug(f"Employee {employee_number}: employeeStatusCode = {employment_details.get('employeeStatusCode')}")
-        logger.debug(f"Employee {employee_number}: originalHireDate = {employment_details.get('originalHireDate')}")
-        logger.debug(f"Employee {employee_number}: primaryJobCode = {employment_details.get('primaryJobCode')}")
-        logger.debug(f"Employee {employee_number}: jobDescription = {employment_details.get('jobDescription')}")
-        logger.debug("employment-details full response:")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: === EMPLOYMENT DETAILS ===")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: employment_details keys: {list(employment_details.keys())}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: dateOfTermination = {employment_details.get('terminationDate')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: employeeStatusStartDate = {employment_details.get('employeeStatusStartDate')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: employeeStatusExpectedEndDate = {employment_details.get('employeeStatusExpectedEndDate')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: employeeStatusCode = {employment_details.get('employeeStatusCode')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: originalHireDate = {employment_details.get('originalHireDate')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: primaryJobCode = {employment_details.get('primaryJobCode')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: jobDescription = {employment_details.get('jobDescription')}")
+        logger.debug(f"[{correlation_id}] employment-details full response:")
         logger.debug(json.dumps(employment_details, indent=2))
     if not employment_details:
+        logger.error(
+            f"[{correlation_id}] BUILD ERROR | "
+            f"Employee: {employee_number} | "
+            f"Reason: No employment details found"
+        )
         raise SystemExit(f"no employment details found for employeeNumber={employee_number} companyID={company_id}")
 
     # 2) employee-employment-details (strict by company) - for primaryProjectCode and fallback employeeId
+    logger.info(f"[{correlation_id}] UKG FETCH employee-employment-details | Employee: {employee_number}")
     employee_employment = get_employee_employment_details(employee_number, company_id)
     if DEBUG:
-        logger.debug(f"Employee {employee_number}: === EMPLOYEE EMPLOYMENT DETAILS ===")
-        logger.debug(f"Employee {employee_number}: employee_employment keys: {list(employee_employment.keys())}")
-        logger.debug(f"Employee {employee_number}: primaryProjectCode = {employee_employment.get('primaryProjectCode')}")
-        logger.debug(f"Employee {employee_number}: primaryProjectDescription = {employee_employment.get('primaryProjectDescription')}")
-        logger.debug(f"Employee {employee_number}: employeeId = {employee_employment.get('employeeId')}")
-        logger.debug(f"Employee {employee_number}: employeeID = {employee_employment.get('employeeID')}")
-        logger.debug("employee-employment-details full response:")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: === EMPLOYEE EMPLOYMENT DETAILS ===")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: employee_employment keys: {list(employee_employment.keys())}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: primaryProjectCode = {employee_employment.get('primaryProjectCode')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: primaryProjectDescription = {employee_employment.get('primaryProjectDescription')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: employeeId = {employee_employment.get('employeeId')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: employeeID = {employee_employment.get('employeeID')}")
+        logger.debug(f"[{correlation_id}] employee-employment-details full response:")
         logger.debug(json.dumps(employee_employment, indent=2))
 
     # 3) resolve employeeId (covers employeeId / employeeID with fallback)
@@ -257,22 +301,29 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
         employee_employment.get("employeeID")
     )
     if not employee_id:
+        logger.error(
+            f"[{correlation_id}] BUILD ERROR | "
+            f"Employee: {employee_number} | "
+            f"Reason: No employeeId found"
+        )
         raise SystemExit(f"no employeeId found for employeeNumber={employee_number} companyID={company_id}")
 
     # 4) person (requires employeeId)
+    logger.info(f"[{correlation_id}] UKG FETCH person-details | Employee: {employee_number}")
     person = get_person_details(employee_id)
     if DEBUG:
-        logger.debug(f"Employee {employee_number}: === PERSON DETAILS ===")
-        logger.debug(f"Employee {employee_number}: person keys: {list(person.keys())}")
-        logger.debug(f"Employee {employee_number}: firstName = {person.get('firstName')}")
-        logger.debug(f"Employee {employee_number}: lastName = {person.get('lastName')}")
-        logger.debug(f"Employee {employee_number}: emailAddress = {person.get('emailAddress')}")
-        logger.debug(f"Employee {employee_number}: addressLine1 = {person.get('addressLine1')}")
-        logger.debug(f"Employee {employee_number}: addressCity = {person.get('addressCity')}")
-        logger.debug(f"Employee {employee_number}: addressState = {person.get('addressState')}")
-        logger.debug(f"Employee {employee_number}: addressZipCode = {person.get('addressZipCode')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: === PERSON DETAILS ===")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: person keys: {list(person.keys())}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: firstName = {person.get('firstName')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: lastName = {person.get('lastName')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: emailAddress = {person.get('emailAddress')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: addressLine1 = {person.get('addressLine1')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: addressCity = {person.get('addressCity')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: addressState = {person.get('addressState')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: addressZipCode = {person.get('addressZipCode')}")
 
     # 4b) supervisor/manager details
+    logger.info(f"[{correlation_id}] UKG FETCH supervisor-details | Employee: {employee_number}")
     supervisor = get_supervisor_details(employee_id)
     supervisor_name = ""
     if supervisor:
@@ -280,26 +331,27 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
         sup_last = supervisor.get("supervisorLastName", "") or ""
         supervisor_name = f"{sup_first} {sup_last}".strip()
     if DEBUG:
-        logger.debug(f"Employee {employee_number}: === SUPERVISOR DETAILS ===")
-        logger.debug(f"Employee {employee_number}: supervisor keys: {list(supervisor.keys()) if supervisor else []}")
-        logger.debug(f"Employee {employee_number}: supervisor_name = {supervisor_name}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: === SUPERVISOR DETAILS ===")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: supervisor keys: {list(supervisor.keys()) if supervisor else []}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: supervisor_name = {supervisor_name}")
 
     # 4c) determine derived employment status
     derived_status = determine_employment_status(employment_details)
     if DEBUG:
-        logger.debug(f"Employee {employee_number}: === STATUS DETERMINATION ===")
-        logger.debug(f"Employee {employee_number}: Input - employeeStatusCode = {employment_details.get('employeeStatusCode')}")
-        logger.debug(f"Employee {employee_number}: Input - employeeStatusStartDate = {employment_details.get('employeeStatusStartDate')}")
-        logger.debug(f"Employee {employee_number}: Input - employeeStatusExpectedEndDate = {employment_details.get('employeeStatusExpectedEndDate')}")
-        logger.debug(f"Employee {employee_number}: Input - dateOfTermination = {employment_details.get('dateOfTermination')}")
-        logger.debug(f"Employee {employee_number}: Output - derived_status = {derived_status}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: === STATUS DETERMINATION ===")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: Input - employeeStatusCode = {employment_details.get('employeeStatusCode')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: Input - employeeStatusStartDate = {employment_details.get('employeeStatusStartDate')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: Input - employeeStatusExpectedEndDate = {employment_details.get('employeeStatusExpectedEndDate')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: Input - dateOfTermination = {employment_details.get('dateOfTermination')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: Output - derived_status = {derived_status}")
 
     # 5) location for primaryWorkLocationCode
     location = {}
     loc_code = employment_details.get("primaryWorkLocationCode")
     if loc_code:
+        logger.info(f"[{correlation_id}] UKG FETCH location | Employee: {employee_number} | LocationCode: {loc_code}")
         if DEBUG:
-            logger.debug(f"primaryWorkLocationCode = {loc_code}")
+            logger.debug(f"[{correlation_id}] primaryWorkLocationCode = {loc_code}")
         try:
             location = get_first_item(get_data(f"/configuration/v1/locations/{loc_code}"))
         except SystemExit:
@@ -307,10 +359,10 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
                 location = get_first_item(get_data("/configuration/v1/locations", {"locationCode": loc_code}))
             except SystemExit as e:
                 if DEBUG:
-                    logger.warning(f"Location fetch failed for {loc_code}: {e}")
+                    logger.warning(f"[{correlation_id}] Location fetch failed for {loc_code}: {e}")
                 location = {}
         if DEBUG:
-            logger.debug("location full object:")
+            logger.debug(f"[{correlation_id}] location full object:")
             logger.debug(json.dumps(location, indent=2))
 
     # 6) project
@@ -318,8 +370,14 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
     project_label = employee_employment.get("primaryProjectDescription") or ""
 
     # 7) programId (from job code)
-    program_id = resolve_program_id_from_job_code(employment_details.get("primaryJobCode"))
+    job_code = employment_details.get("primaryJobCode")
+    program_id = resolve_program_id_from_job_code(job_code)
     if not program_id:
+        logger.error(
+            f"[{correlation_id}] BUILD ERROR | "
+            f"Employee: {employee_number} | "
+            f"Reason: No programId for jobCode={job_code}"
+        )
         raise SystemExit(f"no programId found for employeeNumber={employee_number} companyID={company_id}")
 
     # 8) build driver payload
@@ -387,24 +445,34 @@ def build_motus_driver(employee_number: str, company_id: str) -> Dict[str, Any]:
         ]
     }
 
+    # Filter out null/empty values before returning
+    driver = filter_empty_values(driver)
+
     if DEBUG:
-        logger.debug(f"Employee {employee_number}: === FINAL DRIVER PAYLOAD SUMMARY ===")
-        logger.debug(f"Employee {employee_number}: clientEmployeeId1 = {driver['clientEmployeeId1']}")
-        logger.debug(f"Employee {employee_number}: programId = {driver['programId']}")
-        logger.debug(f"Employee {employee_number}: firstName = {driver['firstName']}")
-        logger.debug(f"Employee {employee_number}: lastName = {driver['lastName']}")
-        logger.debug(f"Employee {employee_number}: email = {driver['email']}")
-        logger.debug(f"Employee {employee_number}: address1 = {driver['address1']}")
-        logger.debug(f"Employee {employee_number}: city = {driver['city']}")
-        logger.debug(f"Employee {employee_number}: stateProvince = {driver['stateProvince']}")
-        logger.debug(f"Employee {employee_number}: postalCode = {driver['postalCode']}")
-        logger.debug(f"Employee {employee_number}: startDate = {driver['startDate']}")
-        logger.debug(f"Employee {employee_number}: endDate = {driver['endDate']}")
-        logger.debug(f"Employee {employee_number}: leaveStartDate = {driver['leaveStartDate']}")
-        logger.debug(f"Employee {employee_number}: leaveEndDate = {driver['leaveEndDate']}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: === FINAL DRIVER PAYLOAD SUMMARY ===")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: clientEmployeeId1 = {driver.get('clientEmployeeId1')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: programId = {driver.get('programId')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: firstName = {driver.get('firstName')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: lastName = {driver.get('lastName')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: email = {driver.get('email')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: address1 = {driver.get('address1')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: city = {driver.get('city')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: stateProvince = {driver.get('stateProvince')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: postalCode = {driver.get('postalCode')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: startDate = {driver.get('startDate')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: endDate = {driver.get('endDate')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: leaveStartDate = {driver.get('leaveStartDate')}")
+        logger.debug(f"[{correlation_id}] Employee {employee_number}: leaveEndDate = {driver.get('leaveEndDate')}")
         # Log custom variables
-        for cv in driver['customVariables']:
-            logger.debug(f"Employee {employee_number}: CV[{cv['name']}] = {cv['value']}")
+        for cv in driver.get('customVariables', []):
+            logger.debug(f"[{correlation_id}] Employee {employee_number}: CV[{cv['name']}] = {cv['value']}")
+
+    logger.info(
+        f"[{correlation_id}] BUILD COMPLETE | "
+        f"Employee: {employee_number} | "
+        f"Name: {driver.get('firstName')} {driver.get('lastName')} | "
+        f"Program: {program_id}"
+    )
 
     return driver
 
@@ -414,11 +482,14 @@ def main():
         sys.exit(1)
     employee_number = sys.argv[1]
     company_id = sys.argv[2]
-    driver = build_motus_driver(employee_number, company_id)
-    out_path = os.path.abspath(f"data/motus_driver_{employee_number}.json")
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump([driver], f, indent=2)
-    print(out_path)
+
+    # Create correlation context for this employee
+    with correlation_context(prefix=f"build-{employee_number}"):
+        driver = build_motus_driver(employee_number, company_id)
+        out_path = os.path.abspath(f"data/motus_driver_{employee_number}.json")
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump([driver], f, indent=2)
+        print(out_path)
 
 if __name__ == "__main__":
     main()

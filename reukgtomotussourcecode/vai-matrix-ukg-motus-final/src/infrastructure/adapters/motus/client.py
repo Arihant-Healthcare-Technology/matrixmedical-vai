@@ -4,6 +4,7 @@ Motus API client.
 Provides client for interacting with Motus driver APIs.
 """
 
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
+from common.correlation import get_correlation_id
 from src.domain.exceptions import AuthenticationError, MotusApiError, RateLimitError
 from src.domain.models import MotusDriver
 from src.infrastructure.config.settings import MotusSettings
@@ -68,6 +70,7 @@ class MotusClient:
         self,
         response: requests.Response,
         driver_id: Optional[str] = None,
+        method: str = "REQUEST",
     ) -> Dict[str, Any]:
         """
         Handle API response.
@@ -75,6 +78,7 @@ class MotusClient:
         Args:
             response: HTTP response
             driver_id: Optional driver ID for error context
+            method: HTTP method for logging (GET, POST, PUT)
 
         Returns:
             Parsed JSON response
@@ -84,15 +88,25 @@ class MotusClient:
             RateLimitError: If rate limited
             AuthenticationError: If authentication failed
         """
+        correlation_id = get_correlation_id()
+
         if response.status_code == 429:
             retry_after = response.headers.get("Retry-After")
             wait_time = int(retry_after) if retry_after else 60
+            logger.error(
+                f"[{correlation_id}] MOTUS {method} RATE_LIMITED | "
+                f"Employee: {driver_id} | Retry after: {wait_time}s"
+            )
             raise RateLimitError(
                 f"Rate limit exceeded, retry after {wait_time}s",
                 retry_after=wait_time,
             )
 
         if response.status_code in (401, 403):
+            logger.error(
+                f"[{correlation_id}] MOTUS {method} AUTH_ERROR | "
+                f"Status: {response.status_code} | Employee: {driver_id}"
+            )
             raise AuthenticationError(
                 f"Authentication failed: {response.status_code}",
                 provider="motus",
@@ -103,6 +117,12 @@ class MotusClient:
                 body = response.json()
             except Exception:
                 body = {"text": response.text[:500]}
+            logger.error(
+                f"[{correlation_id}] MOTUS {method} ERROR | "
+                f"Status: {response.status_code} | "
+                f"Employee: {driver_id} | "
+                f"Response: {json.dumps(body, default=str)[:500]}"
+            )
             raise MotusApiError(
                 f"Motus API error {response.status_code}",
                 status_code=response.status_code,
@@ -126,13 +146,23 @@ class MotusClient:
             Driver data or None if not found
         """
         self._acquire_rate_limit()
+        correlation_id = get_correlation_id()
 
         url = f"{self.settings.api_base}/drivers/{client_employee_id1}"
         self._log(f"GET {url}")
 
+        logger.info(
+            f"[{correlation_id}] MOTUS GET REQUEST | "
+            f"URL: {url} | Employee: {client_employee_id1}"
+        )
+
         try:
             response = requests.get(url, headers=self._headers(), timeout=45)
         except requests.exceptions.RequestException as e:
+            logger.error(
+                f"[{correlation_id}] MOTUS GET EXCEPTION | "
+                f"Employee: {client_employee_id1} | Error: {str(e)}"
+            )
             raise MotusApiError(
                 f"Request failed: {str(e)}",
                 status_code=0,
@@ -141,9 +171,18 @@ class MotusClient:
             ) from e
 
         if response.status_code == 404:
+            logger.info(
+                f"[{correlation_id}] MOTUS GET RESPONSE | "
+                f"Status: 404 (Not Found) | Employee: {client_employee_id1}"
+            )
             return None
 
-        return self._handle_response(response, driver_id=client_employee_id1)
+        logger.info(
+            f"[{correlation_id}] MOTUS GET RESPONSE | "
+            f"Status: {response.status_code} | Employee: {client_employee_id1}"
+        )
+
+        return self._handle_response(response, driver_id=client_employee_id1, method="GET")
 
     def driver_exists(self, client_employee_id1: str) -> bool:
         """
@@ -168,6 +207,7 @@ class MotusClient:
             Created driver data
         """
         self._acquire_rate_limit()
+        correlation_id = get_correlation_id()
 
         payload = driver.to_api_payload()
 
@@ -179,6 +219,14 @@ class MotusClient:
         url = f"{self.settings.api_base}/drivers"
         self._log(f"POST {url}")
 
+        # Log request BEFORE sending
+        logger.info(
+            f"[{correlation_id}] MOTUS POST REQUEST | "
+            f"URL: {url} | "
+            f"Employee: {driver.client_employee_id1} | "
+            f"Payload: {json.dumps(payload, default=str)}"
+        )
+
         try:
             response = requests.post(
                 url,
@@ -187,6 +235,11 @@ class MotusClient:
                 timeout=60,
             )
         except requests.exceptions.RequestException as e:
+            logger.error(
+                f"[{correlation_id}] MOTUS POST EXCEPTION | "
+                f"Employee: {driver.client_employee_id1} | "
+                f"Error: {str(e)}"
+            )
             raise MotusApiError(
                 f"Request failed: {str(e)}",
                 status_code=0,
@@ -194,13 +247,16 @@ class MotusClient:
                 driver_id=driver.client_employee_id1,
             ) from e
 
-        result = self._handle_response(response, driver_id=driver.client_employee_id1)
+        result = self._handle_response(response, driver_id=driver.client_employee_id1, method="POST")
 
         # Log success response
-        logger.info(f"Driver CREATED: {driver.client_employee_id1} | "
-                    f"Name: {driver.first_name} {driver.last_name} | "
-                    f"Status: {response.status_code} | "
-                    f"Program: {driver.program_id}")
+        logger.info(
+            f"[{correlation_id}] MOTUS POST RESPONSE | "
+            f"Status: {response.status_code} | "
+            f"Employee: {driver.client_employee_id1} | "
+            f"Name: {driver.first_name} {driver.last_name} | "
+            f"Program: {driver.program_id}"
+        )
 
         return result
 
@@ -215,6 +271,7 @@ class MotusClient:
             Updated driver data
         """
         self._acquire_rate_limit()
+        correlation_id = get_correlation_id()
 
         payload = driver.to_api_payload()
 
@@ -226,6 +283,14 @@ class MotusClient:
         url = f"{self.settings.api_base}/drivers/{driver.client_employee_id1}"
         self._log(f"PUT {url}")
 
+        # Log request BEFORE sending
+        logger.info(
+            f"[{correlation_id}] MOTUS PUT REQUEST | "
+            f"URL: {url} | "
+            f"Employee: {driver.client_employee_id1} | "
+            f"Payload: {json.dumps(payload, default=str)}"
+        )
+
         try:
             response = requests.put(
                 url,
@@ -234,6 +299,11 @@ class MotusClient:
                 timeout=60,
             )
         except requests.exceptions.RequestException as e:
+            logger.error(
+                f"[{correlation_id}] MOTUS PUT EXCEPTION | "
+                f"Employee: {driver.client_employee_id1} | "
+                f"Error: {str(e)}"
+            )
             raise MotusApiError(
                 f"Request failed: {str(e)}",
                 status_code=0,
@@ -241,15 +311,18 @@ class MotusClient:
                 driver_id=driver.client_employee_id1,
             ) from e
 
-        result = self._handle_response(response, driver_id=driver.client_employee_id1)
+        result = self._handle_response(response, driver_id=driver.client_employee_id1, method="PUT")
 
         # Log success response
         end_date_info = f" | EndDate: {driver.end_date}" if driver.end_date else ""
         leave_info = f" | Leave: {driver.leave_start_date}" if driver.leave_start_date else ""
-        logger.info(f"Driver UPDATED: {driver.client_employee_id1} | "
-                    f"Name: {driver.first_name} {driver.last_name} | "
-                    f"Status: {response.status_code} | "
-                    f"Program: {driver.program_id}{end_date_info}{leave_info}")
+        logger.info(
+            f"[{correlation_id}] MOTUS PUT RESPONSE | "
+            f"Status: {response.status_code} | "
+            f"Employee: {driver.client_employee_id1} | "
+            f"Name: {driver.first_name} {driver.last_name} | "
+            f"Program: {driver.program_id}{end_date_info}{leave_info}"
+        )
 
         return result
 
@@ -270,9 +343,16 @@ class MotusClient:
         Returns:
             Result dict with action taken
         """
+        correlation_id = get_correlation_id()
+
         # Validate driver
         errors = driver.validate()
         if errors:
+            logger.error(
+                f"[{correlation_id}] MOTUS VALIDATION_ERROR | "
+                f"Employee: {driver.client_employee_id1} | "
+                f"Errors: {errors}"
+            )
             return {
                 "success": False,
                 "action": "validation_error",

@@ -172,7 +172,12 @@ class TestBuildMotusDriverManagerField:
         assert manager_var["value"] == "Jane Manager"
 
     def test_empty_manager_when_no_supervisor(self, monkeypatch, mock_api_responses):
-        """Test empty manager name when no supervisor found."""
+        """Test empty manager name is excluded when no supervisor found.
+
+        Empty custom variables are filtered out from the payload per the
+        filter_empty_values logic, so 'Manager Name' should NOT be present
+        when the supervisor is not found.
+        """
         builder = get_builder_module(monkeypatch)
 
         def mock_get_data(path, params=None):
@@ -191,13 +196,14 @@ class TestBuildMotusDriverManagerField:
         with patch.object(builder, 'get_data', side_effect=mock_get_data):
             result = builder.build_motus_driver("12345", "J9A6Y")
 
+        # Manager Name with empty value should be filtered out from payload
         manager_var = next(
-            (cv for cv in result["customVariables"] if cv["name"] == "Manager Name"),
+            (cv for cv in result.get("customVariables", []) if cv["name"] == "Manager Name"),
             None
         )
 
-        assert manager_var is not None
-        assert manager_var["value"] == ""
+        # Empty custom variables are excluded from payload
+        assert manager_var is None
 
     def test_manager_name_handles_only_first_name(self, monkeypatch, mock_api_responses):
         """Test manager name when only first name available."""

@@ -754,3 +754,512 @@ class TestExceptionHandling:
             data = response.json()
             # Empty employment details results in a failed build
             assert data.get("success") is False or data.get("ukg_built_payload") is None
+
+
+# ============ Validation Function Tests ============
+
+class TestValidateNewHireFunction:
+    """Tests for _validate_new_hire validation logic."""
+
+    def test_new_hire_ineligible_job_code(self, client, sample_person_details):
+        """Test validation when job code is not eligible."""
+        from src.presentation.api.debug_api import _validate_new_hire
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {
+            "employment_details": {"primaryJobCode": "9999"},
+            "person_details": sample_person_details,
+        }
+
+        checks, recommendation = _validate_new_hire(ukg_data, None, "12345")
+
+        assert any(c.check == "Job code is eligible for Motus" and c.status == CheckStatus.FAIL for c in checks)
+        assert "ineligible job code" in recommendation.lower()
+
+    def test_new_hire_missing_required_fields(self, client):
+        """Test validation when required UKG fields are missing."""
+        from src.presentation.api.debug_api import _validate_new_hire
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {
+            "employment_details": {"primaryJobCode": "1103"},
+            "person_details": {
+                "firstName": "John",
+                "lastName": "",  # Missing
+                "emailAddress": "",  # Missing
+            },
+        }
+
+        checks, recommendation = _validate_new_hire(ukg_data, None, "12345")
+
+        assert any(c.check == "Required fields present in UKG" and c.status == CheckStatus.FAIL for c in checks)
+        assert "Missing" in recommendation
+
+    def test_new_hire_already_exists_in_motus(self, client, sample_person_details):
+        """Test validation when employee already exists in Motus."""
+        from src.presentation.api.debug_api import _validate_new_hire
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {
+            "employment_details": {"primaryJobCode": "1103"},
+            "person_details": sample_person_details,
+        }
+        motus_current = {"clientEmployeeId1": "12345"}
+
+        checks, recommendation = _validate_new_hire(ukg_data, motus_current, "12345")
+
+        assert any(c.check == "Employee not already in Motus" and c.status == CheckStatus.WARN for c in checks)
+        assert "already exists" in recommendation.lower()
+
+    def test_new_hire_missing_start_date(self, client, sample_person_details):
+        """Test validation when start date is not present."""
+        from src.presentation.api.debug_api import _validate_new_hire
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {
+            "employment_details": {"primaryJobCode": "1103", "startDate": None},
+            "person_details": sample_person_details,
+        }
+
+        checks, recommendation = _validate_new_hire(ukg_data, None, "12345")
+
+        assert any(c.check == "Start date present" and c.status == CheckStatus.WARN for c in checks)
+
+    def test_new_hire_all_checks_pass(self, client, sample_person_details):
+        """Test validation when all checks pass."""
+        from src.presentation.api.debug_api import _validate_new_hire
+
+        ukg_data = {
+            "employment_details": {"primaryJobCode": "1103", "startDate": "2024-01-15"},
+            "person_details": sample_person_details,
+        }
+
+        checks, recommendation = _validate_new_hire(ukg_data, None, "12345")
+
+        assert "eligible for Motus" in recommendation
+
+
+class TestValidateTerminationFunction:
+    """Tests for _validate_termination validation logic."""
+
+    def test_termination_no_date_in_ukg(self, client):
+        """Test when dateOfTermination is not set in UKG."""
+        from src.presentation.api.debug_api import _validate_termination
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {
+            "employment_details": {"dateOfTermination": None},
+        }
+
+        checks, recommendation = _validate_termination(ukg_data, None, "12345")
+
+        assert any(c.check == "dateOfTermination in UKG" and c.status == CheckStatus.FAIL for c in checks)
+        assert "No termination date" in recommendation
+
+    def test_termination_employee_not_in_motus(self, client):
+        """Test when employee doesn't exist in Motus."""
+        from src.presentation.api.debug_api import _validate_termination
+
+        ukg_data = {
+            "employment_details": {
+                "dateOfTermination": "2024-03-15",
+                "employeeStatusCode": "T",
+            },
+        }
+
+        checks, recommendation = _validate_termination(ukg_data, None, "12345")
+
+        assert "does not exist in Motus" in recommendation
+
+    def test_termination_already_synced(self, client):
+        """Test when termination is already synced to Motus."""
+        from src.presentation.api.debug_api import _validate_termination
+
+        ukg_data = {
+            "employment_details": {
+                "dateOfTermination": "2024-03-15",
+                "employeeStatusCode": "T",
+            },
+        }
+        motus_current = {
+            "endDate": "2024-03-15",
+            "customVariables": [{"name": "Derived Status", "value": "Terminated"}],
+        }
+
+        checks, recommendation = _validate_termination(ukg_data, motus_current, "12345")
+
+        assert "already synced" in recommendation.lower()
+
+    def test_termination_needs_sync(self, client):
+        """Test when termination exists in UKG but not in Motus."""
+        from src.presentation.api.debug_api import _validate_termination
+
+        ukg_data = {
+            "employment_details": {
+                "dateOfTermination": "2024-03-15",
+                "employeeStatusCode": "T",
+            },
+        }
+        motus_current = {
+            "endDate": None,
+            "customVariables": [{"name": "Derived Status", "value": "Active"}],
+        }
+
+        checks, recommendation = _validate_termination(ukg_data, motus_current, "12345")
+
+        assert "Run sync to update" in recommendation
+
+    def test_termination_derived_status_check(self, client):
+        """Test derived status calculation for terminated employee."""
+        from src.presentation.api.debug_api import _validate_termination
+
+        ukg_data = {
+            "employment_details": {
+                "dateOfTermination": "2024-03-15",
+                "employeeStatusCode": "T",
+            },
+        }
+
+        checks, recommendation = _validate_termination(ukg_data, None, "12345")
+
+        assert any(c.check == "Derived Status = Terminated" for c in checks)
+
+
+class TestValidateLeaveFunction:
+    """Tests for _validate_leave validation logic."""
+
+    def test_leave_no_start_date(self, client):
+        """Test when leave start date is not set."""
+        from src.presentation.api.debug_api import _validate_leave
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {
+            "employment_details": {"employeeStatusStartDate": None},
+        }
+
+        checks, recommendation = _validate_leave(ukg_data, None, "12345")
+
+        assert any(c.check == "employeeStatusStartDate in UKG" and c.status == CheckStatus.FAIL for c in checks)
+        assert "not on leave" in recommendation.lower()
+
+    def test_leave_ongoing_no_end_date(self, client):
+        """Test ongoing leave with no end date."""
+        from src.presentation.api.debug_api import _validate_leave
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {
+            "employment_details": {
+                "employeeStatusStartDate": "2024-03-01",
+                "employeeStatusExpectedEndDate": None,
+            },
+        }
+
+        checks, recommendation = _validate_leave(ukg_data, None, "12345")
+
+        assert any(c.check == "employeeStatusExpectedEndDate in UKG" and c.status == CheckStatus.WARN for c in checks)
+
+    def test_leave_employee_not_in_motus(self, client):
+        """Test leave validation when employee not in Motus."""
+        from src.presentation.api.debug_api import _validate_leave
+
+        ukg_data = {
+            "employment_details": {
+                "employeeStatusStartDate": "2024-03-01",
+                "employeeStatusExpectedEndDate": "2024-04-01",
+            },
+        }
+
+        checks, recommendation = _validate_leave(ukg_data, None, "12345")
+
+        assert "does not exist in Motus" in recommendation
+
+    def test_leave_already_synced(self, client):
+        """Test when leave is already synced."""
+        from src.presentation.api.debug_api import _validate_leave
+
+        ukg_data = {
+            "employment_details": {
+                "employeeStatusStartDate": "2024-03-01",
+                "employeeStatusExpectedEndDate": "2024-04-01",
+            },
+        }
+        motus_current = {
+            "leaveStartDate": "2024-03-01",
+            "leaveEndDate": "2024-04-01",
+        }
+
+        checks, recommendation = _validate_leave(ukg_data, motus_current, "12345")
+
+        assert "already in sync" in recommendation.lower()
+
+    def test_leave_needs_sync(self, client):
+        """Test when leave data needs to be synced."""
+        from src.presentation.api.debug_api import _validate_leave
+
+        ukg_data = {
+            "employment_details": {
+                "employeeStatusStartDate": "2024-03-01",
+                "employeeStatusExpectedEndDate": "2024-04-01",
+            },
+        }
+        motus_current = {
+            "leaveStartDate": None,
+            "leaveEndDate": None,
+        }
+
+        checks, recommendation = _validate_leave(ukg_data, motus_current, "12345")
+
+        assert "Run sync to update" in recommendation
+
+
+class TestValidateManagerChangeFunction:
+    """Tests for _validate_manager_change validation logic."""
+
+    def test_manager_change_no_supervisor_in_ukg(self, client):
+        """Test when supervisor details not found in UKG."""
+        from src.presentation.api.debug_api import _validate_manager_change
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {
+            "supervisor_details": {},
+        }
+
+        checks, recommendation = _validate_manager_change(ukg_data, None, "12345")
+
+        assert any(c.check == "Supervisor details in UKG" and c.status == CheckStatus.WARN for c in checks)
+
+    def test_manager_change_employee_not_in_motus(self, client):
+        """Test when employee doesn't exist in Motus."""
+        from src.presentation.api.debug_api import _validate_manager_change
+
+        ukg_data = {
+            "supervisor_details": {
+                "supervisorFirstName": "Jane",
+                "supervisorLastName": "Smith",
+            },
+        }
+
+        checks, recommendation = _validate_manager_change(ukg_data, None, "12345")
+
+        assert "does not exist in Motus" in recommendation
+
+    def test_manager_change_names_match(self, client):
+        """Test when manager names already match."""
+        from src.presentation.api.debug_api import _validate_manager_change
+
+        ukg_data = {
+            "supervisor_details": {
+                "supervisorFirstName": "Jane",
+                "supervisorLastName": "Smith",
+            },
+        }
+        motus_current = {
+            "customVariables": [{"name": "Manager Name", "value": "Jane Smith"}],
+        }
+
+        checks, recommendation = _validate_manager_change(ukg_data, motus_current, "12345")
+
+        assert "already in sync" in recommendation.lower()
+
+    def test_manager_change_names_differ(self, client):
+        """Test when manager names are different."""
+        from src.presentation.api.debug_api import _validate_manager_change
+
+        ukg_data = {
+            "supervisor_details": {
+                "supervisorFirstName": "Jane",
+                "supervisorLastName": "Smith",
+            },
+        }
+        motus_current = {
+            "customVariables": [{"name": "Manager Name", "value": "John Doe"}],
+        }
+
+        checks, recommendation = _validate_manager_change(ukg_data, motus_current, "12345")
+
+        assert "mismatch" in recommendation.lower()
+        assert "Run sync to update" in recommendation
+
+
+class TestValidateAddressFunction:
+    """Tests for _validate_address validation logic."""
+
+    def test_address_all_fields_match(self, client, sample_person_details):
+        """Test when all address fields match."""
+        from src.presentation.api.debug_api import _validate_address
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {"person_details": sample_person_details}
+        motus_current = {
+            "address1": sample_person_details["addressLine1"],
+            "city": sample_person_details["addressCity"],
+            "stateProvince": sample_person_details["addressState"],
+            "postalCode": sample_person_details["addressZipCode"],
+        }
+
+        checks, recommendation = _validate_address(ukg_data, motus_current, "12345")
+
+        assert all(c.status == CheckStatus.PASS for c in checks)
+        assert "in sync" in recommendation.lower()
+
+    def test_address_some_fields_differ(self, client, sample_person_details):
+        """Test when some address fields are different."""
+        from src.presentation.api.debug_api import _validate_address
+        from src.presentation.api.models import CheckStatus
+
+        ukg_data = {"person_details": sample_person_details}
+        motus_current = {
+            "address1": "456 Different St",
+            "city": sample_person_details["addressCity"],
+            "stateProvince": sample_person_details["addressState"],
+            "postalCode": sample_person_details["addressZipCode"],
+        }
+
+        checks, recommendation = _validate_address(ukg_data, motus_current, "12345")
+
+        assert any(c.status == CheckStatus.FAIL for c in checks)
+        assert "differ" in recommendation.lower()
+
+    def test_address_employee_not_in_motus(self, client, sample_person_details):
+        """Test when employee not in Motus."""
+        from src.presentation.api.debug_api import _validate_address
+
+        ukg_data = {"person_details": sample_person_details}
+
+        checks, recommendation = _validate_address(ukg_data, None, "12345")
+
+        assert "does not exist in Motus" in recommendation
+
+
+# ============ Helper Function Tests ============
+
+class TestFetchAllUKGData:
+    """Tests for _fetch_all_ukg_data helper function."""
+
+    def test_employment_details_exception(self):
+        """Test exception handling when employment details fetch fails."""
+        from src.presentation.api.debug_api import _fetch_all_ukg_data
+
+        mock_client = MagicMock()
+        mock_client.get_employment_details.side_effect = Exception("API Error")
+        mock_client.get_employee_employment_details.return_value = {}
+
+        result = _fetch_all_ukg_data(mock_client, "12345", "J9A6Y")
+
+        assert result["employment_details"] == {}
+
+    def test_person_details_exception(self):
+        """Test exception handling when person details fetch fails."""
+        from src.presentation.api.debug_api import _fetch_all_ukg_data
+
+        mock_client = MagicMock()
+        mock_client.get_employment_details.return_value = {"employeeId": "emp-123"}
+        mock_client.get_employee_employment_details.return_value = {}
+        mock_client.get_person_details.side_effect = Exception("API Error")
+        mock_client.get_supervisor_details.return_value = {}
+
+        result = _fetch_all_ukg_data(mock_client, "12345", "J9A6Y")
+
+        assert result["person_details"] == {}
+
+    def test_supervisor_details_exception(self):
+        """Test exception handling when supervisor details fetch fails."""
+        from src.presentation.api.debug_api import _fetch_all_ukg_data
+
+        mock_client = MagicMock()
+        mock_client.get_employment_details.return_value = {"employeeId": "emp-123"}
+        mock_client.get_employee_employment_details.return_value = {}
+        mock_client.get_person_details.return_value = {"firstName": "John"}
+        mock_client.get_supervisor_details.side_effect = Exception("API Error")
+
+        result = _fetch_all_ukg_data(mock_client, "12345", "J9A6Y")
+
+        assert result["supervisor_details"] == {}
+
+    def test_no_employee_id_skips_person_and_supervisor(self):
+        """Test that person/supervisor fetch is skipped when no employee ID."""
+        from src.presentation.api.debug_api import _fetch_all_ukg_data
+
+        mock_client = MagicMock()
+        mock_client.get_employment_details.return_value = {}  # No employeeId
+        mock_client.get_employee_employment_details.return_value = {}  # No employeeId
+
+        result = _fetch_all_ukg_data(mock_client, "12345", "J9A6Y")
+
+        mock_client.get_person_details.assert_not_called()
+        mock_client.get_supervisor_details.assert_not_called()
+
+    def test_with_logger_logs_requests(self):
+        """Test that logger is called for UKG requests."""
+        from src.presentation.api.debug_api import _fetch_all_ukg_data
+        from src.presentation.api.logging_service import DebugLogger
+
+        mock_client = MagicMock()
+        mock_client.get_employment_details.return_value = {"employeeId": "emp-123"}
+        mock_client.get_employee_employment_details.return_value = {}
+        mock_client.get_person_details.return_value = {"firstName": "John"}
+        mock_client.get_supervisor_details.return_value = {}
+
+        logger = DebugLogger("12345", "J9A6Y", "test-op")
+        result = _fetch_all_ukg_data(mock_client, "12345", "J9A6Y", logger)
+
+        # Check logger recorded UKG calls
+        trace = logger.get_trace()
+        assert len(trace.ukg_calls) >= 2  # At least employment and employee employment
+
+
+class TestComparePayloads:
+    """Tests for _compare_payloads helper function."""
+
+    def test_compare_identical_payloads(self):
+        """Test comparison of identical payloads."""
+        from src.presentation.api.debug_api import _compare_payloads
+
+        payload1 = {"firstName": "John", "lastName": "Doe"}
+        payload2 = {"firstName": "John", "lastName": "Doe"}
+
+        differences = _compare_payloads(payload1, payload2)
+
+        assert len(differences) == 0
+
+    def test_compare_different_simple_fields(self):
+        """Test comparison with different simple fields."""
+        from src.presentation.api.debug_api import _compare_payloads
+
+        payload1 = {"firstName": "John", "lastName": "Doe"}
+        payload2 = {"firstName": "Jane", "lastName": "Doe"}
+
+        differences = _compare_payloads(payload1, payload2)
+
+        assert len(differences) == 1
+        assert differences[0].field == "firstName"
+        assert differences[0].ukg_value == "John"
+        assert differences[0].motus_value == "Jane"
+
+    def test_compare_different_custom_variables(self):
+        """Test comparison with different custom variables."""
+        from src.presentation.api.debug_api import _compare_payloads
+
+        payload1 = {
+            "firstName": "John",
+            "customVariables": [{"name": "Manager Name", "value": "Jane Smith"}],
+        }
+        payload2 = {
+            "firstName": "John",
+            "customVariables": [{"name": "Manager Name", "value": "John Doe"}],
+        }
+
+        differences = _compare_payloads(payload1, payload2)
+
+        assert any("Manager Name" in str(d) for d in differences)
+
+    def test_compare_missing_fields(self):
+        """Test comparison when one payload has missing fields."""
+        from src.presentation.api.debug_api import _compare_payloads
+
+        payload1 = {"firstName": "John", "lastName": "Doe", "city": "Miami"}
+        payload2 = {"firstName": "John", "lastName": "Doe"}
+
+        differences = _compare_payloads(payload1, payload2)
+
+        assert any(d.field == "city" for d in differences)

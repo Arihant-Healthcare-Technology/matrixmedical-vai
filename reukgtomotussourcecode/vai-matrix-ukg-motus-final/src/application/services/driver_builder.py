@@ -7,6 +7,7 @@ Builds Motus driver payloads from UKG data.
 import logging
 from typing import Any, Dict, Optional
 
+from common.correlation import get_correlation_id
 from src.domain.exceptions import EmployeeNotFoundError, ProgramNotFoundError
 from src.domain.models import MotusDriver
 from src.domain.models.employment_status import determine_employment_status_from_dict
@@ -54,7 +55,15 @@ class DriverBuilderService:
             EmployeeNotFoundError: If employee not found
             ProgramNotFoundError: If program ID cannot be determined
         """
+        correlation_id = get_correlation_id()
+
+        logger.info(
+            f"[{correlation_id}] BUILD START | "
+            f"Employee: {employee_number} | Company: {company_id}"
+        )
+
         # 1) Get employment details
+        logger.info(f"[{correlation_id}] UKG FETCH employment-details | Employee: {employee_number}")
         employment_details = self.ukg_client.get_employment_details(
             employee_number, company_id
         )
@@ -67,6 +76,11 @@ class DriverBuilderService:
         self._log(f"Employee {employee_number}: originalHireDate = {employment_details.get('originalHireDate')}")
         self._log(f"Employee {employee_number}: primaryJobCode = {employment_details.get('primaryJobCode')}")
         if not employment_details:
+            logger.error(
+                f"[{correlation_id}] BUILD ERROR | "
+                f"Employee: {employee_number} | "
+                f"Reason: No employment details found"
+            )
             raise EmployeeNotFoundError(
                 f"No employment details found for employeeNumber={employee_number} "
                 f"companyID={company_id}",
@@ -75,6 +89,7 @@ class DriverBuilderService:
             )
 
         # 2) Get employee employment details for project info
+        logger.info(f"[{correlation_id}] UKG FETCH employee-employment-details | Employee: {employee_number}")
         employee_employment = self.ukg_client.get_employee_employment_details(
             employee_number, company_id
         )
@@ -91,6 +106,11 @@ class DriverBuilderService:
             or employee_employment.get("employeeID")
         )
         if not employee_id:
+            logger.error(
+                f"[{correlation_id}] BUILD ERROR | "
+                f"Employee: {employee_number} | "
+                f"Reason: No employeeId found"
+            )
             raise EmployeeNotFoundError(
                 f"No employeeId found for employeeNumber={employee_number} "
                 f"companyID={company_id}",
@@ -99,6 +119,7 @@ class DriverBuilderService:
             )
 
         # 4) Get person details
+        logger.info(f"[{correlation_id}] UKG FETCH person-details | Employee: {employee_number}")
         person = self.ukg_client.get_person_details(employee_id)
         self._log(f"Employee {employee_number}: === PERSON DETAILS ===")
         self._log(f"Employee {employee_number}: person keys: {list(person.keys())}")
@@ -111,6 +132,7 @@ class DriverBuilderService:
         self._log(f"Employee {employee_number}: addressZipCode = {person.get('addressZipCode')}")
 
         # 5) Get supervisor details
+        logger.info(f"[{correlation_id}] UKG FETCH supervisor-details | Employee: {employee_number}")
         supervisor = self.ukg_client.get_supervisor_details(employee_id)
         supervisor_name = ""
         if supervisor:
@@ -144,6 +166,11 @@ class DriverBuilderService:
         job_code = employment_details.get("primaryJobCode")
         program_id = resolve_program_id_from_job_code(job_code)
         if not program_id:
+            logger.error(
+                f"[{correlation_id}] BUILD ERROR | "
+                f"Employee: {employee_number} | "
+                f"Reason: No programId for jobCode={job_code}"
+            )
             raise ProgramNotFoundError(
                 f"No programId found for employeeNumber={employee_number} "
                 f"companyID={company_id} jobCode={job_code}",
@@ -180,5 +207,12 @@ class DriverBuilderService:
         self._log(f"Employee {employee_number}: leave_end_date = {driver.leave_end_date}")
         for cv in driver.custom_variables:
             self._log(f"Employee {employee_number}: CV[{cv.name}] = {cv.value}")
+
+        logger.info(
+            f"[{correlation_id}] BUILD COMPLETE | "
+            f"Employee: {employee_number} | "
+            f"Name: {driver.first_name} {driver.last_name} | "
+            f"Program: {program_id}"
+        )
 
         return driver

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from common.correlation import get_correlation_id
 from src.domain.exceptions import UkgApiError
 from src.infrastructure.config.settings import UKGSettings
 
@@ -51,6 +52,7 @@ class UKGClient:
         Raises:
             UkgApiError: If request fails
         """
+        correlation_id = get_correlation_id()
         url = f"{self.settings.base_url.rstrip('/')}/{path.lstrip('/')}"
 
         try:
@@ -62,14 +64,21 @@ class UKGClient:
             )
 
             if self.debug:
-                logger.debug(f"GET {response.url} -> {response.status_code}")
+                logger.debug(f"[{correlation_id}] UKG GET {response.url} -> {response.status_code}")
 
             response.raise_for_status()
 
         except requests.RequestException as e:
+            status_code = getattr(e.response, "status_code", None) if hasattr(e, "response") else None
+            logger.error(
+                f"[{correlation_id}] UKG GET ERROR | "
+                f"URL: {url} | "
+                f"Status: {status_code} | "
+                f"Error: {str(e)}"
+            )
             raise UkgApiError(
                 f"HTTP error fetching {url}: {e}",
-                status_code=getattr(e.response, "status_code", None) if hasattr(e, "response") else None,
+                status_code=status_code,
                 endpoint=path,
             )
 
@@ -77,24 +86,28 @@ class UKGClient:
             data = response.json()
             if self.debug:
                 if isinstance(data, list):
-                    logger.debug(f"UKG Response: list len={len(data)}; first keys={list(data[0].keys()) if data else []}")
+                    logger.debug(f"[{correlation_id}] UKG Response: list len={len(data)}; first keys={list(data[0].keys()) if data else []}")
                     if data and len(data) > 0:
                         # Log critical fields from first item for debugging
                         first = data[0]
-                        logger.debug(f"UKG Response: First item - dateOfTermination={first.get('dateOfTermination')}")
-                        logger.debug(f"UKG Response: First item - employeeStatusStartDate={first.get('employeeStatusStartDate')}")
-                        logger.debug(f"UKG Response: First item - employeeStatusCode={first.get('employeeStatusCode')}")
-                        logger.debug(f"UKG Response: First item - primaryProjectCode={first.get('primaryProjectCode')}")
-                        logger.debug(f"UKG Response: First item - primaryProjectDescription={first.get('primaryProjectDescription')}")
+                        logger.debug(f"[{correlation_id}] UKG Response: First item - dateOfTermination={first.get('dateOfTermination')}")
+                        logger.debug(f"[{correlation_id}] UKG Response: First item - employeeStatusStartDate={first.get('employeeStatusStartDate')}")
+                        logger.debug(f"[{correlation_id}] UKG Response: First item - employeeStatusCode={first.get('employeeStatusCode')}")
+                        logger.debug(f"[{correlation_id}] UKG Response: First item - primaryProjectCode={first.get('primaryProjectCode')}")
+                        logger.debug(f"[{correlation_id}] UKG Response: First item - primaryProjectDescription={first.get('primaryProjectDescription')}")
                 elif isinstance(data, dict):
-                    logger.debug(f"UKG Response: dict keys={list(data.keys())}")
-                    logger.debug(f"UKG Response: dateOfTermination={data.get('dateOfTermination')}")
-                    logger.debug(f"UKG Response: employeeStatusStartDate={data.get('employeeStatusStartDate')}")
-                    logger.debug(f"UKG Response: employeeStatusCode={data.get('employeeStatusCode')}")
-                    logger.debug(f"UKG Response: primaryProjectCode={data.get('primaryProjectCode')}")
-                    logger.debug(f"UKG Response: primaryProjectDescription={data.get('primaryProjectDescription')}")
+                    logger.debug(f"[{correlation_id}] UKG Response: dict keys={list(data.keys())}")
+                    logger.debug(f"[{correlation_id}] UKG Response: dateOfTermination={data.get('dateOfTermination')}")
+                    logger.debug(f"[{correlation_id}] UKG Response: employeeStatusStartDate={data.get('employeeStatusStartDate')}")
+                    logger.debug(f"[{correlation_id}] UKG Response: employeeStatusCode={data.get('employeeStatusCode')}")
+                    logger.debug(f"[{correlation_id}] UKG Response: primaryProjectCode={data.get('primaryProjectCode')}")
+                    logger.debug(f"[{correlation_id}] UKG Response: primaryProjectDescription={data.get('primaryProjectDescription')}")
             return data
         except ValueError as e:
+            logger.error(
+                f"[{correlation_id}] UKG JSON_PARSE_ERROR | "
+                f"URL: {url} | Error: {str(e)}"
+            )
             raise UkgApiError(f"JSON parse error from {url}: {e}", endpoint=path)
 
     @staticmethod

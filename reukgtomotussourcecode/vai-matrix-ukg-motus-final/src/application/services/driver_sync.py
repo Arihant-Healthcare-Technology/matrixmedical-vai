@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from common.correlation import correlation_context, get_correlation_id
 from src.domain.exceptions import EmployeeNotFoundError, ProgramNotFoundError
 from src.domain.models import MotusDriver
 from src.infrastructure.adapters.motus import MotusClient
@@ -115,39 +116,68 @@ class DriverSyncService:
         if not employee_number or not employee_id:
             return ("", "", "skipped")
 
-        # Get state and filter
-        state = self.get_person_state(employee_id, state_cache)
+        # Create correlation ID context for this employee
+        with correlation_context(prefix=f"emp-{employee_number}"):
+            correlation_id = get_correlation_id()
 
-        if states_filter and state not in states_filter:
-            self._log(f"skip emp={employee_number} state={state}")
-            return (employee_number, state, "skipped")
+            # Get state and filter
+            state = self.get_person_state(employee_id, state_cache)
 
-        try:
-            # Build driver
-            driver = self.builder.build_driver(employee_number, company_id)
+            if states_filter and state not in states_filter:
+                self._log(f"skip emp={employee_number} state={state}")
+                logger.info(
+                    f"[{correlation_id}] SYNC SKIPPED | "
+                    f"Employee: {employee_number} | State: {state} (filtered)"
+                )
+                return (employee_number, state, "skipped")
 
-            # Upsert driver
-            result = self.motus_client.upsert_driver(
-                driver, dry_run=dry_run, probe=probe
+            logger.info(
+                f"[{correlation_id}] SYNC START | "
+                f"Employee: {employee_number} | State: {state}"
             )
 
-            # Save to file if requested
-            if out_dir:
-                file_path = out_dir / f"motus_driver_{employee_number}.json"
-                with file_path.open("w", encoding="utf-8") as f:
-                    json.dump([driver.to_api_payload()], f, indent=2)
+            try:
+                # Build driver
+                driver = self.builder.build_driver(employee_number, company_id)
 
-            action = result.get("action", "unknown")
-            if dry_run:
-                return (employee_number, state, "dry_run")
-            return (employee_number, state, action)
+                # Upsert driver
+                result = self.motus_client.upsert_driver(
+                    driver, dry_run=dry_run, probe=probe
+                )
 
-        except (EmployeeNotFoundError, ProgramNotFoundError) as e:
-            logger.warning(f"employeeNumber={employee_number} skipped: {e}")
-            return (employee_number, state, "skipped")
-        except Exception as e:
-            logger.warning(f"employeeNumber={employee_number} error: {repr(e)}")
-            return (employee_number, state, "error")
+                # Save to file if requested
+                if out_dir:
+                    file_path = out_dir / f"motus_driver_{employee_number}.json"
+                    with file_path.open("w", encoding="utf-8") as f:
+                        json.dump([driver.to_api_payload()], f, indent=2)
+
+                action = result.get("action", "unknown")
+
+                if dry_run:
+                    logger.info(
+                        f"[{correlation_id}] SYNC COMPLETE (DRY_RUN) | "
+                        f"Employee: {employee_number}"
+                    )
+                    return (employee_number, state, "dry_run")
+
+                logger.info(
+                    f"[{correlation_id}] SYNC COMPLETE | "
+                    f"Employee: {employee_number} | Action: {action}"
+                )
+                return (employee_number, state, action)
+
+            except (EmployeeNotFoundError, ProgramNotFoundError) as e:
+                logger.warning(
+                    f"[{correlation_id}] SYNC SKIPPED | "
+                    f"Employee: {employee_number} | Reason: {e}"
+                )
+                return (employee_number, state, "skipped")
+            except Exception as e:
+                logger.error(
+                    f"[{correlation_id}] SYNC ERROR | "
+                    f"Employee: {employee_number} | Error: {repr(e)}"
+                )
+                return (employee_number, state, "error")
 
     def sync_batch(
         self,
@@ -166,51 +196,62 @@ class DriverSyncService:
         Returns:
             Statistics dict with counts
         """
-        out_dir = Path(settings.out_dir).resolve() if settings.save_local else None
-        if out_dir:
-            out_dir.mkdir(parents=True, exist_ok=True)
+        # Create correlation context for the entire batch
+        with correlation_context(prefix="batch"):
+            batch_correlation_id = get_correlation_id()
 
-        state_cache: Dict[str, str] = {}
-        total = len(employees)
-        stats = {"saved": 0, "skipped": 0, "errors": 0, "total": total}
-        processed = 0
+            out_dir = Path(settings.out_dir).resolve() if settings.save_local else None
+            if out_dir:
+                out_dir.mkdir(parents=True, exist_ok=True)
 
-        with ThreadPoolExecutor(max_workers=settings.workers) as executor:
-            futures = [
-                executor.submit(
-                    self.sync_employee,
-                    emp,
-                    settings.company_id,
-                    states_filter,
-                    state_cache,
-                    settings.dry_run,
-                    settings.probe,
-                    out_dir,
-                )
-                for emp in employees
-            ]
+            state_cache: Dict[str, str] = {}
+            total = len(employees)
+            stats = {"saved": 0, "skipped": 0, "errors": 0, "total": total}
+            processed = 0
 
-            for future in as_completed(futures):
-                employee_number, state, status = future.result()
+            logger.info(
+                f"[{batch_correlation_id}] BATCH START | "
+                f"Total employees: {total} | Company: {settings.company_id}"
+            )
 
-                if status in ("saved", "insert", "update"):
-                    stats["saved"] += 1
-                elif status == "error":
-                    stats["errors"] += 1
-                else:
-                    stats["skipped"] += 1
-
-                processed += 1
-                if processed % 100 == 0 or processed == total:
-                    logger.info(
-                        f"progress: {processed}/{total} | "
-                        f"saved={stats['saved']} skipped={stats['skipped']} "
-                        f"errors={stats['errors']}"
+            with ThreadPoolExecutor(max_workers=settings.workers) as executor:
+                futures = [
+                    executor.submit(
+                        self.sync_employee,
+                        emp,
+                        settings.company_id,
+                        states_filter,
+                        state_cache,
+                        settings.dry_run,
+                        settings.probe,
+                        out_dir,
                     )
+                    for emp in employees
+                ]
 
-        logger.info(
-            f"done: total={total} | saved={stats['saved']} | "
-            f"skipped={stats['skipped']} | errors={stats['errors']}"
-        )
+                for future in as_completed(futures):
+                    employee_number, state, status = future.result()
 
-        return stats
+                    if status in ("saved", "insert", "update"):
+                        stats["saved"] += 1
+                    elif status == "error":
+                        stats["errors"] += 1
+                    else:
+                        stats["skipped"] += 1
+
+                    processed += 1
+                    if processed % 100 == 0 or processed == total:
+                        logger.info(
+                            f"[{batch_correlation_id}] BATCH PROGRESS | "
+                            f"{processed}/{total} | "
+                            f"saved={stats['saved']} skipped={stats['skipped']} "
+                            f"errors={stats['errors']}"
+                        )
+
+            logger.info(
+                f"[{batch_correlation_id}] BATCH COMPLETE | "
+                f"total={total} | saved={stats['saved']} | "
+                f"skipped={stats['skipped']} | errors={stats['errors']}"
+            )
+
+            return stats
