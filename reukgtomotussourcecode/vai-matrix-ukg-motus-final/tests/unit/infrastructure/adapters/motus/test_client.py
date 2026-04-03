@@ -96,16 +96,35 @@ class TestMotusClient:
         assert headers["Content-Type"] == "application/json"
         assert headers["Accept"] == "application/json"
 
-    def test_headers_without_jwt(self):
-        """Test request headers without JWT raises error."""
+    def test_headers_without_jwt_auto_refresh_fails(self):
+        """Test that missing JWT triggers auto-refresh, and raises error if refresh fails."""
         settings = MotusSettings(jwt="")
-        client = MotusClient(settings=settings)
 
-        with pytest.raises(AuthenticationError) as exc_info:
-            client._headers()
+        # Mock subprocess to fail (simulating token refresh failure)
+        with patch("src.infrastructure.adapters.motus.client.subprocess.run") as mock_run:
+            mock_run.side_effect = Exception("Token refresh failed")
 
-        assert "Missing MOTUS_JWT" in str(exc_info.value)
-        assert exc_info.value.provider == "motus"
+            with pytest.raises(AuthenticationError) as exc_info:
+                MotusClient(settings=settings)
+
+            assert "Token refresh failed" in str(exc_info.value)
+            assert exc_info.value.provider == "motus"
+
+    def test_headers_without_jwt_auto_refresh_succeeds(self):
+        """Test that missing JWT triggers auto-refresh and succeeds."""
+        settings = MotusSettings(jwt="")
+
+        # Mock subprocess to succeed and mock env reload to set token
+        with patch("src.infrastructure.adapters.motus.client.subprocess.run") as mock_run:
+            with patch("src.infrastructure.adapters.motus.client.os.path.exists", return_value=True):
+                with patch("builtins.open", create=True) as mock_open:
+                    mock_open.return_value.__enter__.return_value.read.return_value = iter([
+                        "MOTUS_JWT=new-refreshed-token\n"
+                    ])
+                    with patch.dict("os.environ", {"MOTUS_JWT": "new-refreshed-token"}):
+                        client = MotusClient(settings=settings)
+                        # After refresh, should have the new token
+                        assert client._token_refreshed is True
 
     def test_acquire_rate_limit_with_limiter(
         self, client_with_limiter, mock_rate_limiter

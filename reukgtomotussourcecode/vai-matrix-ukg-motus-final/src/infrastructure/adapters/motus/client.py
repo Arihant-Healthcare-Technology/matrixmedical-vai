@@ -2,10 +2,13 @@
 Motus API client.
 
 Provides client for interacting with Motus driver APIs.
+Includes automatic token refresh before API calls.
 """
 
 import json
 import logging
+import os
+import subprocess
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -40,6 +43,72 @@ class MotusClient:
         self.settings = settings or MotusSettings.from_env()
         self.debug = debug
         self.rate_limiter = rate_limiter
+        self._token_refreshed = False  # Track if we've already refreshed to prevent loops
+        self._ensure_valid_token()
+
+    def _ensure_valid_token(self) -> None:
+        """Ensure we have a valid JWT token, refresh if needed."""
+        if not self.settings.jwt:
+            logger.info("No MOTUS_JWT found, attempting token refresh...")
+            self._refresh_token()
+
+    def _refresh_token(self) -> None:
+        """Call motus-get-token.py to refresh the JWT and reload settings."""
+        if self._token_refreshed:
+            logger.warning("Token already refreshed once, not retrying to prevent loops")
+            return
+
+        env_file = os.environ.get("ENV_FILE", ".env")
+        cmd = f"python3 motus-get-token.py --write-env --env-path {env_file} --force"
+        correlation_id = get_correlation_id()
+
+        logger.info(f"[{correlation_id}] Refreshing Motus token using: {cmd}")
+
+        try:
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+            )
+            self._token_refreshed = True
+
+            # Reload the env file to get new token
+            self._reload_env_file(env_file)
+
+            # Reload settings with new token
+            self.settings = MotusSettings.from_env()
+
+            if self.settings.jwt:
+                logger.info(f"[{correlation_id}] Token refresh successful")
+            else:
+                logger.error(f"[{correlation_id}] Token refresh completed but MOTUS_JWT still empty")
+                raise AuthenticationError("Token refresh failed - no token returned", provider="motus")
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"[{correlation_id}] Token refresh failed: {e.stderr}")
+            raise AuthenticationError(f"Token refresh failed: {e.stderr}", provider="motus")
+        except Exception as e:
+            logger.error(f"[{correlation_id}] Token refresh failed: {str(e)}")
+            raise AuthenticationError(f"Token refresh failed: {str(e)}", provider="motus")
+
+    def _reload_env_file(self, env_file: str) -> None:
+        """Reload environment variables from the env file."""
+        if not os.path.exists(env_file):
+            return
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, _, value = line.partition("=")
+                        key = key.strip()
+                        value = value.strip().strip('"').strip("'")
+                        os.environ[key] = value
+        except Exception as e:
+            logger.warning(f"Failed to reload env file {env_file}: {e}")
 
     def _log(self, message: str) -> None:
         """Log debug message."""
@@ -47,9 +116,12 @@ class MotusClient:
             logger.debug(message)
 
     def _headers(self) -> Dict[str, str]:
-        """Get request headers."""
+        """Get request headers. Auto-refreshes token if missing."""
         if not self.settings.jwt:
-            raise AuthenticationError("Missing MOTUS_JWT", provider="motus")
+            logger.info("Token missing in _headers(), attempting refresh...")
+            self._refresh_token()
+            if not self.settings.jwt:
+                raise AuthenticationError("Missing MOTUS_JWT after refresh attempt", provider="motus")
         return {
             "Authorization": f"Bearer {self.settings.jwt}",
             "Content-Type": "application/json",
@@ -103,12 +175,16 @@ class MotusClient:
             )
 
         if response.status_code in (401, 403):
-            logger.error(
+            logger.warning(
                 f"[{correlation_id}] MOTUS {method} AUTH_ERROR | "
-                f"Status: {response.status_code} | Employee: {driver_id}"
+                f"Status: {response.status_code} | Employee: {driver_id} | "
+                f"Attempting token refresh..."
             )
+            # Try to refresh the token
+            self._refresh_token()
+            # Raise with a flag indicating retry is possible
             raise AuthenticationError(
-                f"Authentication failed: {response.status_code}",
+                f"Authentication failed: {response.status_code}. Token refreshed - please retry.",
                 provider="motus",
             )
 

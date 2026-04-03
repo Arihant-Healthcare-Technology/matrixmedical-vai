@@ -314,13 +314,133 @@ python run-motus-batch.py --company-id J9A6Y --states FL,MS --dry-run --save-loc
 | `--save-local` | Save JSON payloads to data/batch/ |
 | `--probe` | Check Motus state before writing |
 
-### Token Refresh
+### Token Management
+
+#### Manual Token Generation
 
 Generate a new Motus JWT token:
 
 ```bash
+# Generate token and print to stdout
 python motus-get-token.py
+
+# Generate token and write to .env file
+python motus-get-token.py --write-env
+
+# Force refresh (ignore cache)
+python motus-get-token.py --force --write-env
+
+# Output as JSON with expiration details
+python motus-get-token.py --json
 ```
+
+#### Automatic Token Refresh
+
+The `MotusClient` automatically refreshes the token when:
+- No `MOTUS_JWT` is found on initialization
+- A 401/403 authentication error is received
+
+This eliminates the need to manually refresh tokens before batch runs.
+
+```python
+# Token is auto-refreshed if missing or expired
+from src.infrastructure.adapters.motus import MotusClient
+client = MotusClient()  # Auto-refreshes token if needed
+```
+
+### Environment-Specific Configuration
+
+The system supports separate configuration files for Development and Production environments.
+
+#### Environment Files
+
+| File | Purpose | Key Settings |
+|------|---------|--------------|
+| `.env.dev` | Development | `DRY_RUN=1`, `DEBUG=1`, `WORKERS=4` |
+| `.env.prod` | Production | `DRY_RUN=0`, `DEBUG=0`, `WORKERS=12` |
+| `.env` | Default fallback | Used if no specific env file found |
+
+#### Switching Environments
+
+**Option 1: Using ENV_FILE (Recommended)**
+
+```bash
+# Development
+ENV_FILE=.env.dev python motus-get-token.py --write-env --env-path .env.dev
+ENV_FILE=.env.dev python run-motus-batch.py --company-id J9A6Y
+
+# Production
+ENV_FILE=.env.prod python motus-get-token.py --write-env --env-path .env.prod
+ENV_FILE=.env.prod python run-motus-batch.py --company-id J9A6Y
+```
+
+**Option 2: Using ENV_NAME**
+
+```bash
+# Development (auto-selects .env.dev)
+ENV_NAME=development python run-motus-batch.py --company-id J9A6Y
+
+# Production (auto-selects .env.prod)
+ENV_NAME=production python run-motus-batch.py --company-id J9A6Y
+```
+
+#### Environment Priority
+
+The secrets manager loads configuration in this order:
+1. `ENV_FILE` environment variable (explicit override)
+2. `.env.dev` if `ENV_NAME=development`
+3. `.env.prod` if `ENV_NAME=production`
+4. `.env` (default fallback)
+5. Project-specific files (`matrix-ukg-motus.env`, etc.)
+
+### Debug API
+
+A FastAPI-based debug API is available for testing individual employees and troubleshooting sync issues.
+
+#### Starting the Debug API
+
+```bash
+# Development
+ENV_FILE=.env.dev uvicorn src.presentation.api.debug_api:app --reload --port 8000
+
+# Production
+ENV_FILE=.env.prod uvicorn src.presentation.api.debug_api:app --port 8000
+```
+
+#### Debug API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/ukg/employment-details/{emp_num}` | GET | Raw UKG employment data |
+| `/ukg/person-details/{emp_id}` | GET | Raw UKG person data |
+| `/motus/driver/{emp_num}` | GET | Current Motus driver data |
+| `/build-driver` | POST | Build driver payload without syncing |
+| `/compare` | POST | Compare UKG vs Motus data |
+| `/validate-scenario` | POST | Validate specific scenario |
+| `/sync` | POST | Sync single employee (with dry_run option) |
+
+#### Example: Debug Single Employee Sync
+
+```bash
+# Dry run - validate without making changes
+curl -X POST "http://localhost:8000/sync?include_trace=true" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "employee_number": "12345",
+    "company_id": "J9A6Y",
+    "dry_run": true
+  }'
+```
+
+The response includes a detailed trace of:
+- All UKG API calls and responses
+- Data transformations applied
+- Motus API request and response
+
+#### Swagger Documentation
+
+Interactive API docs available at: `http://localhost:8000/docs`
 
 ---
 
@@ -500,12 +620,18 @@ pytest tests/unit/test_job_code_filter.py -v
 
 | Component | Coverage |
 |-----------|----------|
-| Overall | 91% |
-| build-motus-driver.py | 95% |
-| run-motus-batch.py | 88% |
-| upsert-motus-driver.py | 90% |
+| Overall | 93% |
+| src/application/services | 96-99% |
+| src/domain/models | 94-100% |
+| src/infrastructure/adapters | 89-91% |
+| src/presentation/api | 89-91% |
 
-**Total Tests: 235**
+**Total Tests: 819**
+
+Run tests with coverage:
+```bash
+python -m pytest tests/unit/ -v --cov=src --cov-report=term-missing --cov-fail-under=90
+```
 
 ### Test EEIDs
 
@@ -663,7 +789,7 @@ Batch processing reports progress every 100 records:
 A: Employees are skipped if they have ineligible job codes or don't match the state filter.
 
 **Q: How often should the JWT be refreshed?**
-A: Run `motus-get-token.py` when you see 401 errors or before scheduled batch runs.
+A: The system now auto-refreshes the JWT token when needed. Manual refresh is only required if you see persistent authentication errors. Run `python motus-get-token.py --write-env --force` to force a refresh.
 
 **Q: Can I run multiple batches in parallel?**
 A: Not recommended. Use a single batch with increased `WORKERS` instead.
@@ -715,6 +841,11 @@ A: Not recommended. Use a single batch with increased `WORKERS` instead.
 | 1.1.0 | 2026-03-26 | Added manager/supervisor name field |
 | 1.1.0 | 2026-03-26 | Added leave of absence status derivation |
 | 1.1.0 | 2026-03-26 | Added comprehensive test suite (235 tests, 91% coverage) |
+| 1.2.0 | 2026-04-03 | Added automatic token refresh in MotusClient |
+| 1.2.0 | 2026-04-03 | Added DEV/PROD environment separation (.env.dev, .env.prod) |
+| 1.2.0 | 2026-04-03 | Added Debug API for single employee troubleshooting |
+| 1.2.0 | 2026-04-03 | Enhanced correlation ID logging throughout |
+| 1.2.0 | 2026-04-03 | Test coverage improved to 93% (819 tests) |
 
 ---
 
