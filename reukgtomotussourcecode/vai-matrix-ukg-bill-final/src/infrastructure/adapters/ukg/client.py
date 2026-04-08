@@ -120,9 +120,22 @@ class UKGClient:
         Returns:
             Parsed JSON response
         """
+        # Log request with sanitized params
+        safe_params = {k: "***" if "password" in k.lower() else v
+                       for k, v in (params or {}).items()}
+        logger.debug(f"UKG API GET {path} params={safe_params}")
+
         response = self._http.get(path, params=params)
         response.raise_for_status()
-        return safe_json(response)
+        data = safe_json(response)
+
+        # Log response summary
+        if isinstance(data, list):
+            logger.debug(f"UKG API response: {path} -> {len(data)} records")
+        elif isinstance(data, dict):
+            logger.debug(f"UKG API response: {path} -> keys={list(data.keys())[:5]}")
+
+        return data
 
     def _extract_list(self, data: Any) -> List[Dict[str, Any]]:
         """
@@ -251,6 +264,8 @@ class UKGClient:
         Returns:
             List of employee records
         """
+        logger.info(f"UKG listing employees: companyId={company_id} page={page} pageSize={page_size}")
+
         params: Dict[str, Any] = {
             "page": page,
             "per_page": page_size,
@@ -259,7 +274,9 @@ class UKGClient:
             params["companyID"] = company_id
 
         data = self._get_data("/personnel/v1/employment-details", params)
-        return self._extract_list(data)
+        result = self._extract_list(data)
+        logger.info(f"UKG employees listed: count={len(result)} companyId={company_id}")
+        return result
 
     def list_active_employees(
         self,
@@ -407,9 +424,12 @@ class UKGClient:
         Raises:
             ValueError: If employee not found
         """
+        logger.info(f"UKG fetching full employee data: employeeNumber={employee_number} companyId={company_id}")
+
         # Get employment details
         employment = self.get_employment_details(employee_number, company_id)
         if not employment:
+            logger.warning(f"UKG employee not found: employeeNumber={employee_number} companyId={company_id}")
             raise ValueError(
                 f"Employee not found: employeeNumber={employee_number}, "
                 f"companyID={company_id}"
@@ -430,6 +450,8 @@ class UKGClient:
         person = None
         if employee_id:
             person = self.get_person_details(employee_id)
+
+        logger.info(f"UKG full employee data fetched: employeeNumber={employee_number} employeeId={employee_id}")
 
         return {
             "employment": employment,

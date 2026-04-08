@@ -2,6 +2,7 @@
 
 import base64
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -96,6 +97,12 @@ class UKGClient:
             UkgApiError: For other error status codes.
         """
         url = f"{self.settings.base_url.rstrip('/')}/{path.lstrip('/')}"
+        start_time = time.time()
+
+        # Log request (hide sensitive query params)
+        safe_params = {k: "***" if "password" in k.lower() or "key" in k.lower() else v
+                       for k, v in (params or {}).items()}
+        logger.info(f"UKG API request: GET {path} params={list(safe_params.keys())}")
 
         try:
             response = requests.get(
@@ -105,20 +112,25 @@ class UKGClient:
                 timeout=self.settings.timeout,
             )
         except requests.exceptions.Timeout as e:
-            logger.error(f"UKG API timeout: {url}")
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(f"UKG API timeout: GET {path} elapsed={elapsed_ms:.0f}ms timeout={self.settings.timeout}s")
             raise TimeoutError(
                 message=f"UKG API request timed out: {url}",
                 timeout_seconds=self.settings.timeout,
             ) from e
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"UKG API connection error: {url} - {e}")
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(f"UKG API connection error: GET {path} elapsed={elapsed_ms:.0f}ms error={e}")
             raise ServerError(
                 message=f"UKG API connection failed: {e}",
                 status_code=503,
             ) from e
 
-        if self.debug:
-            logger.debug(f"GET {response.url} -> {response.status_code}")
+        elapsed_ms = (time.time() - start_time) * 1000
+        if response.status_code < 400:
+            logger.info(f"UKG API response: GET {path} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
+        else:
+            logger.warning(f"UKG API response: GET {path} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
 
         # Handle specific HTTP status codes
         self._handle_response_status(response, url)
@@ -127,9 +139,9 @@ class UKGClient:
             data = response.json()
             if self.debug:
                 if isinstance(data, list):
-                    logger.debug(f"Response: list len={len(data)}")
+                    logger.debug(f"UKG API response body: list len={len(data)}")
                 elif isinstance(data, dict):
-                    logger.debug(f"Response: dict keys={list(data.keys())[:12]}")
+                    logger.debug(f"UKG API response body keys: {list(data.keys())[:12]}")
             return data
         except Exception:
             return {}

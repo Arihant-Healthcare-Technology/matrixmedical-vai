@@ -336,8 +336,13 @@ class SpendExpenseClient(BillClient):
         Returns:
             Created user dict
         """
+        email = payload.get("email", "unknown")
+        logger.info(f"BILL S&E creating user: email={email}")
         response = self._http.post("/users", json=payload, timeout=BATCH_TIMEOUT)
-        return self._handle_response(response, [200, 201])
+        result = self._handle_response(response, [200, 201])
+        user_id = result.get("uuid") or result.get("id")
+        logger.info(f"BILL S&E user created: id={user_id} email={email}")
+        return result
 
     def update_user(self, user_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -350,8 +355,11 @@ class SpendExpenseClient(BillClient):
         Returns:
             Updated user dict
         """
+        logger.info(f"BILL S&E updating user: id={user_id}")
         response = self._http.patch(f"/users/{user_id}", json=payload)
-        return self._handle_response(response, [200, 204])
+        result = self._handle_response(response, [200, 204])
+        logger.info(f"BILL S&E user updated: id={user_id}")
+        return result
 
     def retire_user(self, user_id: str) -> bool:
         """
@@ -365,8 +373,10 @@ class SpendExpenseClient(BillClient):
         Returns:
             True if retired successfully
         """
+        logger.info(f"BILL S&E retiring user: id={user_id}")
         response = self._http.delete(f"/users/{user_id}")
         self._handle_response(response, [200, 204])
+        logger.info(f"BILL S&E user retired: id={user_id}")
         return True
 
     def get_all_users(self) -> List[Dict[str, Any]]:
@@ -446,13 +456,21 @@ class AccountsPayableClient(BillClient):
 
     def create_vendor(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Create new vendor."""
+        name = payload.get("name", "unknown")
+        logger.info(f"BILL AP creating vendor: name={name}")
         response = self._http.post("/vendors", json=payload, timeout=BATCH_TIMEOUT)
-        return self._handle_response(response, [200, 201])
+        result = self._handle_response(response, [200, 201])
+        vendor_id = result.get("id")
+        logger.info(f"BILL AP vendor created: id={vendor_id} name={name}")
+        return result
 
     def update_vendor(self, vendor_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Update existing vendor."""
+        logger.info(f"BILL AP updating vendor: id={vendor_id}")
         response = self._http.patch(f"/vendors/{vendor_id}", json=payload)
-        return self._handle_response(response, [200, 204])
+        result = self._handle_response(response, [200, 204])
+        logger.info(f"BILL AP vendor updated: id={vendor_id}")
+        return result
 
     def get_all_vendors(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all vendors (paginated)."""
@@ -514,13 +532,21 @@ class AccountsPayableClient(BillClient):
 
     def create_bill(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Create new bill."""
+        vendor_id = payload.get("vendorId", "unknown")
+        logger.info(f"BILL AP creating bill: vendorId={vendor_id}")
         response = self._http.post("/bills", json=payload, timeout=BATCH_TIMEOUT)
-        return self._handle_response(response, [200, 201])
+        result = self._handle_response(response, [200, 201])
+        bill_id = result.get("id")
+        logger.info(f"BILL AP bill created: id={bill_id} vendorId={vendor_id}")
+        return result
 
     def update_bill(self, bill_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Update existing bill."""
+        logger.info(f"BILL AP updating bill: id={bill_id}")
         response = self._http.patch(f"/bills/{bill_id}", json=payload)
-        return self._handle_response(response, [200, 204])
+        result = self._handle_response(response, [200, 204])
+        logger.info(f"BILL AP bill updated: id={bill_id}")
+        return result
 
     def get_bills_for_vendor(
         self,
@@ -545,21 +571,29 @@ class AccountsPayableClient(BillClient):
 
     def create_payment(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Create single payment."""
+        bill_id = payload.get("billId", "unknown")
+        logger.info(f"BILL AP creating payment: billId={bill_id}")
         response = self._http.post("/payments", json=payload, timeout=BATCH_TIMEOUT)
-        return self._handle_response(response, [200, 201])
+        result = self._handle_response(response, [200, 201])
+        payment_id = result.get("id")
+        logger.info(f"BILL AP payment created: id={payment_id} billId={bill_id}")
+        return result
 
     def create_bulk_payments(
         self,
         payments: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """Create bulk payments."""
+        logger.info(f"BILL AP creating bulk payments: count={len(payments)}")
         payload = {"payments": payments}
         response = self._http.post(
             "/payments/bulk",
             json=payload,
             timeout=120,  # Longer timeout for bulk
         )
-        return self._handle_response(response, [200, 201])
+        result = self._handle_response(response, [200, 201])
+        logger.info(f"BILL AP bulk payments created: count={len(payments)}")
+        return result
 
     def record_external_payment(
         self,
@@ -569,6 +603,7 @@ class AccountsPayableClient(BillClient):
         reference: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Record external payment made outside BILL."""
+        logger.info(f"BILL AP recording external payment: billId={bill_id} amount={amount}")
         payload: Dict[str, Any] = {
             "billId": bill_id,
             "amount": amount,
@@ -582,7 +617,9 @@ class AccountsPayableClient(BillClient):
             json=payload,
             timeout=BATCH_TIMEOUT,
         )
-        return self._handle_response(response, [200, 201, 204])
+        result = self._handle_response(response, [200, 201, 204])
+        logger.info(f"BILL AP external payment recorded: billId={bill_id}")
+        return result
 
     def get_payment(self, payment_id: str) -> Dict[str, Any]:
         """Get payment by ID."""

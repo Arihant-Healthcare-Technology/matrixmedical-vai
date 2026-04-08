@@ -20,6 +20,8 @@ Usage:
         # All logs will include the correlation ID
 """
 
+import os
+import sys
 import uuid
 import logging
 import threading
@@ -190,7 +192,7 @@ class CorrelationLogFormatter(logging.Formatter):
 
 
 def configure_logging(
-    level: int = logging.INFO,
+    level: Optional[int] = None,
     include_module: bool = True,
     log_file: Optional[str] = None
 ) -> None:
@@ -198,10 +200,15 @@ def configure_logging(
     Configure logging with correlation ID support.
 
     Args:
-        level: Logging level
+        level: Logging level (defaults to LOG_LEVEL env var or INFO)
         include_module: Include module name in log format
         log_file: Optional file path for file logging
     """
+    # Determine log level from environment or parameter
+    if level is None:
+        level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+        level = getattr(logging, level_name, logging.INFO)
+
     # Create formatter
     formatter = CorrelationLogFormatter(include_module=include_module)
 
@@ -213,11 +220,15 @@ def configure_logging(
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
-    # Console handler
-    console_handler = logging.StreamHandler()
+    # Console handler - use stderr for container compatibility
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setLevel(level)
     console_handler.setFormatter(formatter)
     console_handler.addFilter(CorrelationLogFilter())
     root_logger.addHandler(console_handler)
+
+    # Log initial configuration for debugging
+    root_logger.info(f"Logging configured: level={logging.getLevelName(level)}")
 
     # File handler (optional)
     if log_file:
