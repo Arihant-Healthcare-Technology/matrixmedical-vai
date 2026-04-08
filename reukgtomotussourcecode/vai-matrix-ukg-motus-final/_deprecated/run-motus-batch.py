@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+DEPRECATED: This file has been replaced by src/presentation/cli/batch_runner.py
+Please use the batch_runner module from the src module instead.
+This file is kept for reference only and will be removed in a future release.
+================================================================================
+"""
 import os, json, importlib.util, time, logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path

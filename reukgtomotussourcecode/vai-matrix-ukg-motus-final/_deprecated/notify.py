@@ -1,4 +1,9 @@
 """
+DEPRECATED: This file has been replaced by common/notifications/ module.
+Please use the notification classes from common/notifications/ instead.
+This file is kept for reference only and will be removed in a future release.
+================================================================================
+
 Notification module for batch operation alerts.
 Supports SMTP and AWS SES.
 """

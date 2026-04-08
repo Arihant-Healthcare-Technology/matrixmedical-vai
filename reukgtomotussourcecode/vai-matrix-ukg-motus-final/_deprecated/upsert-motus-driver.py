@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+DEPRECATED: This file has been replaced by src/infrastructure/adapters/motus/client.py
+Please use the MotusClient class from the src module instead.
+This file is kept for reference only and will be removed in a future release.
+================================================================================
+"""
 import logging
 import os
 import sys

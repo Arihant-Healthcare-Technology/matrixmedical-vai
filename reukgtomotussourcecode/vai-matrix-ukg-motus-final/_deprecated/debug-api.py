@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: This file has been replaced by src/presentation/api/debug_api.py
+Please use the debug_api module from the src module instead.
+This file is kept for reference only and will be removed in a future release.
+================================================================================
+
 Debug API for UKG-to-Motus data validation.
 
 Run locally for Postman/curl testing.

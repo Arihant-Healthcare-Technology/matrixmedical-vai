@@ -9,11 +9,14 @@ import logging
 import os
 from typing import Optional, Set
 
+from common.correlation import configure_logging
 from src.application.services import DriverSyncService
 from src.infrastructure.adapters.motus import MotusClient
 from src.infrastructure.adapters.ukg import UKGClient
 from src.infrastructure.config.settings import BatchSettings, MotusSettings, UKGSettings
 
+# Configure logging at module startup
+configure_logging()
 logger = logging.getLogger(__name__)
 
 

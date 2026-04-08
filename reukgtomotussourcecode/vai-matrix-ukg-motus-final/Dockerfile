@@ -2,14 +2,14 @@ FROM python:3.11-slim
 
 # avoid buffering stdout/stderr
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 WORKDIR /app
 
-# copy common module (self-contained)
+# copy application code from src folder
+COPY src/ /app/src/
 COPY common/ /app/common/
-
-# copy main application files
-COPY build-motus-driver.py upsert-motus-driver.py run-motus-batch.py motus-get-token.py /app/
+COPY motus-get-token.py /app/
 COPY requirements.txt /app/
 
 RUN pip install --no-cache-dir -r requirements.txt
@@ -24,6 +24,6 @@ RUN useradd -m -u 1000 -s /bin/bash appuser && \
 # Switch to non-root user
 USER appuser
 
-# by default it exec batch
-ENTRYPOINT ["python3", "run-motus-batch.py"]
+# Use src-based batch runner as entry point
+ENTRYPOINT ["python3", "-m", "src.presentation.cli.batch_runner"]
 CMD []
