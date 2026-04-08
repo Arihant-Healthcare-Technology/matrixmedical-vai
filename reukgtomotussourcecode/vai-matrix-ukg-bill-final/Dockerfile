@@ -47,6 +47,7 @@ COPY --from=builder /deps /usr/local/lib/python3.11/site-packages/
 # Copy application code (Clean Architecture)
 COPY src/ /app/src/
 COPY common/ /app/common/
+COPY config/ /app/config/
 
 # Copy legacy scripts (deprecated but still needed for backward compatibility)
 COPY build-bill-entity.py upsert-bill-entity.py run-bill-batch.py /app/

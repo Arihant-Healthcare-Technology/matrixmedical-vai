@@ -118,6 +118,7 @@ services:
       # Mount source for hot-reload
       - ./src:/app/src:ro
       - ./common:/app/common:ro
+      - ./config:/app/config:ro
       # Writable data directory
       - ./data:/app/data:rw
       # Mount legacy scripts for testing
@@ -193,6 +194,7 @@ services:
     volumes:
       - ./src:/app/src:ro
       - ./common:/app/common:ro
+      - ./config:/app/config:ro
       - ./tests:/app/tests:ro
       - ./pyproject.toml:/app/pyproject.toml:ro
     working_dir: /app
