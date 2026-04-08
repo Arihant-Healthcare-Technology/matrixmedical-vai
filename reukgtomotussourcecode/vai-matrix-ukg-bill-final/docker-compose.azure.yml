@@ -1,0 +1,91 @@
+version: "3.8"
+
+# =============================================================================
+# UKG-BILL Integration - Azure Container Instances Configuration
+# =============================================================================
+#
+# This is a simplified compose file for Azure deployment WITHOUT Playwright.
+# Use this for API-based sync operations only.
+#
+# Deploy to Azure:
+#   az container create --resource-group <rg> --file docker-compose.azure.yml
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # BILL Spend & Expense (S&E) Sync - API Only
+  # ---------------------------------------------------------------------------
+  bill-se-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production  # Uses production stage - NO Playwright
+    image: ${ACR_REGISTRY:-vaiacr}.azurecr.io/vai-matrix-ukg-bill:${IMAGE_TAG:-latest}
+    container_name: ukg-bill-se-sync
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATA_DIR=/app/data
+      - BILL_MODE=spend_expense
+      # UKG Configuration
+      - UKG_BASE_URL=${UKG_BASE_URL}
+      - UKG_CUSTOMER_API_KEY=${UKG_CUSTOMER_API_KEY}
+      - UKG_USERNAME=${UKG_USERNAME}
+      - UKG_PASSWORD=${UKG_PASSWORD}
+      # BILL S&E Configuration
+      - BILL_API_BASE=${BILL_API_BASE}
+      - BILL_SE_API_TOKEN=${BILL_SE_API_TOKEN}
+    volumes:
+      - bill-data:/app/data:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # BILL Accounts Payable (AP) Sync - API Only
+  # ---------------------------------------------------------------------------
+  bill-ap-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production  # Uses production stage - NO Playwright
+    image: ${ACR_REGISTRY:-vaiacr}.azurecr.io/vai-matrix-ukg-bill:${IMAGE_TAG:-latest}
+    container_name: ukg-bill-ap-sync
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATA_DIR=/app/data
+      - BILL_MODE=accounts_payable
+      # UKG Configuration
+      - UKG_BASE_URL=${UKG_BASE_URL}
+      - UKG_CUSTOMER_API_KEY=${UKG_CUSTOMER_API_KEY}
+      - UKG_USERNAME=${UKG_USERNAME}
+      - UKG_PASSWORD=${UKG_PASSWORD}
+      # BILL AP Configuration
+      - BILL_AP_API_BASE=${BILL_AP_API_BASE}
+      - BILL_AP_API_TOKEN=${BILL_AP_API_TOKEN}
+    volumes:
+      - bill-data:/app/data:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+volumes:
+  bill-data:
+    driver: azure_file
+    driver_opts:
+      share_name: vai-bill-data
+      storage_account_name: ${AZURE_STORAGE_ACCOUNT}

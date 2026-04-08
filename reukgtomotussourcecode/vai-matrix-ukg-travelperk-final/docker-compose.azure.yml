@@ -1,0 +1,56 @@
+version: "3.8"
+
+# =============================================================================
+# UKG-TravelPerk Integration - Azure Container Instances Configuration
+# =============================================================================
+#
+# Deploy to Azure:
+#   az container create --resource-group <rg> --file docker-compose.azure.yml
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # TravelPerk SCIM Sync - API Only
+  # ---------------------------------------------------------------------------
+  travelperk-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: ${ACR_REGISTRY:-vaiacr}.azurecr.io/vai-matrix-ukg-travelperk:${IMAGE_TAG:-latest}
+    container_name: ukg-travelperk-sync
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATA_DIR=/app/data
+      # UKG Configuration
+      - UKG_BASE_URL=${UKG_BASE_URL}
+      - UKG_CUSTOMER_API_KEY=${UKG_CUSTOMER_API_KEY}
+      - UKG_USERNAME=${UKG_USERNAME}
+      - UKG_PASSWORD=${UKG_PASSWORD}
+      # TravelPerk Configuration
+      - TRAVELPERK_SCIM_BASE=${TRAVELPERK_SCIM_BASE}
+      - TRAVELPERK_SCIM_TOKEN=${TRAVELPERK_SCIM_TOKEN}
+      # Optional filters
+      - COMPANY_ID=${COMPANY_ID:-}
+      - STATES_FILTER=${STATES_FILTER:-}
+      - EMPLOYEE_TYPE_CODES=${EMPLOYEE_TYPE_CODES:-}
+    volumes:
+      - travelperk-data:/app/data:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+volumes:
+  travelperk-data:
+    driver: azure_file
+    driver_opts:
+      share_name: vai-travelperk-data
+      storage_account_name: ${AZURE_STORAGE_ACCOUNT}

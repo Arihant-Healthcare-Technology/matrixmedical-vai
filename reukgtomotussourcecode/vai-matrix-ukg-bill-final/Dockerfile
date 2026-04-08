@@ -96,14 +96,25 @@ ENTRYPOINT ["/bin/bash"]
 CMD []
 
 # -----------------------------------------------------------------------------
-# Stage 4: Scraping - Includes Playwright for UI automation
+# Stage 4: Scraping - Includes Playwright for UI automation (Azure-compatible)
+# -----------------------------------------------------------------------------
+# NOTE: This stage is OPTIONAL. Only build if you need web UI automation.
+# For API-based sync, use the 'production' stage instead.
+#
+# Build with: docker build --target scraping -t vai-ukg-bill:scraping .
 # -----------------------------------------------------------------------------
 FROM production AS scraping
 
 USER root
 
-# Install Playwright and browser dependencies
+# Set Playwright environment variables BEFORE installation
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+ENV PLAYWRIGHT_SKIP_BROWSER_GC=1
+
+# Install ALL required system dependencies for Playwright Chromium
+# Reference: https://playwright.dev/python/docs/browsers#install-system-dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core browser dependencies
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -117,17 +128,58 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrandr2 \
     libgbm1 \
     libasound2 \
+    # Additional dependencies often missing
+    libdbus-1-3 \
+    libexpat1 \
+    libfontconfig1 \
+    libgcc1 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libstdc++6 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxi6 \
+    libxrender1 \
+    libxss1 \
+    libxtst6 \
+    # Fonts (required for proper rendering)
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    # CA certificates for HTTPS
+    ca-certificates \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir playwright && \
-    playwright install chromium
+# Create browser directory with proper permissions
+RUN mkdir -p ${PLAYWRIGHT_BROWSERS_PATH} && \
+    chmod 777 ${PLAYWRIGHT_BROWSERS_PATH}
+
+# Install Playwright and download Chromium browser
+RUN pip install --no-cache-dir playwright==1.40.0 && \
+    playwright install chromium --with-deps || playwright install chromium
+
+# Set proper permissions on browser directory for non-root user
+RUN chmod -R 755 ${PLAYWRIGHT_BROWSERS_PATH} && \
+    chown -R appuser:appuser ${PLAYWRIGHT_BROWSERS_PATH}
 
 # Copy scraping module
 COPY scraping/ /app/scraping/
 
-RUN chown -R appuser:appuser /app/scraping
+# Create screenshots directory with proper permissions
+RUN mkdir -p /app/scraping/screenshots && \
+    chown -R appuser:appuser /app/scraping && \
+    chmod -R 755 /app/scraping
 
 USER appuser
+
+# Verify Playwright installation
+RUN python -c "from playwright.sync_api import sync_playwright; print('Playwright installed successfully')"
 
 ENTRYPOINT ["python3", "orchestrate_people_import.py"]
 CMD ["--help"]

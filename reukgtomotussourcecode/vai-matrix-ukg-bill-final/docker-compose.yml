@@ -131,7 +131,7 @@ services:
     tty: true
 
   # ---------------------------------------------------------------------------
-  # Scraping Service - UI automation with Playwright
+  # Scraping Service - UI automation with Playwright (Azure-compatible)
   # ---------------------------------------------------------------------------
   bill-scrape:
     build:
@@ -146,7 +146,16 @@ services:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATA_DIR=/app/data
-      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      # Playwright configuration for Azure
+      - PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+      - PLAYWRIGHT_SKIP_BROWSER_GC=1
+      # Run Chromium in headless mode with sandbox disabled (required for containers)
+      - PLAYWRIGHT_CHROMIUM_SANDBOX=false
+    # Security context for Azure Container Instances
+    security_opt:
+      - seccomp:unconfined
+    # Shared memory size (required for Chromium)
+    shm_size: '2gb'
     volumes:
       - bill-data:/app/data:rw
       - ./scraping/screenshots:/app/scraping/screenshots:rw
