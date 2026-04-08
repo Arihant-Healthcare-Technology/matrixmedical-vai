@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: This file has been replaced by src/application/services/driver_builder.py
+Please use the DriverBuilderService class from the src module instead.
+This file is kept for reference only and will be removed in a future release.
+================================================================================
+
 solution: Build a single Motus driver payload from UKG for a given employeeNumber,
 auth method: using Basic Auth + US-CUSTOMER-API-KEY.
 usage:

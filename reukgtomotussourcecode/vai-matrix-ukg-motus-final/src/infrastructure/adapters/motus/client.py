@@ -225,15 +225,19 @@ class MotusClient:
         correlation_id = get_correlation_id()
 
         url = f"{self.settings.api_base}/drivers/{client_employee_id1}"
-        self._log(f"GET {url}")
+        headers = self._headers()
 
+        # Log full request details
         logger.info(
             f"[{correlation_id}] MOTUS GET REQUEST | "
             f"URL: {url} | Employee: {client_employee_id1}"
         )
+        logger.info(
+            f"[{correlation_id}] MOTUS GET HEADERS | {json.dumps(headers, default=str)}"
+        )
 
         try:
-            response = requests.get(url, headers=self._headers(), timeout=45)
+            response = requests.get(url, headers=headers, timeout=45)
         except requests.exceptions.RequestException as e:
             logger.error(
                 f"[{correlation_id}] MOTUS GET EXCEPTION | "
@@ -293,20 +297,25 @@ class MotusClient:
             self._log(f"startDate injected for INSERT: {payload['startDate']}")
 
         url = f"{self.settings.api_base}/drivers"
-        self._log(f"POST {url}")
+        headers = self._headers()
 
-        # Log request BEFORE sending
+        # Log full request details BEFORE sending
         logger.info(
             f"[{correlation_id}] MOTUS POST REQUEST | "
             f"URL: {url} | "
-            f"Employee: {driver.client_employee_id1} | "
-            f"Payload: {json.dumps(payload, default=str)}"
+            f"Employee: {driver.client_employee_id1}"
+        )
+        logger.info(
+            f"[{correlation_id}] MOTUS POST HEADERS | {json.dumps(headers, default=str)}"
+        )
+        logger.info(
+            f"[{correlation_id}] MOTUS POST BODY | {json.dumps(payload, default=str)}"
         )
 
         try:
             response = requests.post(
                 url,
-                headers=self._headers(),
+                headers=headers,
                 json=payload,
                 timeout=60,
             )
@@ -357,20 +366,25 @@ class MotusClient:
             self._log("startDate stripped for UPDATE")
 
         url = f"{self.settings.api_base}/drivers/{driver.client_employee_id1}"
-        self._log(f"PUT {url}")
+        headers = self._headers()
 
-        # Log request BEFORE sending
+        # Log full request details BEFORE sending
         logger.info(
             f"[{correlation_id}] MOTUS PUT REQUEST | "
             f"URL: {url} | "
-            f"Employee: {driver.client_employee_id1} | "
-            f"Payload: {json.dumps(payload, default=str)}"
+            f"Employee: {driver.client_employee_id1}"
+        )
+        logger.info(
+            f"[{correlation_id}] MOTUS PUT HEADERS | {json.dumps(headers, default=str)}"
+        )
+        logger.info(
+            f"[{correlation_id}] MOTUS PUT BODY | {json.dumps(payload, default=str)}"
         )
 
         try:
             response = requests.put(
                 url,
-                headers=self._headers(),
+                headers=headers,
                 json=payload,
                 timeout=60,
             )

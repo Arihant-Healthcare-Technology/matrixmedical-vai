@@ -129,7 +129,6 @@ def main() -> None:
 
     ukg_settings = UKGSettings.from_env()
     ukg_settings.validate_or_exit()
-    logger.info("UKG credentials validated successfully.")
 
     motus_settings = MotusSettings.from_env()
     motus_settings.validate_or_exit()
@@ -162,7 +161,6 @@ def main() -> None:
     employees = ukg_client.get_all_employment_details_by_company(
         batch_settings.company_id
     )
-    logger.info(f"Total employees from UKG: {len(employees)}")
 
     # Filter by job codes
     employees = filter_by_eligible_job_codes(employees, eligible_job_codes, debug)

@@ -63,7 +63,6 @@ class DriverBuilderService:
         )
 
         # 1) Get employment details
-        logger.info(f"[{correlation_id}] UKG FETCH employment-details | Employee: {employee_number}")
         employment_details = self.ukg_client.get_employment_details(
             employee_number, company_id
         )
@@ -89,7 +88,6 @@ class DriverBuilderService:
             )
 
         # 2) Get employee employment details for project info
-        logger.info(f"[{correlation_id}] UKG FETCH employee-employment-details | Employee: {employee_number}")
         employee_employment = self.ukg_client.get_employee_employment_details(
             employee_number, company_id
         )
@@ -119,7 +117,6 @@ class DriverBuilderService:
             )
 
         # 4) Get person details
-        logger.info(f"[{correlation_id}] UKG FETCH person-details | Employee: {employee_number}")
         person = self.ukg_client.get_person_details(employee_id)
         self._log(f"Employee {employee_number}: === PERSON DETAILS ===")
         self._log(f"Employee {employee_number}: person keys: {list(person.keys())}")
@@ -132,7 +129,6 @@ class DriverBuilderService:
         self._log(f"Employee {employee_number}: addressZipCode = {person.get('addressZipCode')}")
 
         # 5) Get supervisor details
-        logger.info(f"[{correlation_id}] UKG FETCH supervisor-details | Employee: {employee_number}")
         supervisor = self.ukg_client.get_supervisor_details(employee_id)
         supervisor_name = ""
         if supervisor:

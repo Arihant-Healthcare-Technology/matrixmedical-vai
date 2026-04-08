@@ -63,9 +63,6 @@ class UKGClient:
                 timeout=self.settings.timeout,
             )
 
-            if self.debug:
-                logger.debug(f"[{correlation_id}] UKG GET {response.url} -> {response.status_code}")
-
             response.raise_for_status()
 
         except requests.RequestException as e:
@@ -84,24 +81,6 @@ class UKGClient:
 
         try:
             data = response.json()
-            if self.debug:
-                if isinstance(data, list):
-                    logger.debug(f"[{correlation_id}] UKG Response: list len={len(data)}; first keys={list(data[0].keys()) if data else []}")
-                    if data and len(data) > 0:
-                        # Log critical fields from first item for debugging
-                        first = data[0]
-                        logger.debug(f"[{correlation_id}] UKG Response: First item - dateOfTermination={first.get('dateOfTermination')}")
-                        logger.debug(f"[{correlation_id}] UKG Response: First item - employeeStatusStartDate={first.get('employeeStatusStartDate')}")
-                        logger.debug(f"[{correlation_id}] UKG Response: First item - employeeStatusCode={first.get('employeeStatusCode')}")
-                        logger.debug(f"[{correlation_id}] UKG Response: First item - primaryProjectCode={first.get('primaryProjectCode')}")
-                        logger.debug(f"[{correlation_id}] UKG Response: First item - primaryProjectDescription={first.get('primaryProjectDescription')}")
-                elif isinstance(data, dict):
-                    logger.debug(f"[{correlation_id}] UKG Response: dict keys={list(data.keys())}")
-                    logger.debug(f"[{correlation_id}] UKG Response: dateOfTermination={data.get('dateOfTermination')}")
-                    logger.debug(f"[{correlation_id}] UKG Response: employeeStatusStartDate={data.get('employeeStatusStartDate')}")
-                    logger.debug(f"[{correlation_id}] UKG Response: employeeStatusCode={data.get('employeeStatusCode')}")
-                    logger.debug(f"[{correlation_id}] UKG Response: primaryProjectCode={data.get('primaryProjectCode')}")
-                    logger.debug(f"[{correlation_id}] UKG Response: primaryProjectDescription={data.get('primaryProjectDescription')}")
             return data
         except ValueError as e:
             logger.error(
@@ -130,8 +109,6 @@ class UKGClient:
         Returns:
             Employment details dict
         """
-        if self.debug:
-            logger.debug(f"UKG get_employment_details: Fetching for employeeNumber={employee_number}, companyID={company_id}")
         params = {"employeeNumber": employee_number, "companyID": company_id}
         data = self._get("/personnel/v1/employment-details", params)
 
@@ -139,23 +116,11 @@ class UKGClient:
             data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
         )
 
-        if self.debug:
-            logger.debug(f"UKG get_employment_details: Total items returned: {len(items)}")
-
         for item in items:
             if str(item.get("employeeNumber")) == str(employee_number):
                 comp = item.get("companyID") or item.get("companyId")
                 if str(comp) == str(company_id):
-                    if self.debug:
-                        logger.debug(f"UKG get_employment_details: MATCHED! All keys: {list(item.keys())}")
-                        logger.debug(f"UKG get_employment_details: dateOfTermination = {item.get('dateOfTermination')}")
-                        logger.debug(f"UKG get_employment_details: employeeStatusStartDate = {item.get('employeeStatusStartDate')}")
-                        logger.debug(f"UKG get_employment_details: employeeStatusExpectedEndDate = {item.get('employeeStatusExpectedEndDate')}")
-                        logger.debug(f"UKG get_employment_details: employeeStatusCode = {item.get('employeeStatusCode')}")
-                        logger.debug(f"UKG get_employment_details: startDate = {item.get('startDate')}")
                     return item
-        if self.debug:
-            logger.debug(f"UKG get_employment_details: NO MATCH FOUND for employeeNumber={employee_number}")
         return {}
 
     def get_employee_employment_details(
@@ -171,8 +136,6 @@ class UKGClient:
         Returns:
             Employee employment details dict
         """
-        if self.debug:
-            logger.debug(f"UKG get_employee_employment_details: Fetching for employeeNumber={employee_number}, companyID={company_id}")
         params = {"employeeNumber": employee_number, "companyID": company_id}
         data = self._get("/personnel/v1/employee-employment-details", params)
 
@@ -180,20 +143,11 @@ class UKGClient:
             data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
         )
 
-        if self.debug:
-            logger.debug(f"UKG get_employee_employment_details: Total items returned: {len(items)}")
-
         for item in items:
             if str(item.get("employeeNumber")) == str(employee_number):
                 comp = item.get("companyID") or item.get("companyId")
                 if str(comp) == str(company_id):
-                    if self.debug:
-                        logger.debug(f"UKG get_employee_employment_details: MATCHED! All keys: {list(item.keys())}")
-                        logger.debug(f"UKG get_employee_employment_details: primaryProjectCode = {item.get('primaryProjectCode')}")
-                        logger.debug(f"UKG get_employee_employment_details: primaryProjectDescription = {item.get('primaryProjectDescription')}")
                     return item
-        if self.debug:
-            logger.debug(f"UKG get_employee_employment_details: NO MATCH FOUND for employeeNumber={employee_number}")
         return {}
 
     def get_person_details(self, employee_id: str) -> Dict[str, Any]:
@@ -246,8 +200,6 @@ class UKGClient:
             return items[0] if items else {}
 
         except UkgApiError:
-            if self.debug:
-                logger.warning(f"No supervisor found for employeeId={employee_id}")
             return {}
 
     def get_location(self, location_code: str) -> Dict[str, Any]:
@@ -272,9 +224,7 @@ class UKGClient:
                 return self._get_first_item(
                     self._get("/configuration/v1/locations", {"locationCode": location_code})
                 )
-            except UkgApiError as e:
-                if self.debug:
-                    logger.warning(f"Location fetch failed for {location_code}: {e}")
+            except UkgApiError:
                 return {}
 
     def get_all_employment_details_by_company(
