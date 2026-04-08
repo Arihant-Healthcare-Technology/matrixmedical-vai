@@ -67,6 +67,7 @@ reports/
 credentials.json
 service-account*.json
 *secret*
+!**/secrets_manager.py
 *token*
 
 # OS files
