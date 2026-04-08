@@ -2,14 +2,26 @@
 
 import argparse
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Optional, Set, List
+
+from common import configure_logging, get_logger, RedactingFilter
 
 from ...application.services import UserSyncService
 from ...infrastructure.adapters.ukg import UKGClient
 from ...infrastructure.adapters.travelperk import TravelPerkClient
 from ...infrastructure.config.settings import BatchSettings
+
+
+# Configure logging with correlation support and PII redaction
+configure_logging(include_module=True)
+logger = get_logger(__name__)
+
+# Add PII redaction filter to all handlers
+for handler in logging.root.handlers:
+    handler.addFilter(RedactingFilter())
 
 
 def parse_args() -> argparse.Namespace:
@@ -112,11 +124,11 @@ def main() -> None:
     states_filter = parse_states(batch_settings.states_filter)
     debug = os.getenv("DEBUG", "0") == "1"
 
-    # Print config
+    # Log configuration
     has_api_key = bool(os.getenv("TRAVELPERK_API_KEY"))
     type_codes_str = ",".join(batch_settings.employee_type_codes or []) or "ALL"
-    print(
-        f"[CFG] companyID={batch_settings.company_id} | "
+    logger.info(
+        f"Configuration: companyID={batch_settings.company_id} | "
         f"states={batch_settings.states_filter or 'ALL'} | "
         f"employeeTypeCodes={type_codes_str} | "
         f"workers={batch_settings.workers} | "
@@ -139,7 +151,7 @@ def main() -> None:
             batch_settings.insert_supervisors,
             batch_settings,
         )
-        print(f"[INFO] Pre-inserted {len(pre_inserted_mapping)} supervisor(s)")
+        logger.info(f"Pre-inserted {len(pre_inserted_mapping)} supervisor(s)")
 
     # Fetch employees from UKG
     employees = ukg_client.get_all_employment_details_by_company(
@@ -161,7 +173,7 @@ def main() -> None:
         mapping_file = out_path / "employee_to_travelperk_id_mapping.json"
         with mapping_file.open("w", encoding="utf-8") as f:
             json.dump(mapping, f, indent=2)
-        print(f"[INFO] Saved mapping to {mapping_file}")
+        logger.info(f"Saved mapping to {mapping_file}")
 
 
 if __name__ == "__main__":

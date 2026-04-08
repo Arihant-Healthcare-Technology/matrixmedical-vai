@@ -1,12 +1,24 @@
 """UKG API client for TravelPerk integration."""
 
 import base64
+import logging
 from typing import Any, Dict, List, Optional
 
 import requests
 
-from ....domain.exceptions import UkgApiError, AuthenticationError
+from ....domain.exceptions import (
+    UkgApiError,
+    AuthenticationError,
+    RateLimitError,
+    BadRequestError,
+    NotFoundError,
+    ServerError,
+    TimeoutError,
+)
 from ...config.settings import UKGSettings
+
+
+logger = logging.getLogger(__name__)
 
 
 class UKGClient:
@@ -37,13 +49,11 @@ class UKGClient:
             token = ''.join(token.split())
             try:
                 base64.b64decode(token, validate=True)
-                if self.debug:
-                    print(f"[DEBUG] Using UKG_BASIC_B64 (length: {len(token)})")
+                logger.debug(f"Using UKG_BASIC_B64 (length: {len(token)})")
                 self._token = token
                 return token
             except Exception as error:
-                if self.debug:
-                    print(f"[WARN] UKG_BASIC_B64 is invalid: {error}")
+                logger.warning(f"UKG_BASIC_B64 is invalid: {error}")
 
         if not self.settings.username or not self.settings.password:
             raise AuthenticationError("Missing UKG_USERNAME/UKG_PASSWORD or UKG_BASIC_B64")
@@ -67,34 +77,141 @@ class UKGClient:
         path: str,
         params: Optional[Dict[str, Any]] = None,
     ) -> Any:
-        """Make GET request to UKG API."""
+        """Make GET request to UKG API.
+
+        Args:
+            path: API endpoint path.
+            params: Query parameters.
+
+        Returns:
+            Parsed JSON response.
+
+        Raises:
+            AuthenticationError: For 401/403 status codes.
+            BadRequestError: For 400 status code.
+            NotFoundError: For 404 status code.
+            RateLimitError: For 429 status code.
+            ServerError: For 5xx status codes.
+            TimeoutError: For request timeouts.
+            UkgApiError: For other error status codes.
+        """
         url = f"{self.settings.base_url.rstrip('/')}/{path.lstrip('/')}"
-        response = requests.get(
-            url,
-            headers=self._headers(),
-            params=params,
-            timeout=self.settings.timeout,
-        )
+
+        try:
+            response = requests.get(
+                url,
+                headers=self._headers(),
+                params=params,
+                timeout=self.settings.timeout,
+            )
+        except requests.exceptions.Timeout as e:
+            logger.error(f"UKG API timeout: {url}")
+            raise TimeoutError(
+                message=f"UKG API request timed out: {url}",
+                timeout_seconds=self.settings.timeout,
+            ) from e
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"UKG API connection error: {url} - {e}")
+            raise ServerError(
+                message=f"UKG API connection failed: {e}",
+                status_code=503,
+            ) from e
 
         if self.debug:
-            print(f"[DEBUG] GET {response.url} -> {response.status_code}")
+            logger.debug(f"GET {response.url} -> {response.status_code}")
 
-        if response.status_code >= 400:
-            raise UkgApiError(
-                f"UKG API error: {response.text[:500]}",
-                status_code=response.status_code,
-            )
+        # Handle specific HTTP status codes
+        self._handle_response_status(response, url)
 
         try:
             data = response.json()
             if self.debug:
                 if isinstance(data, list):
-                    print(f"[DEBUG] list len={len(data)}")
+                    logger.debug(f"Response: list len={len(data)}")
                 elif isinstance(data, dict):
-                    print(f"[DEBUG] dict keys={list(data.keys())[:12]}")
+                    logger.debug(f"Response: dict keys={list(data.keys())[:12]}")
             return data
         except Exception:
             return {}
+
+    def _handle_response_status(
+        self,
+        response: requests.Response,
+        url: str,
+    ) -> None:
+        """Handle HTTP response status codes.
+
+        Args:
+            response: HTTP response object.
+            url: Request URL for error messages.
+
+        Raises:
+            Appropriate exception based on status code.
+        """
+        status = response.status_code
+
+        if status < 400:
+            return  # Success
+
+        # Parse error response body
+        try:
+            error_body = response.json()
+        except Exception:
+            error_body = {"raw_text": response.text[:500]}
+
+        error_message = error_body.get("message") or error_body.get("error") or response.text[:200]
+
+        if status == 400:
+            logger.warning(f"UKG bad request: {url} - {error_message}")
+            raise BadRequestError(
+                message=f"UKG bad request: {error_message}",
+                response_body=error_body,
+            )
+
+        elif status == 401:
+            logger.error(f"UKG authentication failed: {url}")
+            raise AuthenticationError(
+                message="UKG authentication failed - check credentials",
+                status_code=401,
+            )
+
+        elif status == 403:
+            logger.error(f"UKG access forbidden: {url}")
+            raise AuthenticationError(
+                message="UKG access forbidden - check API key permissions",
+                status_code=403,
+            )
+
+        elif status == 404:
+            logger.debug(f"UKG resource not found: {url}")
+            raise NotFoundError(
+                message=f"UKG resource not found: {url}",
+                resource_type="employee",
+            )
+
+        elif status == 429:
+            retry_after = int(response.headers.get("Retry-After", 60))
+            logger.warning(f"UKG rate limit exceeded, retry after {retry_after}s")
+            raise RateLimitError(
+                message="UKG rate limit exceeded",
+                retry_after=retry_after,
+            )
+
+        elif status >= 500:
+            logger.error(f"UKG server error {status}: {url} - {error_message}")
+            raise ServerError(
+                message=f"UKG server error: {error_message}",
+                status_code=status,
+                response_body=error_body,
+            )
+
+        else:
+            logger.error(f"UKG API error {status}: {url} - {error_message}")
+            raise UkgApiError(
+                message=f"UKG API error: {error_message}",
+                status_code=status,
+                response_body=error_body,
+            )
 
     def _normalize_list(self, data: Any) -> List[Dict[str, Any]]:
         """Normalize API response to list."""
@@ -160,12 +277,12 @@ class UKGClient:
                 item for item in items
                 if item.get("employeeTypeCode", "").strip().upper() in type_codes_set
             ]
-            print(
-                f"[INFO] companyId={company_id} -> total: {original_count} | "
+            logger.info(
+                f"companyId={company_id} -> total: {original_count} | "
                 f"filtered by employeeTypeCode={list(type_codes_set)}: {len(items)}"
             )
         else:
-            print(f"[INFO] companyId={company_id} -> total records: {len(items)}")
+            logger.info(f"companyId={company_id} -> total records: {len(items)}")
 
         return items
 

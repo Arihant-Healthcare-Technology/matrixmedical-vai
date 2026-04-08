@@ -1,3 +1,18 @@
+"""
+DEPRECATED: This script is deprecated and will be removed in a future version.
+            Use 'ukg-bill batch sync' CLI command instead.
+            Run 'ukg-bill --help' for available commands.
+"""
+import warnings
+
+warnings.warn(
+    "run-bill-batch.py is deprecated and will be removed in a future version. "
+    "Use 'ukg-bill batch sync' CLI command instead. "
+    "Run 'ukg-bill --help' for available commands.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import os, json, importlib.util, time, sys, logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path

@@ -17,7 +17,21 @@ environment (.env example):
 
 optional:
   DEBUG=1 # prints requested URLs and brief response info
+
+DEPRECATED: This script is deprecated and will be removed in a future version.
+            Use 'ukg-bill build user' CLI command instead.
+            Run 'ukg-bill --help' for available commands.
 """
+import warnings
+
+warnings.warn(
+    "build-bill-entity.py is deprecated and will be removed in a future version. "
+    "Use 'ukg-bill build user' CLI command instead. "
+    "Run 'ukg-bill --help' for available commands.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import os
 import re
 import sys

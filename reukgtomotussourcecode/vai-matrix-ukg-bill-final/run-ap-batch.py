@@ -18,7 +18,21 @@ environment (.env example):
   VENDOR_CSV_PATH=data/vendors.csv
   INVOICE_CSV_PATH=data/invoices.csv
   DEBUG=1
+
+DEPRECATED: This script is deprecated and will be removed in a future version.
+            Use 'ukg-bill ap batch' CLI command instead.
+            Run 'ukg-bill --help' for available commands.
 """
+import warnings
+
+warnings.warn(
+    "run-ap-batch.py is deprecated and will be removed in a future version. "
+    "Use 'ukg-bill ap batch' CLI command instead. "
+    "Run 'ukg-bill --help' for available commands.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import os
 import sys
 import json

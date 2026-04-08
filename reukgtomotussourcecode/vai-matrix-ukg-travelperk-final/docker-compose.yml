@@ -1,0 +1,133 @@
+version: "3.8"
+
+# =============================================================================
+# UKG-TravelPerk Integration Docker Compose
+# =============================================================================
+#
+# Usage:
+#   Production:   docker-compose up -d travelperk-sync
+#   Development:  docker-compose --profile dev up travelperk-dev
+#   One-off run:  docker-compose run --rm travelperk-sync --company-id J9A6Y
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Production Service - UKG to TravelPerk Sync
+  # ---------------------------------------------------------------------------
+  travelperk-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: vai-matrix-ukg-travelperk:${IMAGE_TAG:-latest}
+    container_name: ukg-travelperk-sync
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATA_DIR=/app/data
+    volumes:
+      - travelperk-data:/app/data:rw
+    networks:
+      - integration-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, sys; sys.exit(0 if os.getenv('UKG_BASE_URL') else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Development Service - Hot reload with source mounts
+  # ---------------------------------------------------------------------------
+  travelperk-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: vai-matrix-ukg-travelperk:dev
+    container_name: ukg-travelperk-dev
+    env_file:
+      - .env.dev
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=DEBUG
+      - DATA_DIR=/app/data
+    volumes:
+      # Mount source for hot-reload
+      - ./src:/app/src:ro
+      - ./common:/app/common:ro
+      # Writable data directory
+      - ./data:/app/data:rw
+      # Mount scripts for testing
+      - ./run-travelperk-batch.py:/app/run-travelperk-batch.py:ro
+      - ./build-travelperk-user.py:/app/build-travelperk-user.py:ro
+      - ./upsert-travelperk-user.py:/app/upsert-travelperk-user.py:ro
+    networks:
+      - integration-network
+    profiles:
+      - dev
+    stdin_open: true
+    tty: true
+
+  # ---------------------------------------------------------------------------
+  # Test Runner Service
+  # ---------------------------------------------------------------------------
+  travelperk-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: vai-matrix-ukg-travelperk:test
+    container_name: ukg-travelperk-test
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=DEBUG
+      - UKG_BASE_URL=https://test.ultipro.com
+      - UKG_CUSTOMER_API_KEY=test_key
+      - TRAVELPERK_SCIM_BASE=https://test.travelperk.com/scim
+      - TRAVELPERK_SCIM_TOKEN=test_token
+    volumes:
+      - ./src:/app/src:ro
+      - ./common:/app/common:ro
+      - ./tests:/app/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+    working_dir: /app
+    entrypoint: ["pytest"]
+    command: ["--cov=src", "--cov-report=term-missing", "-v"]
+    networks:
+      - integration-network
+    profiles:
+      - test
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  integration-network:
+    driver: bridge
+    name: vai-integration-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  travelperk-data:
+    name: vai-travelperk-data

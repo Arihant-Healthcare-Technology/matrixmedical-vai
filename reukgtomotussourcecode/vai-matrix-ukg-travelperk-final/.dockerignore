@@ -1,0 +1,70 @@
+# Git
+.git/
+.github/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+tests/
+*.test.py
+conftest.py
+pytest.ini
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+pyproject.toml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local data
+data/
+*.json
+*.csv
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# Scraping artifacts
+scraping/screenshots/
+scraping/*.png

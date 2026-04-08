@@ -16,7 +16,21 @@ environment (.env example):
   BILL_FUNDING_ACCOUNT_ID=your-bank-account-id
   DEBUG=1
   MAX_RETRIES=2
+
+DEPRECATED: This script is deprecated and will be removed in a future version.
+            Use 'ukg-bill process payment' CLI command instead.
+            Run 'ukg-bill --help' for available commands.
 """
+import warnings
+
+warnings.warn(
+    "process-bill-payment.py is deprecated and will be removed in a future version. "
+    "Use 'ukg-bill process payment' CLI command instead. "
+    "Run 'ukg-bill --help' for available commands.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import os
 import sys
 import json

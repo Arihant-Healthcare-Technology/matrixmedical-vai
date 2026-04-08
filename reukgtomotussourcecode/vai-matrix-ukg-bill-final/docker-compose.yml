@@ -1,0 +1,210 @@
+version: "3.8"
+
+# =============================================================================
+# UKG-BILL Integration Docker Compose
+# =============================================================================
+#
+# Usage:
+#   Production (S&E):  docker-compose up -d bill-se-sync
+#   Production (AP):   docker-compose up -d bill-ap-sync
+#   Development:       docker-compose --profile dev up bill-dev
+#   Scraping:          docker-compose --profile scraping up bill-scrape
+#   One-off run:       docker-compose run --rm bill-se-sync batch sync --company-id J9A6Y
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Production Service - BILL Spend & Expense (S&E) Sync
+  # ---------------------------------------------------------------------------
+  bill-se-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: vai-matrix-ukg-bill:${IMAGE_TAG:-latest}
+    container_name: ukg-bill-se-sync
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATA_DIR=/app/data
+      - BILL_MODE=spend_expense
+    volumes:
+      - bill-data:/app/data:rw
+    networks:
+      - integration-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, sys; sys.exit(0 if os.getenv('UKG_BASE_URL') and os.getenv('BILL_API_BASE') else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Production Service - BILL Accounts Payable (AP) Sync
+  # ---------------------------------------------------------------------------
+  bill-ap-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: vai-matrix-ukg-bill:${IMAGE_TAG:-latest}
+    container_name: ukg-bill-ap-sync
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATA_DIR=/app/data
+      - BILL_MODE=accounts_payable
+    volumes:
+      - bill-data:/app/data:rw
+    networks:
+      - integration-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, sys; sys.exit(0 if os.getenv('UKG_BASE_URL') and os.getenv('BILL_AP_API_BASE') else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Development Service - Hot reload with source mounts
+  # ---------------------------------------------------------------------------
+  bill-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: vai-matrix-ukg-bill:dev
+    container_name: ukg-bill-dev
+    env_file:
+      - .env.dev
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=DEBUG
+      - DATA_DIR=/app/data
+    volumes:
+      # Mount source for hot-reload
+      - ./src:/app/src:ro
+      - ./common:/app/common:ro
+      # Writable data directory
+      - ./data:/app/data:rw
+      # Mount legacy scripts for testing
+      - ./run-bill-batch.py:/app/run-bill-batch.py:ro
+      - ./run-ap-batch.py:/app/run-ap-batch.py:ro
+    networks:
+      - integration-network
+    profiles:
+      - dev
+    stdin_open: true
+    tty: true
+
+  # ---------------------------------------------------------------------------
+  # Scraping Service - UI automation with Playwright
+  # ---------------------------------------------------------------------------
+  bill-scrape:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: scraping
+    image: vai-matrix-ukg-bill:scraping
+    container_name: ukg-bill-scrape
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATA_DIR=/app/data
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    volumes:
+      - bill-data:/app/data:rw
+      - ./scraping/screenshots:/app/scraping/screenshots:rw
+    networks:
+      - integration-network
+    profiles:
+      - scraping
+    # Scraping needs more resources for browser
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Test Runner Service
+  # ---------------------------------------------------------------------------
+  bill-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: vai-matrix-ukg-bill:test
+    container_name: ukg-bill-test
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=DEBUG
+      - UKG_BASE_URL=https://test.ultipro.com
+      - UKG_CUSTOMER_API_KEY=test_key
+      - BILL_API_BASE=https://test.bill.com/api
+      - BILL_API_TOKEN=test_token
+    volumes:
+      - ./src:/app/src:ro
+      - ./common:/app/common:ro
+      - ./tests:/app/tests:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+    working_dir: /app
+    entrypoint: ["pytest"]
+    command: ["--cov=src", "--cov-report=term-missing", "-v"]
+    networks:
+      - integration-network
+    profiles:
+      - test
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  integration-network:
+    driver: bridge
+    name: vai-integration-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  bill-data:
+    name: vai-bill-data

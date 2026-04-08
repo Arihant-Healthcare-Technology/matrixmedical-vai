@@ -11,7 +11,21 @@ environment (.env example):
   BILL_API_TOKEN=your-api-token
   DEBUG=1
   MAX_RETRIES=2
+
+DEPRECATED: This script is deprecated and will be removed in a future version.
+            Use 'ukg-bill upsert user' CLI command instead.
+            Run 'ukg-bill --help' for available commands.
 """
+import warnings
+
+warnings.warn(
+    "upsert-bill-entity.py is deprecated and will be removed in a future version. "
+    "Use 'ukg-bill upsert user' CLI command instead. "
+    "Run 'ukg-bill --help' for available commands.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import os
 import sys
 import json

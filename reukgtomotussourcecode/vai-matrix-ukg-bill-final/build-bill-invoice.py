@@ -15,7 +15,21 @@ environment (.env example):
   INVOICE_CSV_PATH=data/invoices.csv
   VENDOR_MAPPING_PATH=data/vendors/vendor_id_mapping.json
   DEBUG=1
+
+DEPRECATED: This script is deprecated and will be removed in a future version.
+            Use 'ukg-bill build invoice' CLI command instead.
+            Run 'ukg-bill --help' for available commands.
 """
+import warnings
+
+warnings.warn(
+    "build-bill-invoice.py is deprecated and will be removed in a future version. "
+    "Use 'ukg-bill build invoice' CLI command instead. "
+    "Run 'ukg-bill --help' for available commands.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import os
 import sys
 import json

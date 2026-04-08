@@ -15,7 +15,21 @@ Optional flags:
   --employee-number N     Process a single UKG employeeNumber instead of company-wide
   --dry-run-batch         Pass --dry-run to run-bill-batch (prevents any API writes to BILL)
   --workers N             Control worker threads for batch build
+
+DEPRECATED: This script is deprecated and will be removed in a future version.
+            Use 'ukg-bill import' CLI command instead.
+            Run 'ukg-bill --help' for available commands.
 """
+import warnings
+
+warnings.warn(
+    "orchestrate_people_import.py is deprecated and will be removed in a future version. "
+    "Use 'ukg-bill import' CLI command instead. "
+    "Run 'ukg-bill --help' for available commands.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import argparse
 import subprocess
 import sys
