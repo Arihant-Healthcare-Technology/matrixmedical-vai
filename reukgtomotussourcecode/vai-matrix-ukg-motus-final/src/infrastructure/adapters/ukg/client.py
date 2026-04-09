@@ -181,6 +181,9 @@ class UKGClient:
         """
         Get supervisor details for an employee.
 
+        This is a soft lookup - failures are logged as warnings, not errors.
+        Missing supervisor data does not block driver creation.
+
         Args:
             employee_id: Employee ID
 
@@ -199,7 +202,19 @@ class UKGClient:
                     return item
             return items[0] if items else {}
 
-        except UkgApiError:
+        except UkgApiError as e:
+            # Soft error - log as warning, return empty dict
+            logger.warning(
+                f"Supervisor details not found for employee {employee_id}: {e}. "
+                "Continuing with empty supervisor data."
+            )
+            return {}
+        except Exception as e:
+            # Unexpected error - still soft fail
+            logger.warning(
+                f"Unexpected error fetching supervisor for employee {employee_id}: {e}. "
+                "Continuing with empty supervisor data."
+            )
             return {}
 
     def get_location(self, location_code: str) -> Dict[str, Any]:

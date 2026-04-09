@@ -49,6 +49,9 @@ data/
 *.json
 !package.json
 !package-lock.json
+!**/postman/*.json
+!**/*.postman_collection.json
+!**/*.postman_environment.json
 *.log
 *.tmp
 *.bak
@@ -69,6 +72,11 @@ service-account*.json
 *secret*
 !**/secrets_manager.py
 *token*
+!**/token_service.py
+!**/test_token_service.py
+!**/test_token_flow.py
+!**/test_motus_get_token.py
+!motus-get-token.py
 
 # OS files
 .DS_Store
