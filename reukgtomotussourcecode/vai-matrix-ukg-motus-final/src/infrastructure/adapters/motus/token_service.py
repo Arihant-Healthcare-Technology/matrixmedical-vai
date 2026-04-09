@@ -105,6 +105,7 @@ class MotusTokenService:
             self._cached_token = response.text.strip()
             self._expires_at = self._now_ts() + DEFAULT_TTL_SECONDS
             logger.info(f"Generated new Motus token (plain text), expires at {self._expires_at}")
+            logger.info(f"Generated token value: {self._cached_token}")
             return
 
         # Extract token from JSON response
@@ -127,6 +128,7 @@ class MotusTokenService:
             self._expires_at = exp or (self._now_ts() + DEFAULT_TTL_SECONDS)
 
         logger.info(f"Generated new Motus token, expires at {self._expires_at}")
+        logger.info(f"Generated token value: {self._cached_token}")
 
     def _request_token_form(self) -> requests.Response:
         """Request token using form-urlencoded format."""
