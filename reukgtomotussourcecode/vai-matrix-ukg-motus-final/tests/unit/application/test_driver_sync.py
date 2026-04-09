@@ -32,6 +32,13 @@ class TestDriverSyncService:
     def mock_motus_client(self):
         """Create mock Motus client."""
         client = MagicMock()
+        # Mock is_driver_terminated to return (False, None) - driver does not exist
+        client.is_driver_terminated.return_value = (False, None)
+        # Mock create_driver for new employees
+        client.create_driver.return_value = {"success": True, "id": "12345"}
+        # Mock update_driver for existing employees
+        client.update_driver.return_value = {"success": True, "id": "12345"}
+        # Keep upsert_driver for backwards compatibility with some tests
         client.upsert_driver.return_value = {
             "success": True,
             "action": "insert",
@@ -185,7 +192,9 @@ class TestDriverSyncService:
 
         assert emp_num == "12345"
         assert status == "insert"
-        mock_motus_client.upsert_driver.assert_called_once()
+        # New implementation calls is_driver_terminated first, then create_driver for new employees
+        mock_motus_client.is_driver_terminated.assert_called_once()
+        mock_motus_client.create_driver.assert_called_once()
 
     def test_sync_employee_skipped_empty_number(self, sync_service):
         """Test employee sync skipped for empty employee number."""

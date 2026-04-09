@@ -141,6 +141,7 @@ class BatchSettings:
     save_local: bool = False
     probe: bool = False
     out_dir: str = "data/batch"
+    use_sequential: bool = True  # If True (default), process employees sequentially instead of threaded
 
     @classmethod
     def from_env(cls) -> "BatchSettings":
@@ -154,6 +155,7 @@ class BatchSettings:
             save_local=os.getenv("SAVE_LOCAL", "0") == "1",
             probe=os.getenv("PROBE", "0") == "1",
             out_dir=os.getenv("OUT_DIR", cls.out_dir),
+            use_sequential=os.getenv("USE_SEQUENTIAL", "1").lower() not in ("0", "false", "no"),
         )
 
     def validate(self) -> None:

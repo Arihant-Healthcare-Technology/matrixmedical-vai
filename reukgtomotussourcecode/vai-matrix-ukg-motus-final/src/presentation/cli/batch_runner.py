@@ -68,15 +68,25 @@ def parse_states(states_arg: Optional[str]) -> Optional[Set[str]]:
     return {s.strip().upper() for s in states_arg.split(",") if s.strip()}
 
 
+# Default JOB_IDS if not set in environment
+DEFAULT_JOB_IDS = "1103,4165,4166,1102,1106,4197,4196,2817,4121,2157"
+
+
 def get_eligible_job_codes() -> Set[str]:
-    """Get eligible job codes from environment."""
+    """Get eligible job codes from environment or use default."""
     job_ids_env = os.getenv("JOB_IDS", "").strip()
+
     if not job_ids_env:
-        raise SystemExit(
-            "Error: JOB_IDS environment variable is required "
-            "(comma-separated list, e.g., JOB_IDS=1103,4165,4166)"
+        logger.info(
+            f"JOB_IDS not set in environment, using default: {DEFAULT_JOB_IDS}"
         )
-    return {code.strip() for code in job_ids_env.split(",") if code.strip()}
+        job_ids_env = DEFAULT_JOB_IDS
+    else:
+        logger.info(f"JOB_IDS loaded from environment: {job_ids_env}")
+
+    job_codes = {code.strip() for code in job_ids_env.split(",") if code.strip()}
+    logger.info(f"Eligible job codes ({len(job_codes)}): {sorted(job_codes)}")
+    return job_codes
 
 
 def filter_by_eligible_job_codes(

@@ -137,28 +137,74 @@ class DriverSyncService:
             )
 
             try:
-                # Build driver
+                # === STEP 1: Check MOTUS first (before UKG calls) ===
+                is_terminated, existing_driver = self.motus_client.is_driver_terminated(
+                    employee_number
+                )
+
+                if is_terminated:
+                    motus_end_date = existing_driver.get("endDate", "") if existing_driver else ""
+                    logger.info(
+                        f"[{correlation_id}] SYNC SKIPPED_TERMINATED | "
+                        f"Employee: {employee_number} | "
+                        f"MOTUS endDate: {motus_end_date} | "
+                        f"Reason: Already terminated in MOTUS, skipping UKG data fetch"
+                    )
+                    return (employee_number, state, "skipped_terminated")
+
+                # === STEP 2: Build driver from UKG (only if not terminated) ===
+                driver_exists = existing_driver is not None
+
+                logger.info(
+                    f"[{correlation_id}] MOTUS CHECK | "
+                    f"Employee: {employee_number} | "
+                    f"Exists: {driver_exists} | "
+                    f"Action: {'PUT update' if driver_exists else 'POST create'}"
+                )
+
                 driver = self.builder.build_driver(employee_number, company_id)
 
-                # Upsert driver
-                result = self.motus_client.upsert_driver(
-                    driver, dry_run=dry_run, probe=probe
-                )
+                # Handle dry_run mode
+                if dry_run:
+                    # Save to file if requested
+                    if out_dir:
+                        file_path = out_dir / f"motus_driver_{employee_number}.json"
+                        with file_path.open("w", encoding="utf-8") as f:
+                            json.dump([driver.to_api_payload()], f, indent=2)
+
+                    action = "would_update" if driver_exists else "would_insert"
+                    logger.info(
+                        f"[{correlation_id}] SYNC COMPLETE (DRY_RUN) | "
+                        f"Employee: {employee_number} | "
+                        f"Action: {action}"
+                    )
+                    return (employee_number, state, "dry_run")
+
+                # === STEP 3: POST or PUT based on existence ===
+                if driver_exists:
+                    # Update existing driver (PUT)
+                    result = self.motus_client.update_driver(driver)
+                    action = "update"
+                    logger.info(
+                        f"[{correlation_id}] MOTUS PUT COMPLETE | "
+                        f"Employee: {employee_number} | "
+                        f"Name: {driver.first_name} {driver.last_name}"
+                    )
+                else:
+                    # Create new driver (POST)
+                    result = self.motus_client.create_driver(driver)
+                    action = "insert"
+                    logger.info(
+                        f"[{correlation_id}] MOTUS POST COMPLETE | "
+                        f"Employee: {employee_number} | "
+                        f"Name: {driver.first_name} {driver.last_name}"
+                    )
 
                 # Save to file if requested
                 if out_dir:
                     file_path = out_dir / f"motus_driver_{employee_number}.json"
                     with file_path.open("w", encoding="utf-8") as f:
                         json.dump([driver.to_api_payload()], f, indent=2)
-
-                action = result.get("action", "unknown")
-
-                if dry_run:
-                    logger.info(
-                        f"[{correlation_id}] SYNC COMPLETE (DRY_RUN) | "
-                        f"Employee: {employee_number}"
-                    )
-                    return (employee_number, state, "dry_run")
 
                 logger.info(
                     f"[{correlation_id}] SYNC COMPLETE | "
@@ -206,7 +252,7 @@ class DriverSyncService:
 
             state_cache: Dict[str, str] = {}
             total = len(employees)
-            stats = {"saved": 0, "skipped": 0, "errors": 0, "total": total}
+            stats = {"saved": 0, "skipped": 0, "skipped_terminated": 0, "errors": 0, "total": total}
             processed = 0
 
             logger.info(
@@ -214,10 +260,28 @@ class DriverSyncService:
                 f"Total employees: {total} | Company: {settings.company_id}"
             )
 
-            with ThreadPoolExecutor(max_workers=settings.workers) as executor:
-                futures = [
-                    executor.submit(
-                        self.sync_employee,
+            # Helper function to update stats
+            def update_stats(employee_number: str, status: str) -> None:
+                nonlocal processed
+                if status in ("saved", "insert", "update"):
+                    stats["saved"] += 1
+                elif status == "skipped_terminated":
+                    stats["skipped_terminated"] += 1
+                    stats["skipped"] += 1  # Also count in total skipped
+                elif status == "error":
+                    stats["errors"] += 1
+                else:
+                    stats["skipped"] += 1
+                processed += 1
+
+            if settings.use_sequential:
+                # Sequential processing mode
+                logger.info(
+                    f"[{batch_correlation_id}] BATCH MODE | Sequential processing enabled (USE_SEQUENTIAL=1)"
+                )
+
+                for emp in employees:
+                    employee_number, state, status = self.sync_employee(
                         emp,
                         settings.company_id,
                         states_filter,
@@ -226,32 +290,59 @@ class DriverSyncService:
                         settings.probe,
                         out_dir,
                     )
-                    for emp in employees
-                ]
 
-                for future in as_completed(futures):
-                    employee_number, state, status = future.result()
+                    update_stats(employee_number, status)
 
-                    if status in ("saved", "insert", "update"):
-                        stats["saved"] += 1
-                    elif status == "error":
-                        stats["errors"] += 1
-                    else:
-                        stats["skipped"] += 1
+                    # Log progress after each employee in sequential mode
+                    logger.info(
+                        f"[{batch_correlation_id}] BATCH PROGRESS | "
+                        f"{processed}/{total} | "
+                        f"Employee: {employee_number} | Status: {status} | "
+                        f"saved={stats['saved']} skipped={stats['skipped']} "
+                        f"(terminated={stats['skipped_terminated']}) "
+                        f"errors={stats['errors']}"
+                    )
+            else:
+                # Threaded processing mode (default)
+                logger.info(
+                    f"[{batch_correlation_id}] BATCH MODE | Threaded processing with {settings.workers} workers"
+                )
 
-                    processed += 1
-                    if processed % 100 == 0 or processed == total:
-                        logger.info(
-                            f"[{batch_correlation_id}] BATCH PROGRESS | "
-                            f"{processed}/{total} | "
-                            f"saved={stats['saved']} skipped={stats['skipped']} "
-                            f"errors={stats['errors']}"
+                with ThreadPoolExecutor(max_workers=settings.workers) as executor:
+                    futures = [
+                        executor.submit(
+                            self.sync_employee,
+                            emp,
+                            settings.company_id,
+                            states_filter,
+                            state_cache,
+                            settings.dry_run,
+                            settings.probe,
+                            out_dir,
                         )
+                        for emp in employees
+                    ]
+
+                    for future in as_completed(futures):
+                        employee_number, state, status = future.result()
+
+                        update_stats(employee_number, status)
+
+                        # Log progress every 100 employees or at the end
+                        if processed % 100 == 0 or processed == total:
+                            logger.info(
+                                f"[{batch_correlation_id}] BATCH PROGRESS | "
+                                f"{processed}/{total} | "
+                                f"saved={stats['saved']} skipped={stats['skipped']} "
+                                f"(terminated={stats['skipped_terminated']}) "
+                                f"errors={stats['errors']}"
+                            )
 
             logger.info(
                 f"[{batch_correlation_id}] BATCH COMPLETE | "
                 f"total={total} | saved={stats['saved']} | "
-                f"skipped={stats['skipped']} | errors={stats['errors']}"
+                f"skipped={stats['skipped']} (terminated={stats['skipped_terminated']}) | "
+                f"errors={stats['errors']}"
             )
 
             return stats

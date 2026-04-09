@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 
@@ -103,6 +103,36 @@ class MotusClient:
     def _today_ymd() -> str:
         """Get today's date in YYYY-MM-DD format."""
         return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    @staticmethod
+    def _is_terminated_in_motus(motus_driver_data: Optional[Dict[str, Any]]) -> bool:
+        """
+        Check if a driver is terminated in MOTUS based on endDate.
+
+        A driver is considered terminated if:
+        - The driver exists in MOTUS (data is not None)
+        - The endDate field is present and non-empty
+        - The endDate is today or in the past
+
+        Args:
+            motus_driver_data: Driver data from MOTUS GET response
+
+        Returns:
+            True if driver is terminated (endDate <= today), False otherwise
+        """
+        if not motus_driver_data:
+            return False
+
+        end_date_str = motus_driver_data.get("endDate")
+        if not end_date_str or not end_date_str.strip():
+            return False
+
+        try:
+            end_date = datetime.strptime(end_date_str.strip(), "%Y-%m-%d").date()
+            today = datetime.now(timezone.utc).date()
+            return end_date <= today
+        except (ValueError, TypeError):
+            return False
 
     def _handle_response(
         self,
@@ -241,6 +271,55 @@ class MotusClient:
             True if driver exists
         """
         return self.get_driver(client_employee_id1) is not None
+
+    def is_driver_terminated(
+        self, client_employee_id1: str
+    ) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """
+        Check if driver exists and is terminated in MOTUS.
+
+        Makes a GET request to MOTUS to retrieve driver data and checks
+        if the endDate field indicates termination (endDate <= today).
+
+        Args:
+            client_employee_id1: Client employee ID
+
+        Returns:
+            Tuple of (is_terminated, driver_data):
+            - (True, data) if driver exists and endDate <= today
+            - (False, data) if driver exists but not terminated
+            - (False, None) if driver does not exist
+        """
+        correlation_id = get_correlation_id()
+        driver_data = self.get_driver(client_employee_id1)
+
+        if driver_data is None:
+            logger.info(
+                f"[{correlation_id}] MOTUS TERMINATED CHECK | "
+                f"Employee: {client_employee_id1} | "
+                f"Result: NOT_FOUND (driver does not exist in MOTUS)"
+            )
+            return (False, None)
+
+        is_terminated = self._is_terminated_in_motus(driver_data)
+        motus_end_date = driver_data.get("endDate", "")
+
+        if is_terminated:
+            logger.info(
+                f"[{correlation_id}] MOTUS TERMINATED CHECK | "
+                f"Employee: {client_employee_id1} | "
+                f"Result: TERMINATED | "
+                f"MOTUS endDate: {motus_end_date}"
+            )
+        else:
+            logger.info(
+                f"[{correlation_id}] MOTUS TERMINATED CHECK | "
+                f"Employee: {client_employee_id1} | "
+                f"Result: ACTIVE | "
+                f"MOTUS endDate: {motus_end_date if motus_end_date else 'N/A'}"
+            )
+
+        return (is_terminated, driver_data)
 
     def create_driver(self, driver: MotusDriver) -> Dict[str, Any]:
         """
