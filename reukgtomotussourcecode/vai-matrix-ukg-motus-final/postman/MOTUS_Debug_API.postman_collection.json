@@ -1,0 +1,1093 @@
+{
+  "info": {
+    "_postman_id": "motus-debug-api-collection",
+    "name": "MOTUS Debug API",
+    "description": "Debug API for UKG-to-Motus data synchronization validation.\n\nThis collection provides endpoints to:\n- Fetch raw data from UKG (via Debug API or Direct)\n- Build Motus driver payloads\n- Compare UKG data with Motus current state\n- Validate specific scenarios (new hire, termination, etc.)\n- Sync employees to Motus\n- Direct UKG API calls with authentication\n- Direct Motus API calls with authentication\n\n**Environment Variables Required:**\n- `base_url`: Debug API base URL (default: http://localhost:8000)\n- `company_id`: UKG Company ID (default: J9A6Y)\n- `UKG_BASE_URL`: UKG API base URL\n- `UKG_BASIC_B64`: Base64 encoded username:password for UKG\n- `UKG_CUSTOMER_API_KEY`: UKG customer API key\n- `MOTUS_API_BASE`: Motus API base URL\n- `MOTUS_JWT`: Motus Bearer JWT token\n\n**Test EEIDs:**\n- New Hire: 28190, 28203, 28207, 28209, 28210\n- Termination: 26737, 27991, 28069, 23497, 27938\n- Manager Change: 28195\n- Address Change: 25336, 26421, 10858, 22299\n- Leave: 022393, 028027, 026434",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check API health status."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Direct UKG API",
+      "description": "Direct calls to UKG Pro API endpoints.\n\n**Authentication Required:**\n- Basic Auth: Base64(username:password) in Authorization header\n- US-CUSTOMER-API-KEY: Customer API key header\n\n**Setup:**\n1. Set UKG_BASE_URL (e.g., https://service5.ultipro.com)\n2. Set UKG_BASIC_B64 = Base64 encode of 'username:password'\n3. Set UKG_CUSTOMER_API_KEY = your API key",
+      "item": [
+        {
+          "name": "Get Employment Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{UKG_BASIC_B64}}",
+                "type": "text"
+              },
+              {
+                "key": "US-CUSTOMER-API-KEY",
+                "value": "{{UKG_CUSTOMER_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{UKG_BASE_URL}}/personnel/v1/employment-details?employeeNumber={{employee_number}}&companyIds={{company_id}}",
+              "host": ["{{UKG_BASE_URL}}"],
+              "path": ["personnel", "v1", "employment-details"],
+              "query": [
+                {
+                  "key": "employeeNumber",
+                  "value": "{{employee_number}}"
+                },
+                {
+                  "key": "companyIds",
+                  "value": "{{company_id}}"
+                }
+              ]
+            },
+            "description": "Get employment details directly from UKG Pro API.\n\nReturns employee employment information including:\n- primaryJobCode\n- employeeStatusCode\n- hireDate\n- terminationDate\n- fullTimeOrPartTimeCode\n- homeLocationCode\n- supervisorId"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Person Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{UKG_BASIC_B64}}",
+                "type": "text"
+              },
+              {
+                "key": "US-CUSTOMER-API-KEY",
+                "value": "{{UKG_CUSTOMER_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{UKG_BASE_URL}}/personnel/v1/person-details/{{employee_id}}",
+              "host": ["{{UKG_BASE_URL}}"],
+              "path": ["personnel", "v1", "person-details", "{{employee_id}}"]
+            },
+            "description": "Get person details directly from UKG Pro API.\n\nRequires employee_id (not employee_number).\n\nReturns personal information including:\n- firstName, lastName, middleName\n- address (line1, city, state, postalCode, country)\n- emailAddress\n- mobilePhone\n- homePhone"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Supervisor Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{UKG_BASIC_B64}}",
+                "type": "text"
+              },
+              {
+                "key": "US-CUSTOMER-API-KEY",
+                "value": "{{UKG_CUSTOMER_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{UKG_BASE_URL}}/personnel/v1/supervisor-details/{{employee_id}}",
+              "host": ["{{UKG_BASE_URL}}"],
+              "path": ["personnel", "v1", "supervisor-details", "{{employee_id}}"]
+            },
+            "description": "Get supervisor details directly from UKG Pro API.\n\nRequires employee_id (not employee_number).\n\nReturns supervisor information including:\n- supervisorFirstName\n- supervisorLastName"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Locations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{UKG_BASIC_B64}}",
+                "type": "text"
+              },
+              {
+                "key": "US-CUSTOMER-API-KEY",
+                "value": "{{UKG_CUSTOMER_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{UKG_BASE_URL}}/configuration/v1/org-levels",
+              "host": ["{{UKG_BASE_URL}}"],
+              "path": ["configuration", "v1", "org-levels"]
+            },
+            "description": "Get organization levels/locations from UKG Pro API.\n\nReturns location information used for:\n- Mapping homeLocationCode to location name\n- Division hierarchy"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Employees (Batch)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{UKG_BASIC_B64}}",
+                "type": "text"
+              },
+              {
+                "key": "US-CUSTOMER-API-KEY",
+                "value": "{{UKG_CUSTOMER_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{UKG_BASE_URL}}/personnel/v1/employment-details?companyIds={{company_id}}&per_page=100&page=1",
+              "host": ["{{UKG_BASE_URL}}"],
+              "path": ["personnel", "v1", "employment-details"],
+              "query": [
+                {
+                  "key": "companyIds",
+                  "value": "{{company_id}}"
+                },
+                {
+                  "key": "per_page",
+                  "value": "100"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Get all employment details for batch processing.\n\nPagination:\n- per_page: Number of records per page (default 100)\n- page: Page number (starts at 1)\n\nUsed for batch sync operations."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Direct Motus API",
+      "description": "Direct calls to Motus API endpoints.\n\n**Authentication Required:**\n- Bearer JWT token in Authorization header\n\n**Setup:**\n1. Set MOTUS_API_BASE (e.g., https://api.motus.com/v1)\n2. Set MOTUS_JWT = JWT token from motus-get-token.py",
+      "item": [
+        {
+          "name": "Get Driver",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{MOTUS_JWT}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{MOTUS_API_BASE}}/drivers/{{employee_number}}",
+              "host": ["{{MOTUS_API_BASE}}"],
+              "path": ["drivers", "{{employee_number}}"]
+            },
+            "description": "Get driver details directly from Motus API.\n\nUses clientEmployeeId1 (employee_number) to lookup driver.\n\nReturns:\n- Driver profile information\n- Custom variables (Manager Name, Division, etc.)\n- Program assignment\n- Status (Active, Terminated, etc.)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Driver (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{MOTUS_JWT}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientEmployeeId1\": \"{{employee_number}}\",\n  \"programId\": 21232,\n  \"firstName\": \"Test\",\n  \"lastName\": \"Driver\",\n  \"email\": \"test.driver@example.com\",\n  \"address1\": \"123 Main St\",\n  \"city\": \"Anytown\",\n  \"state\": \"CA\",\n  \"postalCode\": \"90210\",\n  \"country\": \"US\",\n  \"startDate\": \"2024-01-01\",\n  \"phone\": \"555-1234\",\n  \"customVariables\": {\n    \"Manager Name\": \"John Manager\",\n    \"Division\": \"Sales\",\n    \"Division Number\": \"001\",\n    \"UKG Id\": \"{{employee_number}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{MOTUS_API_BASE}}/drivers",
+              "host": ["{{MOTUS_API_BASE}}"],
+              "path": ["drivers"]
+            },
+            "description": "Create a new driver in Motus.\n\n**Required Fields:**\n- clientEmployeeId1 (employee number)\n- programId (21232=FAVR, 21233=CPM)\n- firstName, lastName, email\n- address1, city, state, postalCode, country\n- startDate (YYYY-MM-DD)\n\n**Optional Fields:**\n- phone\n- customVariables (Manager Name, Division, etc.)\n\n**WARNING**: This creates a real driver in Motus!"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Driver (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{MOTUS_JWT}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientEmployeeId1\": \"{{employee_number}}\",\n  \"programId\": 21232,\n  \"firstName\": \"Test\",\n  \"lastName\": \"Driver\",\n  \"email\": \"test.driver@example.com\",\n  \"address1\": \"456 New Address\",\n  \"city\": \"Newtown\",\n  \"state\": \"NY\",\n  \"postalCode\": \"10001\",\n  \"country\": \"US\",\n  \"phone\": \"555-5678\",\n  \"customVariables\": {\n    \"Manager Name\": \"Jane Manager\",\n    \"Division\": \"Marketing\",\n    \"Division Number\": \"002\",\n    \"UKG Id\": \"{{employee_number}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{MOTUS_API_BASE}}/drivers/{{employee_number}}",
+              "host": ["{{MOTUS_API_BASE}}"],
+              "path": ["drivers", "{{employee_number}}"]
+            },
+            "description": "Update an existing driver in Motus.\n\n**Note:** Do NOT include startDate for updates - it cannot be modified.\n\n**Fields that can be updated:**\n- firstName, lastName, email\n- address1, city, state, postalCode, country\n- phone\n- customVariables\n- endDate (for terminations)\n\n**WARNING**: This makes real changes to Motus!"
+          },
+          "response": []
+        },
+        {
+          "name": "Terminate Driver",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{MOTUS_JWT}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientEmployeeId1\": \"{{employee_number}}\",\n  \"programId\": 21232,\n  \"endDate\": \"2024-12-31\"\n}"
+            },
+            "url": {
+              "raw": "{{MOTUS_API_BASE}}/drivers/{{employee_number}}",
+              "host": ["{{MOTUS_API_BASE}}"],
+              "path": ["drivers", "{{employee_number}}"]
+            },
+            "description": "Terminate a driver by setting their endDate.\n\n**Fields:**\n- endDate: Termination date in YYYY-MM-DD format\n\nOnce endDate is set, driver status becomes 'Terminated'.\n\n**WARNING**: This makes real changes to Motus!"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "UKG Raw Data (via Debug API)",
+      "item": [
+        {
+          "name": "Get Employment Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ukg/employment-details/{{employee_number}}?company_id={{company_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["ukg", "employment-details", "{{employee_number}}"],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{company_id}}"
+                }
+              ]
+            },
+            "description": "Get raw employment details from UKG for an employee via Debug API."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Employee Employment Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ukg/employee-employment-details/{{employee_number}}?company_id={{company_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["ukg", "employee-employment-details", "{{employee_number}}"],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{company_id}}"
+                }
+              ]
+            },
+            "description": "Get raw employee employment details from UKG."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Person Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ukg/person-details/{{employee_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["ukg", "person-details", "{{employee_id}}"]
+            },
+            "description": "Get raw person details from UKG (requires employee_id, not employee_number)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Supervisor Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ukg/supervisor-details/{{employee_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["ukg", "supervisor-details", "{{employee_id}}"]
+            },
+            "description": "Get raw supervisor details from UKG (requires employee_id, not employee_number)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Motus Raw Data (via Debug API)",
+      "item": [
+        {
+          "name": "Get Driver",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/motus/driver/{{employee_number}}",
+              "host": ["{{base_url}}"],
+              "path": ["motus", "driver", "{{employee_number}}"]
+            },
+            "description": "Get current driver data from Motus via Debug API."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Debug Operations",
+      "item": [
+        {
+          "name": "Build Driver",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_number\": \"{{employee_number}}\",\n  \"company_id\": \"{{company_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/build-driver",
+              "host": ["{{base_url}}"],
+              "path": ["build-driver"]
+            },
+            "description": "Build a Motus driver payload from UKG data without syncing.\n\nReturns:\n- Raw UKG data from all endpoints\n- Transformations applied\n- Final Motus payload\n- Validation errors (if any)\n- Full request trace"
+          },
+          "response": []
+        },
+        {
+          "name": "Compare",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_number\": \"{{employee_number}}\",\n  \"company_id\": \"{{company_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/compare",
+              "host": ["{{base_url}}"],
+              "path": ["compare"]
+            },
+            "description": "Compare UKG-built payload with current Motus data.\n\nReturns:\n- Whether employee exists in Motus\n- UKG-built payload\n- Current Motus data\n- Field-by-field differences\n- Full request trace"
+          },
+          "response": []
+        },
+        {
+          "name": "Sync (Dry Run)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_number\": \"{{employee_number}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"dry_run\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sync",
+              "host": ["{{base_url}}"],
+              "path": ["sync"]
+            },
+            "description": "Simulate syncing an employee to Motus (no actual changes).\n\nReturns:\n- Action that would be taken (would_insert, would_update, skipped)\n- Full request trace"
+          },
+          "response": []
+        },
+        {
+          "name": "Sync (Actual)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_number\": \"{{employee_number}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"dry_run\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sync",
+              "host": ["{{base_url}}"],
+              "path": ["sync"]
+            },
+            "description": "Actually sync an employee to Motus.\n\n**WARNING**: This will make real changes to Motus!\n\nReturns:\n- Action taken (insert, update, skipped, error)\n- Motus API response\n- Full request trace"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Validation Scenarios",
+      "item": [
+        {
+          "name": "Validate - New Hire",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_number\": \"{{new_hire_eeid}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"scenario\": \"new_hire\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/validate-scenario",
+              "host": ["{{base_url}}"],
+              "path": ["validate-scenario"]
+            },
+            "description": "Validate new hire scenario.\n\nTest EEIDs: 28190, 28203, 28207, 28209, 28210, 28199, 28206, 28189, 28204\n\nChecks:\n- Job code eligibility\n- Required fields present\n- Employee exists in Motus"
+          },
+          "response": []
+        },
+        {
+          "name": "Validate - Termination",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_number\": \"{{termination_eeid}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"scenario\": \"termination\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/validate-scenario",
+              "host": ["{{base_url}}"],
+              "path": ["validate-scenario"]
+            },
+            "description": "Validate termination scenario.\n\nTest EEIDs: 26737, 27991, 28069, 23497, 27938, 23463, 26612, 25213, 28010\n\nChecks:\n- terminationDate present in UKG\n- employeeStatusCode indicates terminated\n- endDate mapped to Motus payload\n- Derived Status = Terminated\n- endDate synced to Motus"
+          },
+          "response": []
+        },
+        {
+          "name": "Validate - Manager Change",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_number\": \"{{manager_change_eeid}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"scenario\": \"manager_change\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/validate-scenario",
+              "host": ["{{base_url}}"],
+              "path": ["validate-scenario"]
+            },
+            "description": "Validate manager change scenario.\n\nTest EEID: 28195\n\nChecks:\n- supervisorFirstName/LastName present in UKG\n- Manager Name custom variable in Motus\n- Manager names match"
+          },
+          "response": []
+        },
+        {
+          "name": "Validate - Leave",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_number\": \"{{leave_eeid}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"scenario\": \"leave\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/validate-scenario",
+              "host": ["{{base_url}}"],
+              "path": ["validate-scenario"]
+            },
+            "description": "Validate leave of absence scenario.\n\nTest EEIDs: 22393, 28027, 26434\n\nChecks:\n- leaveStartDate present in UKG\n- leaveEndDate present (if applicable)\n- Leave dates mapped to Motus payload\n- Derived status = LOA"
+          },
+          "response": []
+        },
+        {
+          "name": "Validate - Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_number\": \"{{address_change_eeid}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"scenario\": \"address\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/validate-scenario",
+              "host": ["{{base_url}}"],
+              "path": ["validate-scenario"]
+            },
+            "description": "Validate address change scenario.\n\nTest EEIDs: 25336, 26421, 10858, 22299\n\nChecks:\n- Address fields present in UKG\n- Address fields mapped to Motus payload\n- Address synced to Motus"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Sample Test Cases",
+      "item": [
+        {
+          "name": "New Hire - 28190",
+          "item": [
+            {
+              "name": "Build Driver - 28190",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"28190\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/build-driver",
+                  "host": ["{{base_url}}"],
+                  "path": ["build-driver"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Compare - 28190",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"28190\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/compare",
+                  "host": ["{{base_url}}"],
+                  "path": ["compare"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Validate New Hire - 28190",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"28190\",\n  \"company_id\": \"J9A6Y\",\n  \"scenario\": \"new_hire\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/validate-scenario",
+                  "host": ["{{base_url}}"],
+                  "path": ["validate-scenario"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Sync Dry Run - 28190",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"28190\",\n  \"company_id\": \"J9A6Y\",\n  \"dry_run\": true\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/sync",
+                  "host": ["{{base_url}}"],
+                  "path": ["sync"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Termination - 26737",
+          "item": [
+            {
+              "name": "Build Driver - 26737",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"26737\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/build-driver",
+                  "host": ["{{base_url}}"],
+                  "path": ["build-driver"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Compare - 26737",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"26737\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/compare",
+                  "host": ["{{base_url}}"],
+                  "path": ["compare"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Validate Termination - 26737",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"26737\",\n  \"company_id\": \"J9A6Y\",\n  \"scenario\": \"termination\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/validate-scenario",
+                  "host": ["{{base_url}}"],
+                  "path": ["validate-scenario"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Sync Dry Run - 26737",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"26737\",\n  \"company_id\": \"J9A6Y\",\n  \"dry_run\": true\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/sync",
+                  "host": ["{{base_url}}"],
+                  "path": ["sync"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Manager Change - 28195",
+          "item": [
+            {
+              "name": "Build Driver - 28195",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"28195\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/build-driver",
+                  "host": ["{{base_url}}"],
+                  "path": ["build-driver"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Compare - 28195",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"28195\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/compare",
+                  "host": ["{{base_url}}"],
+                  "path": ["compare"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Validate Manager Change - 28195",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"28195\",\n  \"company_id\": \"J9A6Y\",\n  \"scenario\": \"manager_change\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/validate-scenario",
+                  "host": ["{{base_url}}"],
+                  "path": ["validate-scenario"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Address Change - 25336",
+          "item": [
+            {
+              "name": "Build Driver - 25336",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"25336\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/build-driver",
+                  "host": ["{{base_url}}"],
+                  "path": ["build-driver"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Compare - 25336",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"25336\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/compare",
+                  "host": ["{{base_url}}"],
+                  "path": ["compare"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Validate Address - 25336",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"25336\",\n  \"company_id\": \"J9A6Y\",\n  \"scenario\": \"address\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/validate-scenario",
+                  "host": ["{{base_url}}"],
+                  "path": ["validate-scenario"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Leave - 22393",
+          "item": [
+            {
+              "name": "Build Driver - 22393",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"22393\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/build-driver",
+                  "host": ["{{base_url}}"],
+                  "path": ["build-driver"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Compare - 22393",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"22393\",\n  \"company_id\": \"J9A6Y\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/compare",
+                  "host": ["{{base_url}}"],
+                  "path": ["compare"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Validate Leave - 22393",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"employee_number\": \"22393\",\n  \"company_id\": \"J9A6Y\",\n  \"scenario\": \"leave\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/validate-scenario",
+                  "host": ["{{base_url}}"],
+                  "path": ["validate-scenario"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "company_id",
+      "value": "J9A6Y"
+    },
+    {
+      "key": "employee_number",
+      "value": "28190"
+    },
+    {
+      "key": "employee_id",
+      "value": ""
+    },
+    {
+      "key": "new_hire_eeid",
+      "value": "28190"
+    },
+    {
+      "key": "termination_eeid",
+      "value": "26737"
+    },
+    {
+      "key": "manager_change_eeid",
+      "value": "28195"
+    },
+    {
+      "key": "address_change_eeid",
+      "value": "25336"
+    },
+    {
+      "key": "leave_eeid",
+      "value": "22393"
+    }
+  ]
+}

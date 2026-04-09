@@ -1,0 +1,66 @@
+# Git
+.git/
+.github/
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing (not needed in container)
+tests/
+*.test.py
+conftest.py
+pytest.ini
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (generated at runtime)
+*.log
+logs/
+
+# Local data
+data/
+*.json
+*.csv
+
+# Deprecated code (not used)
+_deprecated/
+
+# Development files
+requirements-dev.txt
