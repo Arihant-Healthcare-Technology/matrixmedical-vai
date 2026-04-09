@@ -8,7 +8,6 @@ Includes automatic token refresh before API calls.
 import json
 import logging
 import os
-import subprocess
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -18,6 +17,7 @@ import requests
 from common.correlation import get_correlation_id
 from src.domain.exceptions import AuthenticationError, MotusApiError, RateLimitError
 from src.domain.models import MotusDriver
+from src.infrastructure.adapters.motus.token_service import MotusTokenService
 from src.infrastructure.config.settings import MotusSettings
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ class MotusClient:
         settings: Optional[MotusSettings] = None,
         debug: bool = False,
         rate_limiter: Optional[Any] = None,
+        token_service: Optional[MotusTokenService] = None,
     ):
         """
         Initialize Motus client.
@@ -39,10 +40,12 @@ class MotusClient:
             settings: Motus settings (defaults to from_env)
             debug: Enable debug logging
             rate_limiter: Optional rate limiter instance
+            token_service: Optional token service for in-memory token management
         """
         self.settings = settings or MotusSettings.from_env()
         self.debug = debug
         self.rate_limiter = rate_limiter
+        self._token_service = token_service or MotusTokenService()
         self._token_refreshed = False  # Track if we've already refreshed to prevent loops
         self._ensure_valid_token()
 
@@ -53,62 +56,25 @@ class MotusClient:
             self._refresh_token()
 
     def _refresh_token(self) -> None:
-        """Call motus-get-token.py to refresh the JWT and reload settings."""
+        """Generate new token in memory using token service."""
         if self._token_refreshed:
             logger.warning("Token already refreshed once, not retrying to prevent loops")
             return
 
-        env_file = os.environ.get("ENV_FILE", ".env")
-        cmd = f"python3 motus-get-token.py --write-env --env-path {env_file} --force"
         correlation_id = get_correlation_id()
-
-        logger.info(f"[{correlation_id}] Refreshing Motus token using: {cmd}")
+        logger.info(f"[{correlation_id}] Refreshing Motus token in memory...")
 
         try:
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                check=True,
-                capture_output=True,
-                text=True,
-                cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
-            )
+            token = self._token_service.get_token(force_refresh=True)
+            self.settings.set_jwt(token)
             self._token_refreshed = True
-
-            # Reload the env file to get new token
-            self._reload_env_file(env_file)
-
-            # Reload settings with new token
-            self.settings = MotusSettings.from_env()
-
-            if self.settings.jwt:
-                logger.info(f"[{correlation_id}] Token refresh successful")
-            else:
-                logger.error(f"[{correlation_id}] Token refresh completed but MOTUS_JWT still empty")
-                raise AuthenticationError("Token refresh failed - no token returned", provider="motus")
-
-        except subprocess.CalledProcessError as e:
-            logger.error(f"[{correlation_id}] Token refresh failed: {e.stderr}")
-            raise AuthenticationError(f"Token refresh failed: {e.stderr}", provider="motus")
+            logger.info(f"[{correlation_id}] Token refresh successful (in memory)")
+        except ValueError as e:
+            logger.error(f"[{correlation_id}] Token refresh failed - missing credentials: {e}")
+            raise AuthenticationError(f"Token refresh failed - missing credentials: {e}", provider="motus")
         except Exception as e:
             logger.error(f"[{correlation_id}] Token refresh failed: {str(e)}")
             raise AuthenticationError(f"Token refresh failed: {str(e)}", provider="motus")
-
-    def _reload_env_file(self, env_file: str) -> None:
-        """Reload environment variables from the env file."""
-        if not os.path.exists(env_file):
-            return
-        try:
-            with open(env_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, _, value = line.partition("=")
-                        key = key.strip()
-                        value = value.strip().strip('"').strip("'")
-                        os.environ[key] = value
-        except Exception as e:
-            logger.warning(f"Failed to reload env file {env_file}: {e}")
 
     def _log(self, message: str) -> None:
         """Log debug message."""

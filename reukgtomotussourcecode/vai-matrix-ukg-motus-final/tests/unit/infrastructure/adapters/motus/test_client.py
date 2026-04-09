@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from datetime import datetime, timezone
 
 from src.infrastructure.adapters.motus.client import MotusClient
+from src.infrastructure.adapters.motus.token_service import MotusTokenService
 from src.infrastructure.config.settings import MotusSettings
 from src.domain.exceptions import AuthenticationError, MotusApiError, RateLimitError
 from src.domain.models import MotusDriver
@@ -100,31 +101,29 @@ class TestMotusClient:
         """Test that missing JWT triggers auto-refresh, and raises error if refresh fails."""
         settings = MotusSettings(jwt="")
 
-        # Mock subprocess to fail (simulating token refresh failure)
-        with patch("src.infrastructure.adapters.motus.client.subprocess.run") as mock_run:
-            mock_run.side_effect = Exception("Token refresh failed")
+        # Mock token service to fail
+        mock_token_service = MagicMock(spec=MotusTokenService)
+        mock_token_service.get_token.side_effect = ValueError("Missing credentials")
 
-            with pytest.raises(AuthenticationError) as exc_info:
-                MotusClient(settings=settings)
+        with pytest.raises(AuthenticationError) as exc_info:
+            MotusClient(settings=settings, token_service=mock_token_service)
 
-            assert "Token refresh failed" in str(exc_info.value)
-            assert exc_info.value.provider == "motus"
+        assert "Token refresh failed" in str(exc_info.value)
+        assert exc_info.value.provider == "motus"
 
     def test_headers_without_jwt_auto_refresh_succeeds(self):
         """Test that missing JWT triggers auto-refresh and succeeds."""
         settings = MotusSettings(jwt="")
 
-        # Mock subprocess to succeed and mock env reload to set token
-        with patch("src.infrastructure.adapters.motus.client.subprocess.run") as mock_run:
-            with patch("src.infrastructure.adapters.motus.client.os.path.exists", return_value=True):
-                with patch("builtins.open", create=True) as mock_open:
-                    mock_open.return_value.__enter__.return_value.read.return_value = iter([
-                        "MOTUS_JWT=new-refreshed-token\n"
-                    ])
-                    with patch.dict("os.environ", {"MOTUS_JWT": "new-refreshed-token"}):
-                        client = MotusClient(settings=settings)
-                        # After refresh, should have the new token
-                        assert client._token_refreshed is True
+        # Mock token service to return a token
+        mock_token_service = MagicMock(spec=MotusTokenService)
+        mock_token_service.get_token.return_value = "new-refreshed-token"
+
+        client = MotusClient(settings=settings, token_service=mock_token_service)
+
+        # After refresh, should have the new token
+        assert client._token_refreshed is True
+        assert client.settings.jwt == "new-refreshed-token"
 
     def test_acquire_rate_limit_with_limiter(
         self, client_with_limiter, mock_rate_limiter
@@ -924,3 +923,100 @@ class TestMotusClient:
             motus_client.update_driver(sample_driver)
 
         assert exc_info.value.retry_after == 30
+
+    # =========================================================================
+    # Token Service Integration Tests
+    # =========================================================================
+
+    def test_init_with_token_service(self, motus_settings):
+        """Test client initialization with custom token service."""
+        mock_token_service = MagicMock(spec=MotusTokenService)
+        client = MotusClient(
+            settings=motus_settings,
+            token_service=mock_token_service,
+        )
+        assert client._token_service == mock_token_service
+
+    def test_init_creates_default_token_service(self, motus_settings):
+        """Test client creates default token service when not provided."""
+        client = MotusClient(settings=motus_settings)
+        assert isinstance(client._token_service, MotusTokenService)
+
+    def test_refresh_token_uses_token_service(self):
+        """Test _refresh_token uses token service instead of subprocess."""
+        settings = MotusSettings(jwt="initial-token")
+        mock_token_service = MagicMock(spec=MotusTokenService)
+        mock_token_service.get_token.return_value = "refreshed-token"
+
+        client = MotusClient(settings=settings, token_service=mock_token_service)
+
+        # Trigger refresh
+        client._token_refreshed = False  # Reset flag
+        client._refresh_token()
+
+        mock_token_service.get_token.assert_called_with(force_refresh=True)
+        assert client.settings.jwt == "refreshed-token"
+        assert client._token_refreshed is True
+
+    def test_refresh_token_prevents_double_refresh(self):
+        """Test _refresh_token only refreshes once to prevent loops."""
+        settings = MotusSettings(jwt="initial-token")
+        mock_token_service = MagicMock(spec=MotusTokenService)
+        mock_token_service.get_token.return_value = "refreshed-token"
+
+        client = MotusClient(settings=settings, token_service=mock_token_service)
+
+        # First refresh
+        client._token_refreshed = False
+        client._refresh_token()
+
+        # Second refresh should be skipped
+        client._refresh_token()
+
+        # Token service should only be called once
+        assert mock_token_service.get_token.call_count == 1
+
+    def test_refresh_token_handles_value_error(self):
+        """Test _refresh_token handles missing credentials error."""
+        settings = MotusSettings(jwt="")
+        mock_token_service = MagicMock(spec=MotusTokenService)
+        mock_token_service.get_token.side_effect = ValueError("Missing credentials")
+
+        with pytest.raises(AuthenticationError) as exc_info:
+            MotusClient(settings=settings, token_service=mock_token_service)
+
+        assert "missing credentials" in str(exc_info.value).lower()
+
+    def test_refresh_token_handles_runtime_error(self):
+        """Test _refresh_token handles API error."""
+        settings = MotusSettings(jwt="")
+        mock_token_service = MagicMock(spec=MotusTokenService)
+        mock_token_service.get_token.side_effect = RuntimeError("API error")
+
+        with pytest.raises(AuthenticationError) as exc_info:
+            MotusClient(settings=settings, token_service=mock_token_service)
+
+        assert "API error" in str(exc_info.value)
+
+    @responses.activate
+    def test_auth_error_triggers_token_refresh(self, motus_settings, sample_driver):
+        """Test 401 error triggers token refresh via token service."""
+        mock_token_service = MagicMock(spec=MotusTokenService)
+        mock_token_service.get_token.return_value = "new-token"
+
+        client = MotusClient(settings=motus_settings, token_service=mock_token_service)
+        client._token_refreshed = False  # Reset for test
+
+        # Mock 401 response
+        responses.add(
+            responses.GET,
+            "https://api.motus.com/v1/drivers/12345",
+            json={"error": "Unauthorized"},
+            status=401,
+        )
+
+        with pytest.raises(AuthenticationError):
+            client.get_driver("12345")
+
+        # Token service should have been called to refresh
+        mock_token_service.get_token.assert_called_with(force_refresh=True)

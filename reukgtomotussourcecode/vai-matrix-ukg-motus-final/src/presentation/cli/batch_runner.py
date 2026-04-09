@@ -12,6 +12,7 @@ from typing import Optional, Set
 from common.correlation import configure_logging
 from src.application.services import DriverSyncService
 from src.infrastructure.adapters.motus import MotusClient
+from src.infrastructure.adapters.motus.token_service import MotusTokenService
 from src.infrastructure.adapters.ukg import UKGClient
 from src.infrastructure.config.settings import BatchSettings, MotusSettings, UKGSettings
 
@@ -134,6 +135,20 @@ def main() -> None:
     ukg_settings.validate_or_exit()
 
     motus_settings = MotusSettings.from_env()
+
+    # If JWT is missing, generate one in memory using credentials
+    if not motus_settings.jwt:
+        logger.info("MOTUS_JWT not set, generating token in memory...")
+        try:
+            token_service = MotusTokenService()
+            token = token_service.get_token()
+            motus_settings.set_jwt(token)
+            logger.info("Token generated successfully (in memory)")
+        except ValueError as e:
+            logger.error(f"Missing credentials for token generation: {e}")
+        except Exception as e:
+            logger.error(f"Failed to generate token: {e}")
+
     motus_settings.validate_or_exit()
     logger.info("Motus JWT token validated successfully.")
 

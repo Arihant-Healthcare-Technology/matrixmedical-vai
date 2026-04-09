@@ -98,6 +98,15 @@ class MotusSettings:
             max_retries=int(os.getenv("MOTUS_MAX_RETRIES", str(cls.max_retries))),
         )
 
+    def set_jwt(self, jwt: str) -> None:
+        """
+        Set JWT token programmatically (for in-memory token management).
+
+        Args:
+            jwt: The JWT token string
+        """
+        self.jwt = jwt
+
     def validate(self) -> None:
         """Validate settings."""
         if not self.jwt:
@@ -110,13 +119,13 @@ class MotusSettings:
         """
         if not self.jwt:
             logger.error("MOTUS_JWT is not set or is empty. Cannot connect to Motus API.")
-            logger.error("To generate a token, run: python3 motus-get-token.py --write-env")
+            logger.error("Ensure MOTUS_LOGIN_ID and MOTUS_PASSWORD are set for automatic token generation.")
             raise SystemExit(1)
 
         # Validate JWT format (should have 3 parts separated by dots)
         if len(self.jwt.split(".")) != 3:
             logger.error("MOTUS_JWT appears to be invalid (not a valid JWT format).")
-            logger.error("To regenerate the token, run: python3 motus-get-token.py --write-env --force")
+            logger.error("Check MOTUS_LOGIN_ID and MOTUS_PASSWORD credentials.")
             raise SystemExit(1)
 
 
