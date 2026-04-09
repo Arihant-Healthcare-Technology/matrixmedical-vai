@@ -77,7 +77,13 @@ class MotusTokenService:
                 "Set these environment variables to generate tokens."
             )
 
-        logger.info(f"Requesting new Motus token from {self.token_url}")
+        # Log credentials for debugging (password masked for security)
+        masked_password = f"{'*' * len(self.password)}" if self.password else "(empty)"
+        logger.info(
+            f"Requesting new Motus token from {self.token_url} | "
+            f"loginId={self.login_id} | password={masked_password} | "
+            f"password_length={len(self.password)}"
+        )
 
         # Try form-urlencoded first (primary format per Motus API docs)
         response = self._request_token_form()
