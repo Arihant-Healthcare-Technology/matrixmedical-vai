@@ -70,6 +70,13 @@ def parse_states(states_arg: Optional[str]) -> Optional[Set[str]]:
 # Default JOB_IDS if not set in environment
 DEFAULT_JOB_IDS = "1103,4165,4166,1102,1106,4197,4196,2817,4121,2157"
 
+# Hardcoded employee filter for testing (set to None to process all employees)
+TEST_EMPLOYEE_NUMBERS: Optional[Set[str]] = {
+    "012342", "021295", "023371", "024122", "024126", "025330", "025341", "025702",
+    "026979", "027576", "027668", "027850", "028044", "028123", "028140", "028232",
+    "028240", "028241", "028244", "028248", "028251", "028252",
+}
+
 
 def get_eligible_job_codes() -> Set[str]:
     """Get eligible job codes from environment or use default."""
@@ -100,6 +107,19 @@ def filter_by_eligible_job_codes(
         if job_code in eligible_job_codes or job_code_normalized in eligible_job_codes:
             eligible.append(item)
     return eligible
+
+
+def filter_by_employee_numbers(
+    items: list,
+    employee_numbers: Optional[Set[str]],
+) -> list:
+    """Filter employees by specific employee numbers (for testing)."""
+    if not employee_numbers:
+        return items  # No filter, return all
+    return [
+        item for item in items
+        if (item.get("employeeNumber") or "").strip() in employee_numbers
+    ]
 
 
 def main() -> None:
@@ -178,6 +198,11 @@ def main() -> None:
     # Filter by job codes
     employees = filter_by_eligible_job_codes(employees, eligible_job_codes)
     logger.info(f"Eligible employees (by job code): {len(employees)}")
+
+    # Filter by specific employee numbers (for testing)
+    if TEST_EMPLOYEE_NUMBERS:
+        employees = filter_by_employee_numbers(employees, TEST_EMPLOYEE_NUMBERS)
+        logger.info(f"TEST MODE: Filtered to {len(employees)} specific employees")
 
     # Sync
     sync_service = DriverSyncService(ukg_client, motus_client, debug=debug)
