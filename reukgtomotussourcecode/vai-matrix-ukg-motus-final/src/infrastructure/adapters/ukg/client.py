@@ -184,14 +184,35 @@ class UKGClient:
         This is a soft lookup - failures are logged as warnings, not errors.
         Missing supervisor data does not block driver creation.
 
+        Note: This method bypasses _get() to avoid ERROR-level logging on 404s.
+
         Args:
             employee_id: Employee ID
 
         Returns:
             Supervisor details dict (empty if not found)
         """
+        correlation_id = get_correlation_id()
+        url = f"{self.settings.base_url.rstrip('/')}/personnel/v1/supervisor-details"
+
         try:
-            data = self._get("/personnel/v1/supervisor-details", {"employeeId": employee_id})
+            response = requests.get(
+                url,
+                headers=self._headers(),
+                params={"employeeId": employee_id},
+                timeout=self.settings.timeout,
+            )
+
+            # Handle 404 as soft failure (WARNING, not ERROR)
+            if response.status_code == 404:
+                logger.warning(
+                    f"[{correlation_id}] Supervisor not found for employee {employee_id}. "
+                    "Continuing with empty supervisor data."
+                )
+                return {}
+
+            response.raise_for_status()
+            data = response.json()
 
             items: List[Dict[str, Any]] = (
                 data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
@@ -202,17 +223,17 @@ class UKGClient:
                     return item
             return items[0] if items else {}
 
-        except UkgApiError as e:
+        except requests.RequestException as e:
             # Soft error - log as warning, return empty dict
             logger.warning(
-                f"Supervisor details not found for employee {employee_id}: {e}. "
+                f"[{correlation_id}] Supervisor lookup failed for employee {employee_id}: {e}. "
                 "Continuing with empty supervisor data."
             )
             return {}
         except Exception as e:
             # Unexpected error - still soft fail
             logger.warning(
-                f"Unexpected error fetching supervisor for employee {employee_id}: {e}. "
+                f"[{correlation_id}] Unexpected error fetching supervisor for {employee_id}: {e}. "
                 "Continuing with empty supervisor data."
             )
             return {}

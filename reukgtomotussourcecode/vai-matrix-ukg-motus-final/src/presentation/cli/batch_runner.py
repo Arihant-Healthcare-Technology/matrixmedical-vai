@@ -12,7 +12,6 @@ from typing import Optional, Set
 from common.correlation import configure_logging
 from src.application.services import DriverSyncService
 from src.infrastructure.adapters.motus import MotusClient
-from src.infrastructure.adapters.motus.token_service import MotusTokenService
 from src.infrastructure.adapters.ukg import UKGClient
 from src.infrastructure.config.settings import BatchSettings, MotusSettings, UKGSettings
 
@@ -92,7 +91,6 @@ def get_eligible_job_codes() -> Set[str]:
 def filter_by_eligible_job_codes(
     items: list,
     eligible_job_codes: Set[str],
-    debug: bool = False,
 ) -> list:
     """Filter employees by eligible job codes."""
     eligible = []
@@ -101,11 +99,6 @@ def filter_by_eligible_job_codes(
         job_code_normalized = job_code.lstrip("0")
         if job_code in eligible_job_codes or job_code_normalized in eligible_job_codes:
             eligible.append(item)
-        elif debug:
-            logger.debug(
-                f"Skipping employee {item.get('employeeNumber')} - "
-                f"ineligible job code: {job_code}"
-            )
     return eligible
 
 
@@ -146,21 +139,13 @@ def main() -> None:
 
     motus_settings = MotusSettings.from_env()
 
-    # If JWT is missing, generate one in memory using credentials
+    # Token will be generated lazily by MotusClient on first API call
+    # This allows us to log credentials just before the actual Motus call
     if not motus_settings.jwt:
-        logger.info("MOTUS_JWT not set, generating token in memory...")
-        try:
-            token_service = MotusTokenService()
-            token = token_service.get_token()
-            motus_settings.set_jwt(token)
-            logger.info("Token generated successfully (in memory)")
-        except ValueError as e:
-            logger.error(f"Missing credentials for token generation: {e}")
-        except Exception as e:
-            logger.error(f"Failed to generate token: {e}")
-
-    motus_settings.validate_or_exit()
-    logger.info("Motus JWT token validated successfully.")
+        logger.info("MOTUS_JWT not set. Token will be generated on first Motus API call.")
+    else:
+        motus_settings.validate_or_exit()
+        logger.info("Motus JWT token validated successfully.")
 
     states_filter = parse_states(batch_settings.states_filter)
     debug = os.getenv("DEBUG", "0") == "1"
@@ -191,7 +176,7 @@ def main() -> None:
     )
 
     # Filter by job codes
-    employees = filter_by_eligible_job_codes(employees, eligible_job_codes, debug)
+    employees = filter_by_eligible_job_codes(employees, eligible_job_codes)
     logger.info(f"Eligible employees (by job code): {len(employees)}")
 
     # Sync

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 
+from src.application.services.driver_builder import DriverBuilderService
 from src.domain.exceptions import EmployeeNotFoundError, ProgramNotFoundError
 from src.domain.models import MotusDriver
 from src.domain.models.employment_status import determine_employment_status_from_dict
@@ -233,6 +234,7 @@ def _fetch_all_ukg_data(
         "employee_employment_details": {},
         "person_details": {},
         "supervisor_details": {},
+        "location": {},
     }
 
     # 1. Employment details
@@ -356,6 +358,35 @@ def _fetch_all_ukg_data(
                     str(e),
                 )
 
+    # 6. Location details (same as batch runner)
+    loc_code = result["employment_details"].get("primaryWorkLocationCode")
+    if loc_code:
+        if logger:
+            logger.log_ukg_request(
+                f"/configuration/v1/locations/{loc_code}",
+                "GET",
+                {"locationCode": loc_code},
+            )
+        start = time.time()
+        try:
+            result["location"] = ukg_client.get_location(loc_code)
+            if logger:
+                logger.log_ukg_response(
+                    f"/configuration/v1/locations/{loc_code}",
+                    200,
+                    result["location"],
+                    (time.time() - start) * 1000,
+                )
+        except Exception as e:
+            if logger:
+                logger.log_ukg_response(
+                    f"/configuration/v1/locations/{loc_code}",
+                    500,
+                    {},
+                    (time.time() - start) * 1000,
+                    str(e),
+                )
+
     return result
 
 
@@ -440,9 +471,8 @@ def _build_driver_from_ukg(
             transformation_type="name_concatenation",
         )
 
-    # Get location
-    location = {}
-    # Would need to fetch location, but for simplicity we'll skip here
+    # Get location (now fetched in _fetch_all_ukg_data, same as batch runner)
+    location = ukg_data.get("location", {})
 
     # Get project info
     project_code = employee_employment.get("primaryProjectCode") or ""
@@ -1232,6 +1262,9 @@ async def sync_employee(
 
     Use dry_run=true to validate without making changes.
 
+    This endpoint uses the same DriverBuilderService and flow as the batch runner
+    to ensure consistent behavior between API and batch operations.
+
     Includes detailed trace of:
     - All UKG API calls and responses
     - Data transformations applied
@@ -1246,87 +1279,122 @@ async def sync_employee(
     try:
         ukg_client = get_ukg_client()
         motus_client = get_motus_client()
+        debug = os.getenv("DEBUG", "0") == "1"
 
-        # Fetch UKG data and build driver
+        # === STEP 1: Check if already terminated in MOTUS (same as batch runner) ===
+        logger.log_motus_request(
+            f"/drivers/{request.employee_number}",
+            "GET",
+        )
+        start = time.time()
+        is_terminated, existing_driver = motus_client.is_driver_terminated(
+            request.employee_number
+        )
+        logger.log_motus_response(
+            f"/drivers/{request.employee_number}",
+            200 if existing_driver else 404,
+            existing_driver or {},
+            (time.time() - start) * 1000,
+        )
+
+        if is_terminated:
+            motus_end_date = existing_driver.get("endDate", "") if existing_driver else ""
+            result = {
+                "success": True,
+                "action": "skipped_terminated",
+                "reason": f"Already terminated in MOTUS (endDate: {motus_end_date})",
+            }
+            trace = logger.finalize(result)
+            return SyncResponseWithTrace(
+                success=True,
+                employee_number=request.employee_number,
+                company_id=request.company_id,
+                action="skipped_terminated",
+                dry_run=request.dry_run,
+                motus_response=result,
+                trace=RequestTraceModel(**trace.to_dict()) if include_trace else None,
+            )
+
+        # === STEP 2: Build driver using DriverBuilderService (same as batch runner) ===
+        driver_builder = DriverBuilderService(ukg_client, debug=debug)
+
+        # Also fetch UKG data for trace logging
         ukg_data = _fetch_all_ukg_data(
             ukg_client, request.employee_number, request.company_id, logger
         )
 
-        driver, _, errors = _build_driver_from_ukg(
-            ukg_data, request.employee_number, logger
-        )
-
-        if not driver:
-            trace = logger.finalize(error=f"Failed to build driver: {errors}")
+        try:
+            driver = driver_builder.build_driver(request.employee_number, request.company_id)
+        except (EmployeeNotFoundError, ProgramNotFoundError) as e:
+            trace = logger.finalize(error=str(e))
             return SyncResponseWithTrace(
                 success=False,
                 employee_number=request.employee_number,
                 company_id=request.company_id,
-                action="error",
+                action="skipped",
                 dry_run=request.dry_run,
-                error=f"Failed to build driver: {errors}",
+                error=str(e),
                 trace=RequestTraceModel(**trace.to_dict()) if include_trace else None,
             )
 
-        if errors:
-            trace = logger.finalize(error=f"Validation errors: {errors}")
+        # Validate driver
+        validation_errors = driver.validate()
+        if validation_errors:
+            trace = logger.finalize(error=f"Validation errors: {validation_errors}")
             return SyncResponseWithTrace(
                 success=False,
                 employee_number=request.employee_number,
                 company_id=request.company_id,
                 action="validation_error",
                 dry_run=request.dry_run,
-                error=f"Validation errors: {errors}",
+                error=f"Validation errors: {validation_errors}",
                 trace=RequestTraceModel(**trace.to_dict()) if include_trace else None,
             )
 
-        # Log Motus request
+        # Log payload
         payload = driver.to_api_payload()
+        driver_exists = existing_driver is not None
 
-        # Check if driver exists first
-        logger.log_motus_request(
-            f"/drivers/{request.employee_number}",
-            "GET",
-        )
-        start = time.time()
-        existing = motus_client.get_driver(request.employee_number)
-        logger.log_motus_response(
-            f"/drivers/{request.employee_number}",
-            200 if existing else 404,
-            existing or {},
-            (time.time() - start) * 1000,
-        )
-
+        # === STEP 3: Dry run or actual sync ===
         if request.dry_run:
-            action = "would_update" if existing else "would_insert"
+            action = "would_update" if driver_exists else "would_insert"
             result = {"dry_run": True, "action": action, "id": request.employee_number}
         else:
-            # Perform actual upsert
-            if existing:
+            # === STEP 4: POST or PUT based on existence (same as batch runner) ===
+            if driver_exists:
                 logger.log_motus_request(
                     f"/drivers/{request.employee_number}",
                     "PUT",
                     payload,
                 )
+                start = time.time()
+                motus_result = motus_client.update_driver(driver)
+                action = "update"
             else:
                 logger.log_motus_request(
                     "/drivers",
                     "POST",
                     payload,
                 )
+                start = time.time()
+                motus_result = motus_client.create_driver(driver)
+                action = "insert"
 
-            start = time.time()
-            result = motus_client.upsert_driver(
-                driver,
-                dry_run=False,
-                probe=False,
-            )
             logger.log_motus_response(
-                f"/drivers/{request.employee_number}" if existing else "/drivers",
-                result.get("status", 200),
-                result,
+                f"/drivers/{request.employee_number}" if driver_exists else "/drivers",
+                200,
+                motus_result,
                 (time.time() - start) * 1000,
             )
+
+            result = {
+                "success": True,
+                "action": action,
+                "id": request.employee_number,
+                "name": f"{driver.first_name} {driver.last_name}",
+                "program_id": driver.program_id,
+                "data": motus_result,
+            }
 
         trace = logger.finalize(result)
 

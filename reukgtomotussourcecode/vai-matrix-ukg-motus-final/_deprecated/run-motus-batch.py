@@ -112,8 +112,6 @@ def filter_by_eligible_job_codes(items: List[Dict[str, Any]], eligible_job_codes
         job_code_normalized = job_code.lstrip("0")
         if job_code in eligible_job_codes or job_code_normalized in eligible_job_codes:
             eligible.append(item)
-        elif DEBUG:
-            _logger.debug(f"Skipping employee {item.get('employeeNumber')} - ineligible job code: {job_code}")
     return eligible
 
 def get_employee_employment_details_by_company(company_id: str) -> List[Dict[str, Any]]:

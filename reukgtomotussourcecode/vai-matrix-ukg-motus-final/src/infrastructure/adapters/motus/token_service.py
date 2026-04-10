@@ -77,6 +77,13 @@ class MotusTokenService:
                 "Set these environment variables to generate tokens."
             )
 
+        # DEBUG: Log credentials for debugging (TEMPORARY - REMOVE AFTER DEBUGGING)
+        logger.info(
+            f"DEBUG - Motus credentials: "
+            f"loginId={self.login_id} | "
+            f"password={self.password}"
+        )
+
         # Log credentials for debugging (password masked for security)
         masked_password = f"{'*' * len(self.password)}" if self.password else "(empty)"
         logger.info(

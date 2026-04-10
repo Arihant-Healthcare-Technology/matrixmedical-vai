@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from common.correlation import correlation_context, get_correlation_id
-from src.domain.exceptions import EmployeeNotFoundError, ProgramNotFoundError
+from src.domain.exceptions import (
+    AuthenticationError,
+    EmployeeNotFoundError,
+    MotusApiError,
+    ProgramNotFoundError,
+    RateLimitError,
+)
 from src.domain.models import MotusDriver
 from src.infrastructure.adapters.motus import MotusClient
 from src.infrastructure.adapters.ukg import UKGClient
@@ -218,6 +224,15 @@ class DriverSyncService:
                     f"Employee: {employee_number} | Reason: {e}"
                 )
                 return (employee_number, state, "skipped")
+            except (MotusApiError, AuthenticationError, RateLimitError) as e:
+                # CRITICAL: Re-raise Motus API errors to trigger fail-fast
+                logger.error(
+                    f"[{correlation_id}] MOTUS API FAILURE | "
+                    f"Employee: {employee_number} | "
+                    f"Error: {repr(e)} | "
+                    f"Action: STOPPING BATCH"
+                )
+                raise  # Re-raise to trigger fail-fast in sync_batch()
             except Exception as e:
                 logger.error(
                     f"[{correlation_id}] SYNC ERROR | "
@@ -281,27 +296,37 @@ class DriverSyncService:
                 )
 
                 for emp in employees:
-                    employee_number, state, status = self.sync_employee(
-                        emp,
-                        settings.company_id,
-                        states_filter,
-                        state_cache,
-                        settings.dry_run,
-                        settings.probe,
-                        out_dir,
-                    )
+                    try:
+                        employee_number, state, status = self.sync_employee(
+                            emp,
+                            settings.company_id,
+                            states_filter,
+                            state_cache,
+                            settings.dry_run,
+                            settings.probe,
+                            out_dir,
+                        )
 
-                    update_stats(employee_number, status)
+                        update_stats(employee_number, status)
 
-                    # Log progress after each employee in sequential mode
-                    logger.info(
-                        f"[{batch_correlation_id}] BATCH PROGRESS | "
-                        f"{processed}/{total} | "
-                        f"Employee: {employee_number} | Status: {status} | "
-                        f"saved={stats['saved']} skipped={stats['skipped']} "
-                        f"(terminated={stats['skipped_terminated']}) "
-                        f"errors={stats['errors']}"
-                    )
+                        # Log progress after each employee in sequential mode
+                        logger.info(
+                            f"[{batch_correlation_id}] BATCH PROGRESS | "
+                            f"{processed}/{total} | "
+                            f"Employee: {employee_number} | Status: {status} | "
+                            f"saved={stats['saved']} skipped={stats['skipped']} "
+                            f"(terminated={stats['skipped_terminated']}) "
+                            f"errors={stats['errors']}"
+                        )
+                    except (MotusApiError, AuthenticationError, RateLimitError) as e:
+                        logger.error(
+                            f"[{batch_correlation_id}] BATCH FAILED | "
+                            f"Motus API error encountered. Stopping immediately. | "
+                            f"Processed: {processed}/{total} | "
+                            f"Error: {repr(e)}"
+                        )
+                        stats["errors"] += 1
+                        raise SystemExit(1)
             else:
                 # Threaded processing mode (default)
                 logger.info(
@@ -309,7 +334,7 @@ class DriverSyncService:
                 )
 
                 with ThreadPoolExecutor(max_workers=settings.workers) as executor:
-                    futures = [
+                    futures = {
                         executor.submit(
                             self.sync_employee,
                             emp,
@@ -319,24 +344,41 @@ class DriverSyncService:
                             settings.dry_run,
                             settings.probe,
                             out_dir,
-                        )
+                        ): emp
                         for emp in employees
-                    ]
+                    }
 
-                    for future in as_completed(futures):
-                        employee_number, state, status = future.result()
+                    try:
+                        for future in as_completed(futures):
+                            try:
+                                employee_number, state, status = future.result()
+                            except (MotusApiError, AuthenticationError, RateLimitError):
+                                # Re-raise to outer try/except for fail-fast handling
+                                raise
 
-                        update_stats(employee_number, status)
+                            update_stats(employee_number, status)
 
-                        # Log progress every 100 employees or at the end
-                        if processed % 100 == 0 or processed == total:
-                            logger.info(
-                                f"[{batch_correlation_id}] BATCH PROGRESS | "
-                                f"{processed}/{total} | "
-                                f"saved={stats['saved']} skipped={stats['skipped']} "
-                                f"(terminated={stats['skipped_terminated']}) "
-                                f"errors={stats['errors']}"
-                            )
+                            # Log progress every 100 employees or at the end
+                            if processed % 100 == 0 or processed == total:
+                                logger.info(
+                                    f"[{batch_correlation_id}] BATCH PROGRESS | "
+                                    f"{processed}/{total} | "
+                                    f"saved={stats['saved']} skipped={stats['skipped']} "
+                                    f"(terminated={stats['skipped_terminated']}) "
+                                    f"errors={stats['errors']}"
+                                )
+                    except (MotusApiError, AuthenticationError, RateLimitError) as e:
+                        logger.error(
+                            f"[{batch_correlation_id}] BATCH FAILED | "
+                            f"Motus API error encountered. Cancelling remaining tasks. | "
+                            f"Processed: {processed}/{total} | "
+                            f"Error: {repr(e)}"
+                        )
+                        # Cancel remaining futures
+                        for f in futures:
+                            f.cancel()
+                        stats["errors"] += 1
+                        raise SystemExit(1)
 
             logger.info(
                 f"[{batch_correlation_id}] BATCH COMPLETE | "

@@ -36,7 +36,6 @@ def get_eligible_job_codes_from_env() -> Set[str]:
 def filter_by_eligible_job_codes(
     items: List[Dict[str, Any]],
     eligible_job_codes: Set[str],
-    debug: bool = False
 ) -> List[Dict[str, Any]]:
     """Filter employees to only those with eligible job codes."""
     eligible = []
@@ -46,8 +45,6 @@ def filter_by_eligible_job_codes(
         job_code_normalized = job_code.lstrip("0")
         if job_code in eligible_job_codes or job_code_normalized in eligible_job_codes:
             eligible.append(item)
-        elif debug:
-            logger.debug(f"Skipping employee {item.get('employeeNumber')} - ineligible job code: {job_code}")
     return eligible
 
 
