@@ -59,11 +59,7 @@ def parse_args() -> argparse.Namespace:
 DEFAULT_JOB_IDS = "1103,4165,4166,1102,1106,4197,4196,2817,4121,2157"
 
 # Hardcoded employee filter for testing (set to None to process all employees)
-TEST_EMPLOYEE_NUMBERS: Optional[Set[str]] = {
-    "012342", "021295", "023371", "024122", "024126", "025330", "025341", "025702",
-    "026979", "027576", "027668", "027850", "028044", "028123", "028140", "028232",
-    "028240", "028241", "028244", "028248", "028251", "028252",
-}
+TEST_EMPLOYEE_NUMBERS: Optional[Set[str]] = None
 
 
 def get_eligible_job_codes() -> Set[str]:
