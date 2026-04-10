@@ -29,11 +29,6 @@ def parse_args() -> argparse.Namespace:
         help="UKG company ID (e.g., J9A6Y)",
     )
     parser.add_argument(
-        "--states",
-        dest="states",
-        help="Comma-separated US states to filter (e.g., FL,MS,NJ)",
-    )
-    parser.add_argument(
         "--workers",
         dest="workers",
         type=int,
@@ -58,13 +53,6 @@ def parse_args() -> argparse.Namespace:
         help="On dry-run, GET Motus to report would_insert/update",
     )
     return parser.parse_args()
-
-
-def parse_states(states_arg: Optional[str]) -> Optional[Set[str]]:
-    """Parse states argument to set."""
-    if not states_arg:
-        return None
-    return {s.strip().upper() for s in states_arg.split(",") if s.strip()}
 
 
 # Default JOB_IDS if not set in environment
@@ -142,8 +130,6 @@ def main() -> None:
     # Override from CLI
     if args.company_id:
         batch_settings.company_id = args.company_id
-    if args.states:
-        batch_settings.states_filter = args.states
 
     # Validate
     if not batch_settings.company_id:
@@ -167,14 +153,12 @@ def main() -> None:
         motus_settings.validate_or_exit()
         logger.info("Motus JWT token validated successfully.")
 
-    states_filter = parse_states(batch_settings.states_filter)
     debug = os.getenv("DEBUG", "0") == "1"
 
     # Log config
     has_jwt = True  # Already validated above
     logger.info(
         f"Config: companyID={batch_settings.company_id} | "
-        f"states={batch_settings.states_filter or 'ALL'} | "
         f"workers={batch_settings.workers} | "
         f"dry_run={batch_settings.dry_run} | "
         f"probe={batch_settings.probe} | "
@@ -206,7 +190,7 @@ def main() -> None:
 
     # Sync
     sync_service = DriverSyncService(ukg_client, motus_client, debug=debug)
-    sync_service.sync_batch(employees, batch_settings, states_filter)
+    sync_service.sync_batch(employees, batch_settings)
 
 
 if __name__ == "__main__":

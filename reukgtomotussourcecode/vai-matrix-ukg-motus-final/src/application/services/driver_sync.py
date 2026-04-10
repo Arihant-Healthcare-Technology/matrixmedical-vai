@@ -8,7 +8,7 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from common.correlation import correlation_context, get_correlation_id
 from src.domain.exceptions import (
@@ -55,91 +55,40 @@ class DriverSyncService:
         if self.debug:
             logger.debug(message)
 
-    def get_person_state(
-        self,
-        employee_id: str,
-        cache: Dict[str, str],
-        max_retries: int = 5,
-    ) -> str:
-        """
-        Get person's state with caching and retry.
-
-        Args:
-            employee_id: Employee ID
-            cache: State cache
-            max_retries: Maximum retry attempts
-
-        Returns:
-            State code or empty string
-        """
-        if employee_id in cache:
-            return cache[employee_id]
-
-        delay = 0.2
-        for attempt in range(1, max_retries + 1):
-            try:
-                person = self.ukg_client.get_person_details(employee_id)
-                state = (person.get("addressState") or "").strip().upper()
-                cache[employee_id] = state
-                return state
-            except Exception:
-                if attempt < max_retries:
-                    import time
-                    time.sleep(delay)
-                    delay = min(delay * 2, 3.2)
-                else:
-                    cache[employee_id] = ""
-                    return ""
-
     def sync_employee(
         self,
         employee_record: Dict[str, Any],
         company_id: str,
-        states_filter: Optional[Set[str]],
-        state_cache: Dict[str, str],
         dry_run: bool = False,
         probe: bool = False,
         out_dir: Optional[Path] = None,
-    ) -> Tuple[str, str, str]:
+    ) -> Tuple[str, str]:
         """
         Sync a single employee to Motus.
 
         Args:
             employee_record: Employee record from UKG
             company_id: Company ID
-            states_filter: Optional set of states to filter by
-            state_cache: Cache for state lookups
             dry_run: If True, don't make changes
             probe: If True, check existence in Motus
             out_dir: Optional output directory for JSON files
 
         Returns:
-            Tuple of (employee_number, state, status)
+            Tuple of (employee_number, status)
         """
         employee_number = (employee_record.get("employeeNumber") or "").strip()
         employee_id = (employee_record.get("employeeID") or "").strip()
 
         if not employee_number or not employee_id:
-            return ("", "", "skipped")
+            return ("", "skipped")
 
         # Create correlation ID context for this employee
         with correlation_context(prefix=f"emp-{employee_number}"):
             correlation_id = get_correlation_id()
 
-            # Get state and filter
-            state = self.get_person_state(employee_id, state_cache)
-
-            if states_filter and state not in states_filter:
-                self._log(f"skip emp={employee_number} state={state}")
-                logger.info(
-                    f"[{correlation_id}] SYNC SKIPPED | "
-                    f"Employee: {employee_number} | State: {state} (filtered)"
-                )
-                return (employee_number, state, "skipped")
-
             logger.info(
                 f"[{correlation_id}] SYNC START | "
-                f"Employee: {employee_number} | State: {state}"
+                f"Employee: {employee_number}"
             )
 
             try:
@@ -156,7 +105,7 @@ class DriverSyncService:
                         f"MOTUS endDate: {motus_end_date} | "
                         f"Reason: Already terminated in MOTUS, skipping UKG data fetch"
                     )
-                    return (employee_number, state, "skipped_terminated")
+                    return (employee_number, "skipped_terminated")
 
                 # === STEP 2: Build driver from UKG (only if not terminated) ===
                 driver_exists = existing_driver is not None
@@ -184,7 +133,7 @@ class DriverSyncService:
                         f"Employee: {employee_number} | "
                         f"Action: {action}"
                     )
-                    return (employee_number, state, "dry_run")
+                    return (employee_number, "dry_run")
 
                 # === STEP 3: POST or PUT based on existence ===
                 if driver_exists:
@@ -216,14 +165,14 @@ class DriverSyncService:
                     f"[{correlation_id}] SYNC COMPLETE | "
                     f"Employee: {employee_number} | Action: {action}"
                 )
-                return (employee_number, state, action)
+                return (employee_number, action)
 
             except (EmployeeNotFoundError, ProgramNotFoundError) as e:
                 logger.warning(
                     f"[{correlation_id}] SYNC SKIPPED | "
                     f"Employee: {employee_number} | Reason: {e}"
                 )
-                return (employee_number, state, "skipped")
+                return (employee_number, "skipped")
             except (MotusApiError, AuthenticationError, RateLimitError) as e:
                 # CRITICAL: Re-raise Motus API errors to trigger fail-fast
                 logger.error(
@@ -238,13 +187,12 @@ class DriverSyncService:
                     f"[{correlation_id}] SYNC ERROR | "
                     f"Employee: {employee_number} | Error: {repr(e)}"
                 )
-                return (employee_number, state, "error")
+                return (employee_number, "error")
 
     def sync_batch(
         self,
         employees: List[Dict[str, Any]],
         settings: BatchSettings,
-        states_filter: Optional[Set[str]] = None,
     ) -> Dict[str, int]:
         """
         Sync a batch of employees to Motus.
@@ -252,7 +200,6 @@ class DriverSyncService:
         Args:
             employees: List of employee records
             settings: Batch settings
-            states_filter: Optional set of states to filter by
 
         Returns:
             Statistics dict with counts
@@ -265,7 +212,6 @@ class DriverSyncService:
             if out_dir:
                 out_dir.mkdir(parents=True, exist_ok=True)
 
-            state_cache: Dict[str, str] = {}
             total = len(employees)
             stats = {"saved": 0, "skipped": 0, "skipped_terminated": 0, "errors": 0, "total": total}
             processed = 0
@@ -297,11 +243,9 @@ class DriverSyncService:
 
                 for emp in employees:
                     try:
-                        employee_number, state, status = self.sync_employee(
+                        employee_number, status = self.sync_employee(
                             emp,
                             settings.company_id,
-                            states_filter,
-                            state_cache,
                             settings.dry_run,
                             settings.probe,
                             out_dir,
@@ -339,8 +283,6 @@ class DriverSyncService:
                             self.sync_employee,
                             emp,
                             settings.company_id,
-                            states_filter,
-                            state_cache,
                             settings.dry_run,
                             settings.probe,
                             out_dir,
@@ -351,7 +293,7 @@ class DriverSyncService:
                     try:
                         for future in as_completed(futures):
                             try:
-                                employee_number, state, status = future.result()
+                                employee_number, status = future.result()
                             except (MotusApiError, AuthenticationError, RateLimitError):
                                 # Re-raise to outer try/except for fail-fast handling
                                 raise
