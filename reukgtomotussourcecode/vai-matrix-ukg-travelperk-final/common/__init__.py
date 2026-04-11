@@ -1,5 +1,28 @@
-# UKG 3-Way Integration Common Modules
-# Shared utilities for BILL.com, Motus, and TravelPerk integrations
+"""
+UKG 3-Way Integration Common Modules.
+
+Shared utilities for BILL.com, Motus, and TravelPerk integrations.
+
+This package provides:
+- Secrets Management (SOW 2.6)
+- Rate Limiting (SOW 5.1, 5.2, 11.10, 13.10, 14.10)
+- Correlation IDs (SOW 7.2)
+- Notifications (SOW 4.6)
+- Metrics (SOW 4.7, 7.3)
+- Report Generation (SOW 4.7, 7.3, 10.4)
+- PII/Secrets Redaction (SOW 7.4, 7.5, 9.4)
+- Validators (SOW 3.6, 3.7)
+
+Structure:
+- secrets_manager.py: Secrets retrieval from various backends
+- rate_limiter/: Rate limiting package (token bucket, adaptive, sliding window)
+- redaction/: PII and secrets redaction package
+- correlation.py: Correlation ID tracking and logging
+- notifications/: Email notification providers
+- metrics.py: Metrics collection
+- report_generator.py: Report generation
+- validators.py: Input validation
+"""
 
 __version__ = "1.0.0"
 

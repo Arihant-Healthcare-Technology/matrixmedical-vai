@@ -1,4 +1,8 @@
-"""TravelPerk SCIM API client."""
+"""
+TravelPerk SCIM API client.
+
+This client provides methods for managing users via TravelPerk's SCIM 2.0 API.
+"""
 
 import logging
 import time
@@ -7,9 +11,13 @@ from typing import Any, Dict, Optional
 import requests
 
 from ....domain.models import TravelPerkUser
-from ....domain.exceptions import TravelPerkApiError, RateLimitError
+from ....domain.exceptions import TravelPerkApiError
 from ...config.settings import TravelPerkSettings
+from ...http.utils import parse_json_response, sanitize_url_for_logging
 from common import get_rate_limiter, sanitize_for_logging
+from .endpoints import TravelPerkEndpoints
+from .error_handler import TravelPerkErrorHandler
+from .scim import extract_resources, get_user_id
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +31,8 @@ class TravelPerkClient:
         settings: Optional[TravelPerkSettings] = None,
         debug: bool = False,
     ):
-        """Initialize TravelPerk client.
+        """
+        Initialize TravelPerk client.
 
         Args:
             settings: TravelPerk API settings. If None, loads from environment.
@@ -43,52 +52,115 @@ class TravelPerkClient:
             "Accept": "application/json",
         }
 
-    def _handle_rate_limit(self, response: requests.Response) -> int:
-        """Extract retry-after seconds from 429 response."""
-        retry_after = response.headers.get("Retry-After")
-        if retry_after:
-            try:
-                return int(retry_after)
-            except ValueError:
-                pass
-        return 60  # Default 60 seconds
+    def _build_url(self, path: str) -> str:
+        """Build full URL from path."""
+        return f"{self.settings.api_base.rstrip('/')}{path}"
 
     def _safe_json(self, response: requests.Response) -> Dict[str, Any]:
         """Safely parse JSON response."""
-        try:
-            return response.json()
-        except Exception:
-            return {"text": response.text[:500]}
+        return parse_json_response(response)
 
-    def _log_request(self, method: str, url: str, payload: Optional[Dict] = None) -> float:
+    def _log_request(
+        self,
+        method: str,
+        url: str,
+        payload: Optional[Dict] = None,
+    ) -> float:
         """Log API request and return start time."""
         start_time = time.time()
-        safe_url = url.split("?")[0]  # Remove query params for logging
+        safe_url = sanitize_url_for_logging(url)
         if payload:
             safe_payload = sanitize_for_logging(payload)
-            logger.info(f"TravelPerk API request: {method} {safe_url} payload_keys={list(safe_payload.keys())}")
+            logger.info(
+                f"TravelPerk API request: {method} {safe_url} "
+                f"payload_keys={list(safe_payload.keys()) if isinstance(safe_payload, dict) else 'N/A'}"
+            )
         else:
             logger.info(f"TravelPerk API request: {method} {safe_url}")
         if self.debug:
             logger.debug(f"TravelPerk API full URL: {url}")
         return start_time
 
-    def _log_response(self, method: str, url: str, status: int, start_time: float, data: Any = None) -> None:
+    def _log_response(
+        self,
+        method: str,
+        url: str,
+        status: int,
+        start_time: float,
+        data: Any = None,
+    ) -> None:
         """Log API response with timing."""
         elapsed_ms = (time.time() - start_time) * 1000
-        safe_url = url.split("?")[0]
+        safe_url = sanitize_url_for_logging(url)
         if status < 400:
-            logger.info(f"TravelPerk API response: {method} {safe_url} status={status} elapsed={elapsed_ms:.0f}ms")
+            logger.info(
+                f"TravelPerk API response: {method} {safe_url} "
+                f"status={status} elapsed={elapsed_ms:.0f}ms"
+            )
         else:
-            logger.warning(f"TravelPerk API response: {method} {safe_url} status={status} elapsed={elapsed_ms:.0f}ms")
+            logger.warning(
+                f"TravelPerk API response: {method} {safe_url} "
+                f"status={status} elapsed={elapsed_ms:.0f}ms"
+            )
         if self.debug and data:
             if isinstance(data, dict):
-                logger.debug(f"TravelPerk API response body keys: {list(data.keys())[:10]}")
+                logger.debug(
+                    f"TravelPerk API response body keys: {list(data.keys())[:10]}"
+                )
             elif isinstance(data, list):
                 logger.debug(f"TravelPerk API response body: list len={len(data)}")
 
+    def _request_with_retry(
+        self,
+        method: str,
+        path: str,
+        params: Optional[Dict] = None,
+        json_data: Optional[Dict] = None,
+    ) -> requests.Response:
+        """Make HTTP request with retry logic."""
+        url = self._build_url(path)
+
+        for attempt in range(self.settings.max_retries + 1):
+            self._rate_limiter.acquire()
+            start_time = self._log_request(method, url, json_data)
+
+            response = requests.request(
+                method=method,
+                url=url,
+                headers=self._headers(),
+                params=params,
+                json=json_data,
+                timeout=self.settings.timeout,
+            )
+
+            self._log_response(method, url, response.status_code, start_time)
+
+            # Handle rate limit
+            if response.status_code == 429:
+                wait_time = TravelPerkErrorHandler.extract_retry_after(response)
+                logger.warning(
+                    f"TravelPerk rate limited (429), waiting {wait_time}s before retry"
+                )
+                time.sleep(wait_time)
+                continue
+
+            # Handle server errors
+            if response.status_code >= 500 and attempt < self.settings.max_retries:
+                logger.warning(
+                    f"TravelPerk server error {response.status_code}, "
+                    f"retry {attempt + 1}/{self.settings.max_retries}"
+                )
+                time.sleep(2 ** attempt)
+                continue
+
+            return response
+
+        logger.error(f"TravelPerk max retries exceeded: {method} {url}")
+        raise TravelPerkApiError("Max retries exceeded")
+
     def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user by TravelPerk ID.
+        """
+        Get user by TravelPerk ID.
 
         Args:
             user_id: TravelPerk user ID
@@ -96,33 +168,23 @@ class TravelPerkClient:
         Returns:
             User data or None if not found
         """
-        self._rate_limiter.acquire()
-        url = f"{self.settings.api_base}/api/v2/scim/Users/{user_id}"
-        start_time = self._log_request("GET", url)
-
-        response = requests.get(
-            url,
-            headers=self._headers(),
-            timeout=self.settings.timeout,
-        )
-
-        data = self._safe_json(response) if response.status_code == 200 else None
-        self._log_response("GET", url, response.status_code, start_time, data)
+        path = TravelPerkEndpoints.user_by_id(user_id)
+        response = self._request_with_retry("GET", path)
 
         if response.status_code == 200:
-            return data
+            return self._safe_json(response)
         if response.status_code == 404:
             logger.debug(f"TravelPerk user not found: id={user_id}")
             return None
 
-        logger.error(f"TravelPerk API error getting user: status={response.status_code} body={response.text[:200]}")
-        raise TravelPerkApiError(
-            f"Failed to get user: {response.text[:500]}",
-            status_code=response.status_code,
+        TravelPerkErrorHandler.handle_response(
+            response, path, context=f"get_user id={user_id}"
         )
+        return None
 
     def get_user_by_external_id(self, external_id: str) -> Optional[Dict[str, Any]]:
-        """Get user by external ID (employeeNumber).
+        """
+        Get user by external ID (employeeNumber).
 
         Args:
             external_id: External ID (employee number)
@@ -130,23 +192,14 @@ class TravelPerkClient:
         Returns:
             User data or None if not found
         """
-        self._rate_limiter.acquire()
-        url = f"{self.settings.api_base}/api/v2/scim/Users"
-        params = {"filter": f'externalId eq "{external_id}"'}
-        start_time = self._log_request("GET", f"{url}?filter=externalId eq ...")
-
-        response = requests.get(
-            url,
-            headers=self._headers(),
-            params=params,
-            timeout=self.settings.timeout,
+        params = TravelPerkEndpoints.filter_by_external_id(external_id)
+        response = self._request_with_retry(
+            "GET", TravelPerkEndpoints.SCIM_USERS, params=params
         )
 
-        data = self._safe_json(response) if response.status_code == 200 else None
-        self._log_response("GET", url, response.status_code, start_time, data)
-
         if response.status_code == 200:
-            resources = data.get("Resources", [])
+            data = self._safe_json(response)
+            resources = extract_resources(data)
             if resources:
                 logger.debug(f"TravelPerk user found by externalId={external_id}")
                 return resources[0]
@@ -154,7 +207,8 @@ class TravelPerkClient:
         return None
 
     def get_user_by_user_name(self, user_name: str) -> Optional[Dict[str, Any]]:
-        """Get user by userName (email).
+        """
+        Get user by userName (email).
 
         Args:
             user_name: User email
@@ -162,30 +216,22 @@ class TravelPerkClient:
         Returns:
             User data or None if not found
         """
-        self._rate_limiter.acquire()
-        url = f"{self.settings.api_base}/api/v2/scim/Users"
-        params = {"filter": f'userName eq "{user_name}"'}
-        start_time = self._log_request("GET", f"{url}?filter=userName eq ...")
-
-        response = requests.get(
-            url,
-            headers=self._headers(),
-            params=params,
-            timeout=self.settings.timeout,
+        params = TravelPerkEndpoints.filter_by_user_name(user_name)
+        response = self._request_with_retry(
+            "GET", TravelPerkEndpoints.SCIM_USERS, params=params
         )
 
-        data = self._safe_json(response) if response.status_code == 200 else None
-        self._log_response("GET", url, response.status_code, start_time, data)
-
         if response.status_code == 200:
-            resources = data.get("Resources", [])
+            data = self._safe_json(response)
+            resources = extract_resources(data)
             if resources:
-                logger.debug(f"TravelPerk user found by userName (email lookup)")
+                logger.debug("TravelPerk user found by userName (email lookup)")
                 return resources[0]
         return None
 
     def create_user(self, user: TravelPerkUser) -> Dict[str, Any]:
-        """Create new user in TravelPerk.
+        """
+        Create new user in TravelPerk.
 
         Args:
             user: TravelPerkUser instance
@@ -197,46 +243,24 @@ class TravelPerkClient:
             TravelPerkApiError: If creation fails
         """
         payload = user.to_api_payload()
-        url = f"{self.settings.api_base}/api/v2/scim/Users"
+        response = self._request_with_retry(
+            "POST", TravelPerkEndpoints.SCIM_USERS, json_data=payload
+        )
 
-        for attempt in range(self.settings.max_retries + 1):
-            self._rate_limiter.acquire()
-            start_time = self._log_request("POST", url, payload)
-
-            response = requests.post(
-                url,
-                headers=self._headers(),
-                json=payload,
-                timeout=self.settings.timeout,
-            )
-
+        if response.status_code in (200, 201):
             data = self._safe_json(response)
-            self._log_response("POST", url, response.status_code, start_time, data)
-
-            if response.status_code in (200, 201):
-                logger.info(f"TravelPerk user created: externalId={user.external_id} id={data.get('id')}")
-                return data
-
-            if response.status_code == 429:
-                wait_time = self._handle_rate_limit(response)
-                logger.warning(f"TravelPerk rate limited (429), waiting {wait_time}s before retry")
-                time.sleep(wait_time)
-                continue
-
-            if response.status_code >= 500 and attempt < self.settings.max_retries:
-                logger.warning(f"TravelPerk server error {response.status_code}, retry {attempt + 1}/{self.settings.max_retries}")
-                time.sleep(2 ** attempt)
-                continue
-
-            logger.error(f"TravelPerk create_user failed: status={response.status_code} externalId={user.external_id} error={response.text[:200]}")
-            raise TravelPerkApiError(
-                f"Failed to create user: {response.text[:500]}",
-                status_code=response.status_code,
-                response_body=data,
+            logger.info(
+                f"TravelPerk user created: externalId={user.external_id} "
+                f"id={get_user_id(data)}"
             )
+            return data
 
-        logger.error(f"TravelPerk create_user max retries exceeded: externalId={user.external_id}")
-        raise TravelPerkApiError("Max retries exceeded for create_user")
+        TravelPerkErrorHandler.handle_response(
+            response,
+            TravelPerkEndpoints.SCIM_USERS,
+            context=f"create_user externalId={user.external_id}",
+        )
+        return {}
 
     def update_user(
         self,
@@ -244,7 +268,8 @@ class TravelPerkClient:
         user: TravelPerkUser,
         include_manager: bool = True,
     ) -> Dict[str, Any]:
-        """Update existing user using PATCH.
+        """
+        Update existing user using PATCH.
 
         Args:
             user_id: TravelPerk user ID
@@ -258,55 +283,35 @@ class TravelPerkClient:
             TravelPerkApiError: If update fails
         """
         patch_payload = user.to_patch_payload(include_manager=include_manager)
-        url = f"{self.settings.api_base}/api/v2/scim/Users/{user_id}"
+        path = TravelPerkEndpoints.user_by_id(user_id)
 
         if self.debug:
-            logger.debug(f"TravelPerk PATCH payload: {sanitize_for_logging(patch_payload)}")
-
-        for attempt in range(self.settings.max_retries + 1):
-            self._rate_limiter.acquire()
-            start_time = self._log_request("PATCH", url, patch_payload)
-
-            response = requests.patch(
-                url,
-                headers=self._headers(),
-                json=patch_payload,
-                timeout=self.settings.timeout,
+            logger.debug(
+                f"TravelPerk PATCH payload: {sanitize_for_logging(patch_payload)}"
             )
 
-            self._log_response("PATCH", url, response.status_code, start_time)
+        response = self._request_with_retry("PATCH", path, json_data=patch_payload)
 
-            if response.status_code in (200, 204):
-                logger.info(f"TravelPerk user updated: id={user_id} externalId={user.external_id}")
-                return self._safe_json(response) if response.status_code == 200 else {"id": user_id}
-
-            if response.status_code == 429:
-                wait_time = self._handle_rate_limit(response)
-                logger.warning(f"TravelPerk rate limited (429), waiting {wait_time}s before retry")
-                time.sleep(wait_time)
-                continue
-
-            if response.status_code >= 500 and attempt < self.settings.max_retries:
-                logger.warning(f"TravelPerk server error {response.status_code}, retry {attempt + 1}/{self.settings.max_retries}")
-                time.sleep(2 ** attempt)
-                continue
-
-            logger.error(f"TravelPerk update_user failed: status={response.status_code} id={user_id} error={response.text[:200]}")
-            raise TravelPerkApiError(
-                f"Failed to update user: {response.text[:500]}",
-                status_code=response.status_code,
-                response_body=self._safe_json(response),
+        if response.status_code in (200, 204):
+            logger.info(
+                f"TravelPerk user updated: id={user_id} externalId={user.external_id}"
             )
+            if response.status_code == 200:
+                return self._safe_json(response)
+            return {"id": user_id}
 
-        logger.error(f"TravelPerk update_user max retries exceeded: id={user_id}")
-        raise TravelPerkApiError("Max retries exceeded for update_user")
+        TravelPerkErrorHandler.handle_response(
+            response, path, context=f"update_user id={user_id}"
+        )
+        return {}
 
     def upsert_user(
         self,
         user: TravelPerkUser,
         include_manager: bool = True,
     ) -> Dict[str, Any]:
-        """Create or update user.
+        """
+        Create or update user.
 
         Args:
             user: TravelPerkUser instance
@@ -319,47 +324,50 @@ class TravelPerkClient:
         existing = self.get_user_by_external_id(user.external_id)
 
         if existing:
-            user_id = existing.get("id")
+            user_id = get_user_id(existing)
             if not user_id:
                 raise TravelPerkApiError(
                     f"Existing user found but no id for externalId={user.external_id}"
                 )
 
-            result = self.update_user(user_id, user, include_manager=include_manager)
+            self.update_user(user_id, user, include_manager=include_manager)
             return {
                 "action": "update",
                 "status": 200,
                 "id": user_id,
                 "externalId": user.external_id,
             }
-        else:
-            # Try to create
-            try:
-                result = self.create_user(user)
-                user_id = result.get("id")
-                if not user_id:
-                    raise TravelPerkApiError(
-                        f"User created but no id for externalId={user.external_id}"
-                    )
-                return {
-                    "action": "insert",
-                    "status": 201,
-                    "id": user_id,
-                    "externalId": user.external_id,
-                }
-            except TravelPerkApiError as error:
-                if error.status_code == 409:
-                    # Conflict - try to find by userName
-                    existing_by_name = self.get_user_by_user_name(user.user_name)
-                    if existing_by_name:
-                        user_id = existing_by_name.get("id")
-                        if user_id:
-                            logger.info(f"TravelPerk conflict resolved: found by userName, updating id={user_id}")
-                            self.update_user(user_id, user, include_manager=include_manager)
-                            return {
-                                "action": "update",
-                                "status": 200,
-                                "id": user_id,
-                                "externalId": user.external_id,
-                            }
-                raise
+
+        # Try to create
+        try:
+            result = self.create_user(user)
+            user_id = get_user_id(result)
+            if not user_id:
+                raise TravelPerkApiError(
+                    f"User created but no id for externalId={user.external_id}"
+                )
+            return {
+                "action": "insert",
+                "status": 201,
+                "id": user_id,
+                "externalId": user.external_id,
+            }
+        except TravelPerkApiError as error:
+            if error.status_code == 409:
+                # Conflict - try to find by userName
+                existing_by_name = self.get_user_by_user_name(user.user_name)
+                if existing_by_name:
+                    user_id = get_user_id(existing_by_name)
+                    if user_id:
+                        logger.info(
+                            f"TravelPerk conflict resolved: found by userName, "
+                            f"updating id={user_id}"
+                        )
+                        self.update_user(user_id, user, include_manager=include_manager)
+                        return {
+                            "action": "update",
+                            "status": 200,
+                            "id": user_id,
+                            "externalId": user.external_id,
+                        }
+            raise
