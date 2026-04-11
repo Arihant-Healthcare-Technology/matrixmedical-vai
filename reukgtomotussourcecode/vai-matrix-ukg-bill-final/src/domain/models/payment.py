@@ -11,11 +11,8 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from src.infrastructure.config.constants import (
-    BILL_DATE_FORMAT,
-    DEFAULT_PAYMENT_METHOD,
-    VALID_PAYMENT_METHODS,
-)
+from src.domain.models.common import PaymentMethod
+from src.infrastructure.config.constants import BILL_DATE_FORMAT
 
 
 class PaymentStatus(str, Enum):
@@ -78,23 +75,6 @@ class PaymentStatus(str, Enum):
             PaymentStatus.VOIDED: "Payment was voided",
         }
         return descriptions.get(self, "Unknown status")
-
-
-class PaymentMethod(str, Enum):
-    """Payment method types."""
-
-    CHECK = "CHECK"
-    ACH = "ACH"
-    WIRE = "WIRE"
-    CARD_ACCOUNT = "CARD_ACCOUNT"
-
-    @classmethod
-    def from_string(cls, method: str) -> "PaymentMethod":
-        """Convert string to payment method enum."""
-        method = (method or "").upper().strip()
-        if method in VALID_PAYMENT_METHODS:
-            return cls(method)
-        return cls.ACH
 
 
 class FundingAccountType(str, Enum):

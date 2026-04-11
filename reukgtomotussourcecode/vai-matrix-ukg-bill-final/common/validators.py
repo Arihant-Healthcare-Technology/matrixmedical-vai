@@ -33,25 +33,13 @@ from typing import Optional, Dict, Any, List, NamedTuple, Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+# Import constants from single source of truth
+from src.infrastructure.config.constants import (
+    US_STATES,
+    COUNTRY_CODES,
+)
+
 logger = logging.getLogger(__name__)
-
-
-# US State codes
-US_STATES = {
-    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
-    'DC', 'PR', 'VI', 'GU', 'AS', 'MP'  # Including territories
-}
-
-# Country codes (ISO 3166-1 alpha-2)
-COUNTRY_CODES = {
-    'US', 'CA', 'MX', 'GB', 'DE', 'FR', 'IT', 'ES', 'JP', 'CN',
-    'AU', 'NZ', 'BR', 'AR', 'IN', 'RU', 'KR', 'SG', 'HK', 'TW',
-    # Add more as needed
-}
 
 # Email regex (RFC 5322 simplified)
 EMAIL_REGEX = re.compile(

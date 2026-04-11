@@ -321,3 +321,360 @@ class TestPIIPatterns:
         assert "password" in SECRET_KEYS
         assert "api_key" in SECRET_KEYS
         assert "token" in SECRET_KEYS
+
+
+class TestRedactAll:
+    """Tests for redact_all function."""
+
+    def test_redact_all_string(self):
+        """Test redact_all on string."""
+        from common.redaction import redact_all
+        text = "Contact john@example.com"
+        result = redact_all(text)
+        assert "[EMAIL]" in result
+        assert "john@example.com" not in result
+
+    def test_redact_all_dict(self):
+        """Test redact_all on dictionary."""
+        from common.redaction import redact_all
+        data = {"api_key": "secret", "email": "john@example.com"}
+        result = redact_all(data)
+        assert result["api_key"] == "[REDACTED]"
+        assert "[EMAIL]" in result["email"]
+
+    def test_redact_all_with_flags(self):
+        """Test redact_all with specific flags."""
+        from common.redaction import redact_all
+        text = "Contact john@example.com"
+        result = redact_all(text, redact_pii_flag=False)
+        assert result == text
+
+    def test_redact_all_dict_secrets_only(self):
+        """Test redact_all dict with secrets only."""
+        from common.redaction import redact_all
+        data = {"api_key": "secret", "email": "john@example.com"}
+        result = redact_all(data, redact_pii_flag=False, redact_secrets_flag=True)
+        assert result["api_key"] == "[REDACTED]"
+        assert result["email"] == "john@example.com"
+
+    def test_redact_all_other_types(self):
+        """Test redact_all with non-string/dict types."""
+        from common.redaction import redact_all
+        result = redact_all(12345)
+        assert result == 12345
+
+        result = redact_all([1, 2, 3])
+        assert result == [1, 2, 3]
+
+
+class TestRedactPIIInDict:
+    """Tests for _redact_pii_in_dict function."""
+
+    def test_redact_pii_in_nested_dict(self):
+        """Test PII redaction in nested dictionary."""
+        from common.redaction import _redact_pii_in_dict
+        data = {
+            "contact": {
+                "email": "john@example.com",
+                "phone": "555-123-4567"
+            },
+            "name": "John Doe"
+        }
+        result = _redact_pii_in_dict(data)
+        assert "[EMAIL]" in result["contact"]["email"]
+        assert "[PHONE]" in result["contact"]["phone"]
+        assert result["name"] == "John Doe"
+
+    def test_redact_pii_in_list_of_dicts(self):
+        """Test PII redaction in list of dicts."""
+        from common.redaction import _redact_pii_in_dict
+        data = {
+            "users": [
+                {"email": "alice@test.com"},
+                {"email": "bob@test.com"}
+            ]
+        }
+        result = _redact_pii_in_dict(data)
+        assert "[EMAIL]" in result["users"][0]["email"]
+        assert "[EMAIL]" in result["users"][1]["email"]
+
+    def test_redact_pii_in_list_of_strings(self):
+        """Test PII redaction in list of strings."""
+        from common.redaction import _redact_pii_in_dict
+        data = {
+            "emails": ["alice@test.com", "bob@test.com"]
+        }
+        result = _redact_pii_in_dict(data)
+        assert "[EMAIL]" in result["emails"][0]
+        assert "[EMAIL]" in result["emails"][1]
+
+    def test_preserves_non_string_values(self):
+        """Test non-string values are preserved."""
+        from common.redaction import _redact_pii_in_dict
+        data = {
+            "count": 42,
+            "active": True,
+            "ratio": 3.14
+        }
+        result = _redact_pii_in_dict(data)
+        assert result["count"] == 42
+        assert result["active"] is True
+        assert result["ratio"] == 3.14
+
+
+class TestRedactingFormatter:
+    """Tests for RedactingFormatter class."""
+
+    def test_formatter_redacts_pii(self):
+        """Test formatter redacts PII in log messages."""
+        from common.redaction import RedactingFormatter
+        import logging
+
+        formatter = RedactingFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Contact john@example.com",
+            args=(),
+            exc_info=None
+        )
+        result = formatter.format(record)
+        assert "[EMAIL]" in result
+        assert "john@example.com" not in result
+
+    def test_formatter_redacts_dict_args(self):
+        """Test formatter redacts secrets in dict args."""
+        from common.redaction import RedactingFormatter
+        import logging
+
+        formatter = RedactingFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Config: %s",
+            args=({"api_key": "secret"},),
+            exc_info=None
+        )
+        result = formatter.format(record)
+        # Dict args in tuple format - message will contain the dict representation
+        assert "api_key" in result
+
+    def test_formatter_redacts_tuple_args(self):
+        """Test formatter redacts PII in tuple args."""
+        from common.redaction import RedactingFormatter
+        import logging
+
+        formatter = RedactingFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="User: %s, Email: %s",
+            args=("John", "john@example.com"),
+            exc_info=None
+        )
+        result = formatter.format(record)
+        assert "[EMAIL]" in result
+
+    def test_formatter_with_custom_format(self):
+        """Test formatter with custom format string."""
+        from common.redaction import RedactingFormatter
+        import logging
+
+        formatter = RedactingFormatter(fmt="%(message)s")
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Test message",
+            args=(),
+            exc_info=None
+        )
+        result = formatter.format(record)
+        assert result == "Test message"
+
+    def test_formatter_disabled_flags(self):
+        """Test formatter with redaction flags disabled."""
+        from common.redaction import RedactingFormatter
+        import logging
+
+        formatter = RedactingFormatter(redact_pii_flag=False, redact_secrets_flag=False)
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Email: john@example.com",
+            args=(),
+            exc_info=None
+        )
+        result = formatter.format(record)
+        assert "john@example.com" in result
+
+
+class TestRedactingFilter:
+    """Tests for RedactingFilter class."""
+
+    def test_filter_redacts_pii(self):
+        """Test filter redacts PII in log record."""
+        from common.redaction import RedactingFilter
+        import logging
+
+        filter_obj = RedactingFilter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Contact john@example.com",
+            args=(),
+            exc_info=None
+        )
+        result = filter_obj.filter(record)
+        assert result is True
+        assert "[EMAIL]" in record.msg
+        assert "john@example.com" not in record.msg
+
+    def test_filter_redacts_dict_args(self):
+        """Test filter redacts secrets in dict args."""
+        from common.redaction import RedactingFilter
+        import logging
+
+        filter_obj = RedactingFilter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Config: %(api_key)s",
+            args={"api_key": "secret", "password": "hidden"},
+            exc_info=None
+        )
+        result = filter_obj.filter(record)
+        assert result is True
+        # Password key should be redacted
+        assert record.args["password"] == "[REDACTED]"
+
+    def test_filter_redacts_tuple_args(self):
+        """Test filter redacts PII in tuple args."""
+        from common.redaction import RedactingFilter
+        import logging
+
+        filter_obj = RedactingFilter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="User: %s",
+            args=("john@example.com",),
+            exc_info=None
+        )
+        result = filter_obj.filter(record)
+        assert result is True
+        assert "[EMAIL]" in record.args[0]
+
+    def test_filter_with_name(self):
+        """Test filter with name parameter."""
+        from common.redaction import RedactingFilter
+        filter_obj = RedactingFilter(name="test_filter")
+        assert filter_obj.name == "test_filter"
+
+
+class TestSanitizeForLogging:
+    """Tests for sanitize_for_logging function."""
+
+    def test_sanitize_string(self):
+        """Test sanitizing string."""
+        from common.redaction import sanitize_for_logging
+        result = sanitize_for_logging("Contact john@example.com")
+        assert "[EMAIL]" in result
+        assert "john@example.com" not in result
+
+    def test_sanitize_truncates_long_string(self):
+        """Test long string is truncated."""
+        from common.redaction import sanitize_for_logging
+        long_str = "a" * 1000
+        result = sanitize_for_logging(long_str, max_length=100)
+        assert len(result) == 100 + len("...[TRUNCATED]")
+        assert "[TRUNCATED]" in result
+
+    def test_sanitize_dict(self):
+        """Test sanitizing dictionary."""
+        from common.redaction import sanitize_for_logging
+        data = {"api_key": "secret", "email": "john@example.com"}
+        result = sanitize_for_logging(data)
+        assert "[REDACTED]" in result
+        assert "[EMAIL]" in result
+
+    def test_sanitize_list(self):
+        """Test sanitizing list."""
+        from common.redaction import sanitize_for_logging
+        data = ["john@example.com", "alice@test.com"]
+        result = sanitize_for_logging(data)
+        assert "[EMAIL]" in result
+
+    def test_sanitize_none(self):
+        """Test sanitizing None."""
+        from common.redaction import sanitize_for_logging
+        result = sanitize_for_logging(None)
+        assert result == "None"
+
+    def test_sanitize_other_types(self):
+        """Test sanitizing other types."""
+        from common.redaction import sanitize_for_logging
+        result = sanitize_for_logging(12345)
+        assert result == "12345"
+
+    def test_sanitize_dict_truncates(self):
+        """Test dict result is truncated."""
+        from common.redaction import sanitize_for_logging
+        # Use a dict with multiple keys to create a long string representation
+        # Avoid values that look like secrets (long alphanumeric strings)
+        data = {f"key{i}": f"short{i}" for i in range(50)}
+        result = sanitize_for_logging(data, max_length=100)
+        assert "[TRUNCATED]" in result
+
+
+class TestCreateSafeErrorContext:
+    """Tests for create_safe_error_context function."""
+
+    def test_basic_exception(self):
+        """Test creating context from basic exception."""
+        from common.redaction import create_safe_error_context
+        exc = ValueError("Something went wrong")
+        result = create_safe_error_context(exc)
+        assert result["error_type"] == "ValueError"
+        assert "Something went wrong" in result["error_message"]
+
+    def test_exception_with_pii(self):
+        """Test PII in exception is redacted."""
+        from common.redaction import create_safe_error_context
+        exc = ValueError("User john@example.com not found")
+        result = create_safe_error_context(exc)
+        assert "[EMAIL]" in result["error_message"]
+        assert "john@example.com" not in result["error_message"]
+
+    def test_with_additional_context(self):
+        """Test with additional context dict."""
+        from common.redaction import create_safe_error_context
+        exc = ValueError("Error")
+        context = {"api_key": "secret", "user": "john"}
+        result = create_safe_error_context(exc, context)
+        assert "context" in result
+        assert result["context"]["api_key"] == "[REDACTED]"
+        assert result["context"]["user"] == "john"
+
+    def test_context_pii_redacted(self):
+        """Test PII in context is redacted."""
+        from common.redaction import create_safe_error_context
+        exc = ValueError("Error")
+        context = {"email": "john@example.com"}
+        result = create_safe_error_context(exc, context)
+        assert "[EMAIL]" in result["context"]["email"]

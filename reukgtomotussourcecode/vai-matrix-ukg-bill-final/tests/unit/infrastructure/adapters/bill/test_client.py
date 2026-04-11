@@ -341,7 +341,7 @@ class TestSpendExpenseClientInit:
         from src.infrastructure.adapters.bill.client import SpendExpenseClient
 
         with patch(
-            "src.infrastructure.adapters.bill.client.BillHttpClient"
+            "src.infrastructure.adapters.bill.base_client.BillHttpClient"
         ) as mock_http:
             SpendExpenseClient(
                 api_base="https://api.bill.com/v3",
@@ -356,7 +356,7 @@ class TestSpendExpenseClientInit:
         from src.infrastructure.adapters.bill.client import SpendExpenseClient
 
         with patch(
-            "src.infrastructure.adapters.bill.client.BillHttpClient"
+            "src.infrastructure.adapters.bill.base_client.BillHttpClient"
         ) as mock_http:
             SpendExpenseClient(
                 api_base="https://api.bill.com/v3/spend",
@@ -371,7 +371,7 @@ class TestSpendExpenseClientInit:
         from src.infrastructure.adapters.bill.client import SpendExpenseClient
 
         with patch(
-            "src.infrastructure.adapters.bill.client.BillHttpClient"
+            "src.infrastructure.adapters.bill.base_client.BillHttpClient"
         ) as mock_http:
             SpendExpenseClient(
                 api_base="https://api.bill.com/v3/",
@@ -389,7 +389,7 @@ class TestSpendExpenseClientUserOperations:
         """Create a client for testing."""
         from src.infrastructure.adapters.bill.client import SpendExpenseClient
 
-        with patch("src.infrastructure.adapters.bill.client.BillHttpClient"):
+        with patch("src.infrastructure.adapters.bill.base_client.BillHttpClient"):
             return SpendExpenseClient(
                 api_base="https://api.bill.com/v3",
                 api_token="test_token",
@@ -555,7 +555,7 @@ class TestAccountsPayableClientInit:
         from src.infrastructure.adapters.bill.client import AccountsPayableClient
 
         with patch(
-            "src.infrastructure.adapters.bill.client.BillHttpClient"
+            "src.infrastructure.adapters.bill.base_client.BillHttpClient"
         ) as mock_http:
             AccountsPayableClient(
                 api_base="https://api.bill.com/v3/spend",
@@ -570,7 +570,7 @@ class TestAccountsPayableClientInit:
         from src.infrastructure.adapters.bill.client import AccountsPayableClient
 
         with patch(
-            "src.infrastructure.adapters.bill.client.BillHttpClient"
+            "src.infrastructure.adapters.bill.base_client.BillHttpClient"
         ) as mock_http:
             AccountsPayableClient(
                 api_base="https://api.bill.com/v3",
@@ -588,7 +588,7 @@ class TestAccountsPayableClientVendorOperations:
         """Create a client for testing."""
         from src.infrastructure.adapters.bill.client import AccountsPayableClient
 
-        with patch("src.infrastructure.adapters.bill.client.BillHttpClient"):
+        with patch("src.infrastructure.adapters.bill.base_client.BillHttpClient"):
             return AccountsPayableClient(
                 api_base="https://api.bill.com/v3",
                 api_token="test_token",
@@ -746,7 +746,7 @@ class TestAccountsPayableClientBillOperations:
         """Create a client for testing."""
         from src.infrastructure.adapters.bill.client import AccountsPayableClient
 
-        with patch("src.infrastructure.adapters.bill.client.BillHttpClient"):
+        with patch("src.infrastructure.adapters.bill.base_client.BillHttpClient"):
             return AccountsPayableClient(
                 api_base="https://api.bill.com/v3",
                 api_token="test_token",
@@ -894,7 +894,7 @@ class TestAccountsPayableClientPaymentOperations:
         """Create a client for testing."""
         from src.infrastructure.adapters.bill.client import AccountsPayableClient
 
-        with patch("src.infrastructure.adapters.bill.client.BillHttpClient"):
+        with patch("src.infrastructure.adapters.bill.base_client.BillHttpClient"):
             return AccountsPayableClient(
                 api_base="https://api.bill.com/v3",
                 api_token="test_token",

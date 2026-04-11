@@ -7,7 +7,8 @@ from unittest.mock import Mock, MagicMock
 import pytest
 
 from src.application.services.vendor_service import VendorService
-from src.domain.models.vendor import Vendor, VendorStatus, PaymentMethod
+from src.domain.models.common import PaymentMethod
+from src.domain.models.vendor import Vendor, VendorStatus
 
 
 @pytest.fixture

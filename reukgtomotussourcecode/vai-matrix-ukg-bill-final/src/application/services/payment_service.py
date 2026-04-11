@@ -20,7 +20,8 @@ from src.domain.interfaces.services import (
     BatchSyncResult,
 )
 from src.domain.interfaces.repositories import PaymentRepository, InvoiceRepository
-from src.domain.models.payment import Payment, PaymentStatus, PaymentMethod, FundingAccount
+from src.domain.models.common import PaymentMethod
+from src.domain.models.payment import Payment, PaymentStatus, FundingAccount
 from src.domain.models.invoice import Invoice, BillStatus
 
 

@@ -91,9 +91,13 @@ US_STATES: FrozenSet[str] = frozenset({
 # ============================================================================
 # Country Codes (ISO 3166-1 alpha-2)
 # ============================================================================
-SUPPORTED_COUNTRIES: FrozenSet[str] = frozenset({
-    "US", "CA", "MX", "GB", "DE", "FR", "AU", "NZ", "IN",
+COUNTRY_CODES: FrozenSet[str] = frozenset({
+    "US", "CA", "MX", "GB", "DE", "FR", "IT", "ES", "JP", "CN",
+    "AU", "NZ", "BR", "AR", "IN", "RU", "KR", "SG", "HK", "TW",
 })
+
+# Alias for backward compatibility
+SUPPORTED_COUNTRIES: FrozenSet[str] = COUNTRY_CODES
 
 DEFAULT_COUNTRY: str = "US"
 

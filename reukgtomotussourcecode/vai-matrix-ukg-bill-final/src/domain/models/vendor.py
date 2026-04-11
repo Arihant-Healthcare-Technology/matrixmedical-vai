@@ -9,28 +9,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from src.domain.models.common import PaymentMethod
 from src.infrastructure.config.constants import (
-    DEFAULT_PAYMENT_METHOD,
     DEFAULT_PAYMENT_TERM_DAYS,
-    VALID_PAYMENT_METHODS,
 )
-
-
-class PaymentMethod(str, Enum):
-    """Vendor payment methods."""
-
-    CHECK = "CHECK"
-    ACH = "ACH"
-    WIRE = "WIRE"
-    CARD_ACCOUNT = "CARD_ACCOUNT"
-
-    @classmethod
-    def from_string(cls, method: str) -> "PaymentMethod":
-        """Convert string to payment method enum."""
-        method = (method or "").upper().strip()
-        if method in VALID_PAYMENT_METHODS:
-            return cls(method)
-        return cls.ACH  # Default
 
 
 class VendorStatus(str, Enum):

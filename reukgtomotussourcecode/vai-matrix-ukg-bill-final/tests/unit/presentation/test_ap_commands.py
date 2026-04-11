@@ -572,17 +572,17 @@ class TestLoadVendorMapping:
 
 
 class TestPrintFunctions:
-    """Tests for print helper functions."""
+    """Tests for print helper functions (now in utils.py)."""
 
     def test_print_preview_with_invoices(self, capsys):
         """Test print_preview with invoice objects."""
-        from src.presentation.cli.ap_commands import _print_preview
+        from src.presentation.cli.utils import print_preview
 
         mock_invoice = MagicMock()
         mock_invoice.invoice_number = "INV-001"
         mock_invoice.total_amount = Decimal("100.00")
 
-        _print_preview([mock_invoice], "test invoices")
+        print_preview([mock_invoice], "test invoices")
 
         captured = capsys.readouterr()
         assert "INV-001" in captured.out
@@ -590,20 +590,20 @@ class TestPrintFunctions:
 
     def test_print_preview_with_vendors(self, capsys):
         """Test print_preview with vendor objects."""
-        from src.presentation.cli.ap_commands import _print_preview
+        from src.presentation.cli.utils import print_preview
 
         class MockVendor:
             name = "Acme Corp"
             email = "billing@acme.com"
 
-        _print_preview([MockVendor()], "test vendors")
+        print_preview([MockVendor()], "test vendors")
 
         captured = capsys.readouterr()
         assert "Acme Corp" in captured.out
 
     def test_print_sync_result(self, capsys):
         """Test print_sync_result."""
-        from src.presentation.cli.ap_commands import _print_sync_result
+        from src.presentation.cli.utils import print_sync_result
 
         mock_result = MagicMock()
         mock_result.total = 10
@@ -616,7 +616,7 @@ class TestPrintFunctions:
         mock_result.correlation_id = "test-correlation"
         mock_result.results = []
 
-        _print_sync_result(mock_result, "TEST SYNC")
+        print_sync_result(mock_result, "TEST SYNC")
 
         captured = capsys.readouterr()
         assert "TEST SYNC" in captured.out
@@ -625,7 +625,7 @@ class TestPrintFunctions:
 
     def test_print_sync_result_with_errors(self, capsys):
         """Test print_sync_result with errors."""
-        from src.presentation.cli.ap_commands import _print_sync_result
+        from src.presentation.cli.utils import print_sync_result
 
         class MockError:
             action = "error"
@@ -643,7 +643,7 @@ class TestPrintFunctions:
             correlation_id = "test-correlation"
             results = [MockError()]
 
-        _print_sync_result(MockResult(), "TEST SYNC")
+        print_sync_result(MockResult(), "TEST SYNC")
 
         captured = capsys.readouterr()
         assert "Errors:" in captured.out

@@ -2,11 +2,14 @@
 Validation mappers.
 
 Provides validation functions for API submissions and error extraction.
+
+Note: This module uses the common validators from common/validators.py
+for base validation functions like email, phone, etc.
 """
 
-import re
 from typing import Any, Dict, List
 
+from common.validators import validate_email
 from src.domain.models.invoice import Invoice
 from src.domain.models.payment import Payment
 from src.domain.models.vendor import Vendor
@@ -65,10 +68,8 @@ def validate_vendor_for_api(vendor: Vendor) -> List[str]:
     if not vendor.name or len(vendor.name.strip()) < 2:
         errors.append("Vendor name is required (min 2 characters)")
 
-    if vendor.email:
-        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        if not re.match(email_pattern, vendor.email):
-            errors.append(f"Invalid vendor email format: {vendor.email}")
+    if vendor.email and not validate_email(vendor.email):
+        errors.append(f"Invalid vendor email format: {vendor.email}")
 
     return errors
 

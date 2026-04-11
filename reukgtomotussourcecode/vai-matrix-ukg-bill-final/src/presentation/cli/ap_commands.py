@@ -16,6 +16,14 @@ from typing import Dict, List, Optional
 from src.domain.models.vendor import Vendor
 from src.domain.models.invoice import Invoice
 from src.presentation.cli.container import Container
+from src.presentation.cli.utils import (
+    format_currency,
+    load_json_file,
+    print_preview,
+    print_step_header,
+    print_summary,
+    print_sync_result,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -53,7 +61,7 @@ def run_vendor_sync(
         logger.info(f"Loaded {len(vendors)} vendors from file")
 
         if dry_run:
-            _print_preview(vendors[:10], "vendors to sync")
+            print_preview(vendors, "vendors to sync")
             return 0
 
         vendor_service = container.vendor_service()
@@ -64,7 +72,7 @@ def run_vendor_sync(
             workers=workers,
         )
 
-        _print_sync_result(result, "VENDOR SYNC")
+        print_sync_result(result, "VENDOR SYNC")
         return 0 if result.errors == 0 else 1
 
     except FileNotFoundError:
@@ -118,7 +126,7 @@ def run_invoice_sync(
             logger.info(f"Loaded {len(vendor_mapping)} vendor mappings")
 
         if dry_run:
-            _print_preview(invoices[:10], "invoices to sync")
+            print_preview(invoices, "invoices to sync")
             return 0
 
         invoice_service = container.invoice_service()
@@ -130,7 +138,7 @@ def run_invoice_sync(
             workers=workers,
         )
 
-        _print_sync_result(result, "INVOICE SYNC")
+        print_sync_result(result, "INVOICE SYNC")
         return 0 if result.errors == 0 else 1
 
     except FileNotFoundError as e:
@@ -198,9 +206,9 @@ def run_payment_process(
             return 0
 
         if dry_run:
-            _print_preview(invoices_to_pay[:10], "invoices to pay")
+            print_preview(invoices_to_pay, "invoices to pay")
             total = sum(float(inv.total_amount or 0) for inv in invoices_to_pay)
-            print(f"Total payment amount: ${total:,.2f}")
+            print(f"Total payment amount: {format_currency(total)}")
             return 0
 
         # Process payments
@@ -209,7 +217,7 @@ def run_payment_process(
             funding_account_id=funding_account_id,
         )
 
-        _print_sync_result(result, "PAYMENT PROCESSING")
+        print_sync_result(result, "PAYMENT PROCESSING")
         return 0 if result.errors == 0 else 1
 
     except Exception as e:
@@ -255,9 +263,7 @@ def run_ap_batch(
     try:
         # Step 1: Vendor sync
         if include_vendors:
-            logger.info("=" * 50)
-            logger.info("Step 1: Vendor Sync")
-            logger.info("=" * 50)
+            print_step_header(1, "Vendor Sync")
 
             vendor_file = None
             if data_dir:
@@ -274,9 +280,7 @@ def run_ap_batch(
 
         # Step 2: Invoice sync
         if include_invoices:
-            logger.info("=" * 50)
-            logger.info("Step 2: Invoice Sync")
-            logger.info("=" * 50)
+            print_step_header(2, "Invoice Sync")
 
             invoice_file = None
             vendor_mapping_file = None
@@ -298,9 +302,7 @@ def run_ap_batch(
 
         # Step 3: Payment processing
         if include_payments:
-            logger.info("=" * 50)
-            logger.info("Step 3: Payment Processing")
-            logger.info("=" * 50)
+            print_step_header(3, "Payment Processing")
 
             result = run_payment_process(
                 container=container,
@@ -312,13 +314,7 @@ def run_ap_batch(
                 exit_code = result
 
         # Print summary
-        print("\n" + "=" * 50)
-        print("AP BATCH SUMMARY")
-        print("=" * 50)
-        for step_name, result in results:
-            status = "SUCCESS" if result == 0 else "FAILED"
-            print(f"  {step_name}: {status}")
-        print("=" * 50 + "\n")
+        print_summary(results, "AP BATCH SUMMARY")
 
         return exit_code
 
@@ -331,8 +327,7 @@ def _load_vendors_from_file(file_path: str) -> List[Vendor]:
     """Load vendors from JSON file."""
     from src.domain.models.vendor import VendorAddress
 
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = load_json_file(file_path)
 
     vendors = []
     items = data if isinstance(data, list) else data.get("vendors", [])
@@ -367,8 +362,7 @@ def _load_invoices_from_file(file_path: str) -> List[Invoice]:
     from decimal import Decimal
     from src.domain.models.invoice import InvoiceLineItem
 
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = load_json_file(file_path)
 
     invoices = []
     items = data if isinstance(data, list) else data.get("invoices", [])
@@ -412,42 +406,4 @@ def _load_invoices_from_file(file_path: str) -> List[Invoice]:
 
 def _load_vendor_mapping(file_path: str) -> Dict[str, str]:
     """Load vendor ID mapping from JSON file."""
-    with open(file_path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _print_preview(items: list, label: str) -> None:
-    """Print preview of items."""
-    print(f"\n=== Preview: {label} (first {len(items)}) ===")
-    for item in items:
-        if hasattr(item, "invoice_number"):
-            print(f"  - {item.invoice_number} (${item.total_amount})")
-        elif hasattr(item, "name"):
-            print(f"  - {item.name} ({item.email})")
-        else:
-            print(f"  - {item}")
-    print()
-
-
-def _print_sync_result(result, title: str) -> None:
-    """Print sync result summary."""
-    print("\n" + "=" * 50)
-    print(title)
-    print("=" * 50)
-    print(f"Total Processed:  {result.total}")
-    print(f"Created:          {result.created}")
-    print(f"Updated:          {result.updated}")
-    print(f"Skipped:          {result.skipped}")
-    print(f"Errors:           {result.errors}")
-    print(f"Success Rate:     {result.success_rate:.1f}%")
-    if hasattr(result, "duration"):
-        print(f"Duration:         {result.duration:.1f}s")
-    print(f"Correlation ID:   {result.correlation_id}")
-    print("=" * 50 + "\n")
-
-    if result.errors > 0:
-        print("Errors:")
-        for r in result.results:
-            if r.action == "error":
-                print(f"  - {r.entity_id}: {r.message}")
-        print()
+    return load_json_file(file_path)

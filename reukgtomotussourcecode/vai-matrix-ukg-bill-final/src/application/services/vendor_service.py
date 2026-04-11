@@ -338,8 +338,8 @@ class VendorService(VendorSyncService):
             if "external_id" in vendor_data:
                 vendor.external_id = vendor_data["external_id"]
             if "payment_method" in vendor_data:
-                from src.domain.models.vendor import VendorPaymentMethod
-                vendor.payment_method = VendorPaymentMethod(vendor_data["payment_method"])
+                from src.domain.models.common import PaymentMethod
+                vendor.payment_method = PaymentMethod(vendor_data["payment_method"])
 
         created = self.vendor_repo.create(vendor)
         self._vendor_cache[created.id] = created

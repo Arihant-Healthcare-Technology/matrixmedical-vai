@@ -376,17 +376,17 @@ class TestPrivateFunctions:
 
 
 class TestPrintFunctions:
-    """Tests for print helper functions."""
+    """Tests for print helper functions (now in utils.py)."""
 
     def test_print_preview_with_email(self, capsys):
         """Test print_preview with email attribute."""
-        from src.presentation.cli.batch_commands import _print_preview
+        from src.presentation.cli.utils import print_preview
 
         class MockEmployee:
             email = "test@example.com"
             full_name = "Test User"
 
-        _print_preview([MockEmployee()], "test employees")
+        print_preview([MockEmployee()], "test employees")
 
         captured = capsys.readouterr()
         assert "test@example.com" in captured.out
@@ -394,21 +394,21 @@ class TestPrintFunctions:
 
     def test_print_preview_with_name(self, capsys):
         """Test print_preview with name attribute."""
-        from src.presentation.cli.batch_commands import _print_preview
+        from src.presentation.cli.utils import print_preview
 
         class MockItem:
             name = "Test Item"
 
-        _print_preview([MockItem()], "test items")
+        print_preview([MockItem()], "test items")
 
         captured = capsys.readouterr()
         assert "Test Item" in captured.out
 
     def test_print_preview_with_other(self, capsys):
         """Test print_preview with unknown object."""
-        from src.presentation.cli.batch_commands import _print_preview
+        from src.presentation.cli.utils import print_preview
 
-        _print_preview(["item1", "item2"], "test items")
+        print_preview(["item1", "item2"], "test items")
 
         captured = capsys.readouterr()
         assert "item1" in captured.out
@@ -416,7 +416,7 @@ class TestPrintFunctions:
 
     def test_print_sync_result(self, capsys):
         """Test print_sync_result."""
-        from src.presentation.cli.batch_commands import _print_sync_result
+        from src.presentation.cli.utils import print_sync_result
 
         class MockResult:
             total = 10
@@ -429,7 +429,7 @@ class TestPrintFunctions:
             correlation_id = "test-correlation"
             results = []
 
-        _print_sync_result(MockResult())
+        print_sync_result(MockResult())
 
         captured = capsys.readouterr()
         assert "SYNC RESULT" in captured.out
@@ -438,7 +438,7 @@ class TestPrintFunctions:
 
     def test_print_sync_result_with_errors(self, capsys):
         """Test print_sync_result with errors."""
-        from src.presentation.cli.batch_commands import _print_sync_result
+        from src.presentation.cli.utils import print_sync_result
 
         class MockError:
             action = "error"
@@ -456,7 +456,7 @@ class TestPrintFunctions:
             correlation_id = "test-correlation"
             results = [MockError()]
 
-        _print_sync_result(MockResult())
+        print_sync_result(MockResult())
 
         captured = capsys.readouterr()
         assert "Errors:" in captured.out

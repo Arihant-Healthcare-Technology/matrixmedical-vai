@@ -16,6 +16,11 @@ from typing import List, Optional
 from src.domain.models.employee import Employee
 from src.domain.models.bill_user import BillRole
 from src.presentation.cli.container import Container
+from src.presentation.cli.utils import (
+    load_json_file,
+    print_preview,
+    print_sync_result,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -56,7 +61,7 @@ def run_sync_all(
             employee_repo = container.employee_repository()
             employees = list(employee_repo.get_active_employees(company_id=company_id))
             logger.info(f"Would sync {len(employees)} employees")
-            _print_preview(employees[:10], "employees to sync")
+            print_preview(employees, "employees to sync")
             return 0
 
         # Run full sync
@@ -66,7 +71,7 @@ def run_sync_all(
             workers=workers,
         )
 
-        _print_sync_result(result)
+        print_sync_result(result)
         return 0 if result.errors == 0 else 1
 
     except Exception as e:
@@ -104,7 +109,7 @@ def run_sync_batch(
         logger.info(f"Loaded {len(employees)} employees from file")
 
         if dry_run:
-            _print_preview(employees[:10], "employees to sync")
+            print_preview(employees, "employees to sync")
             return 0
 
         role = BillRole.from_string(default_role)
@@ -117,7 +122,7 @@ def run_sync_batch(
             workers=workers,
         )
 
-        _print_sync_result(result)
+        print_sync_result(result)
         return 0 if result.errors == 0 else 1
 
     except FileNotFoundError:
@@ -207,8 +212,7 @@ def run_export_csv(
 
 def _load_employees_from_file(file_path: str) -> List[Employee]:
     """Load employees from JSON file."""
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = load_json_file(file_path)
 
     employees = []
     items = data if isinstance(data, list) else data.get("employees", [])
@@ -221,39 +225,3 @@ def _load_employees_from_file(file_path: str) -> List[Employee]:
             logger.warning(f"Failed to parse employee: {e}")
 
     return employees
-
-
-def _print_preview(items: list, label: str) -> None:
-    """Print preview of items."""
-    print(f"\n=== Preview: {label} (first {len(items)}) ===")
-    for item in items:
-        if hasattr(item, "email"):
-            print(f"  - {item.email} ({item.full_name})")
-        elif hasattr(item, "name"):
-            print(f"  - {item.name}")
-        else:
-            print(f"  - {item}")
-    print()
-
-
-def _print_sync_result(result) -> None:
-    """Print sync result summary."""
-    print("\n" + "=" * 50)
-    print("SYNC RESULT")
-    print("=" * 50)
-    print(f"Total Processed:  {result.total}")
-    print(f"Created:          {result.created}")
-    print(f"Updated:          {result.updated}")
-    print(f"Skipped:          {result.skipped}")
-    print(f"Errors:           {result.errors}")
-    print(f"Success Rate:     {result.success_rate:.1f}%")
-    print(f"Duration:         {result.duration:.1f}s")
-    print(f"Correlation ID:   {result.correlation_id}")
-    print("=" * 50 + "\n")
-
-    if result.errors > 0:
-        print("Errors:")
-        for r in result.results:
-            if r.action == "error":
-                print(f"  - {r.entity_id}: {r.message}")
-        print()

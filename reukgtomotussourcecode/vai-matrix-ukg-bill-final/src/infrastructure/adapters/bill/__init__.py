@@ -4,21 +4,36 @@ BILL.com API adapters.
 Provides API clients and repository implementations for:
 - Spend & Expense (S&E) - User provisioning
 - Accounts Payable (AP) - Vendor, invoice, and payment management
+
+Module Structure:
+-----------------
+Clients (split into separate modules for maintainability):
+- base_client.py: BillClient base class
+- spend_expense_client.py: SpendExpenseClient for S&E operations
+- accounts_payable_client.py: AccountsPayableClient for AP operations
+- client.py: Re-exports all clients for backward compatibility
+
+Repositories (split into separate modules):
+- vendor_repository.py: VendorRepositoryImpl
+- invoice_repository.py: InvoiceRepositoryImpl
+- payment_repository.py: PaymentRepositoryImpl
+- spend_expense.py: BillUserRepositoryImpl
+- accounts_payable.py: Re-exports all repositories for backward compatibility
 """
 
-from src.infrastructure.adapters.bill.client import (
-    AccountsPayableClient,
-    BillClient,
-    SpendExpenseClient,
-)
+# Client imports (prefer specific imports for new code)
+from src.infrastructure.adapters.bill.base_client import BillClient
+from src.infrastructure.adapters.bill.spend_expense_client import SpendExpenseClient
+from src.infrastructure.adapters.bill.accounts_payable_client import AccountsPayableClient
+
+# Repository imports (prefer specific imports for new code)
 from src.infrastructure.adapters.bill.spend_expense import BillUserRepositoryImpl
-from src.infrastructure.adapters.bill.accounts_payable import (
-    InvoiceRepositoryImpl,
-    PaymentRepositoryImpl,
-    VendorRepositoryImpl,
-)
+from src.infrastructure.adapters.bill.vendor_repository import VendorRepositoryImpl
+from src.infrastructure.adapters.bill.invoice_repository import InvoiceRepositoryImpl
+from src.infrastructure.adapters.bill.payment_repository import PaymentRepositoryImpl
 from src.infrastructure.adapters.bill.mappers import (
     # Utilities
+    format_cost_center,
     format_date,
     normalize_email,
     normalize_phone,
@@ -69,6 +84,7 @@ __all__ = [
     "InvoiceRepositoryImpl",
     "PaymentRepositoryImpl",
     # Utilities
+    "format_cost_center",
     "format_date",
     "normalize_email",
     "normalize_phone",

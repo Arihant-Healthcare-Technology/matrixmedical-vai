@@ -10,14 +10,13 @@ import pytest
 from src.domain.models.bill_user import BillRole, BillUser
 from src.domain.models.employee import Employee, EmployeeStatus
 from src.domain.models.invoice import BillStatus, Invoice, InvoiceLineItem
+from src.domain.models.common import PaymentMethod
 from src.domain.models.payment import (
     FundingAccount,
     FundingAccountType,
     Payment,
-    PaymentMethod,
     PaymentStatus,
 )
-from src.domain.models.vendor import PaymentMethod as VendorPaymentMethod
 from src.domain.models.vendor import Vendor, VendorAddress, VendorStatus
 from src.infrastructure.adapters.bill.mappers import (
     build_bill_user_csv_row,
@@ -172,31 +171,31 @@ class TestMapVendorStatus:
         assert map_vendor_status("unknown") == VendorStatus.ACTIVE
 
 
-class TestMapVendorPaymentMethod:
+class TestMapPaymentMethod:
     """Tests for map_vendor_payment_method function."""
 
     def test_ach(self):
         """Should map ACH."""
-        assert map_vendor_payment_method("ACH") == VendorPaymentMethod.ACH
+        assert map_vendor_payment_method("ACH") == PaymentMethod.ACH
 
     def test_check(self):
         """Should map CHECK."""
-        assert map_vendor_payment_method("CHECK") == VendorPaymentMethod.CHECK
+        assert map_vendor_payment_method("CHECK") == PaymentMethod.CHECK
 
     def test_wire(self):
         """Should map WIRE."""
-        assert map_vendor_payment_method("WIRE") == VendorPaymentMethod.WIRE
+        assert map_vendor_payment_method("WIRE") == PaymentMethod.WIRE
 
     def test_card_account(self):
         """Should map card account variants."""
-        assert map_vendor_payment_method("CARD_ACCOUNT") == VendorPaymentMethod.CARD_ACCOUNT
-        assert map_vendor_payment_method("CARD") == VendorPaymentMethod.CARD_ACCOUNT
-        assert map_vendor_payment_method("VIRTUAL_CARD") == VendorPaymentMethod.CARD_ACCOUNT
+        assert map_vendor_payment_method("CARD_ACCOUNT") == PaymentMethod.CARD_ACCOUNT
+        assert map_vendor_payment_method("CARD") == PaymentMethod.CARD_ACCOUNT
+        assert map_vendor_payment_method("VIRTUAL_CARD") == PaymentMethod.CARD_ACCOUNT
 
     def test_default(self):
         """Should default to CHECK."""
-        assert map_vendor_payment_method(None) == VendorPaymentMethod.CHECK
-        assert map_vendor_payment_method("unknown") == VendorPaymentMethod.CHECK
+        assert map_vendor_payment_method(None) == PaymentMethod.CHECK
+        assert map_vendor_payment_method("unknown") == PaymentMethod.CHECK
 
 
 class TestMapBillStatus:
@@ -443,7 +442,7 @@ class TestBuildVendorCsvRow:
                 state="TX",
                 zip_code="78701",
             ),
-            payment_method=VendorPaymentMethod.ACH,
+            payment_method=PaymentMethod.ACH,
             payment_term_days=30,
             external_id="EXT001",
         )

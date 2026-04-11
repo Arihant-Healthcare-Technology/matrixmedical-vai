@@ -2,44 +2,25 @@
 UKG data mappers.
 
 Provides mapping functions to transform UKG API data to domain models.
+
+Note: This module uses shared formatters from common/formatters.py
+for phone normalization and date parsing.
 """
 
-import re
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from common.formatters import normalize_phone, parse_datetime
 from src.domain.models.employee import Address, Employee, EmployeeStatus
 
 
-def normalize_phone(phone: Optional[str]) -> str:
-    """
-    Normalize phone number.
-
-    Extracts digits and formats as XXX-XXX-XXXX for US numbers.
-
-    Args:
-        phone: Phone string to normalize
-
-    Returns:
-        Normalized phone string
-    """
-    if not phone:
-        return ""
-    digits = re.sub(r"\D", "", phone)
-    if len(digits) == 10:
-        return f"{digits[0:3]}-{digits[3:6]}-{digits[6:10]}"
-    if len(digits) == 11 and digits[0] == "1":
-        return f"{digits[1:4]}-{digits[4:7]}-{digits[7:11]}"
-    return phone
-
-
+# Re-export for backward compatibility
 def parse_date(date_str: Optional[str]) -> Optional[datetime]:
     """
     Parse UKG date string to datetime.
 
-    Handles various UKG date formats:
-    - ISO 8601: 2024-01-15T00:00:00Z
-    - ISO date: 2024-01-15
+    Note: This is a wrapper around common.formatters.parse_datetime
+    for backward compatibility.
 
     Args:
         date_str: Date string to parse
@@ -47,19 +28,7 @@ def parse_date(date_str: Optional[str]) -> Optional[datetime]:
     Returns:
         Parsed datetime or None
     """
-    if not date_str:
-        return None
-
-    try:
-        # Handle ISO 8601 with timezone
-        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-        return dt
-    except Exception:
-        try:
-            # Handle plain date
-            return datetime.strptime(date_str[:10], "%Y-%m-%d")
-        except Exception:
-            return None
+    return parse_datetime(date_str)
 
 
 def map_employment_status(data: Dict[str, Any]) -> EmployeeStatus:

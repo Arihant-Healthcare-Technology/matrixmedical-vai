@@ -9,7 +9,8 @@ from unittest.mock import Mock, MagicMock
 import pytest
 
 from src.application.services.payment_service import PaymentService
-from src.domain.models.payment import Payment, PaymentStatus, PaymentMethod, FundingAccount
+from src.domain.models.common import PaymentMethod
+from src.domain.models.payment import Payment, PaymentStatus, FundingAccount
 from src.domain.models.invoice import Invoice, BillStatus, InvoiceLineItem
 
 
