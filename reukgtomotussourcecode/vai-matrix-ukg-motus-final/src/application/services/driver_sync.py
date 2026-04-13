@@ -110,6 +110,15 @@ class DriverSyncService:
                 # === STEP 2: Build driver from UKG (only if not terminated) ===
                 driver_exists = existing_driver is not None
 
+                # Extract existing Manager Name from Motus (to preserve if UKG doesn't have it)
+                existing_supervisor_name = ""
+                if existing_driver:
+                    custom_vars = existing_driver.get("customVariables") or []
+                    for cv in custom_vars:
+                        if cv.get("name") == "Manager Name":
+                            existing_supervisor_name = cv.get("value", "") or ""
+                            break
+
                 logger.info(
                     f"[{correlation_id}] MOTUS CHECK | "
                     f"Employee: {employee_number} | "
@@ -117,7 +126,9 @@ class DriverSyncService:
                     f"Action: {'PUT update' if driver_exists else 'POST create'}"
                 )
 
-                driver = self.builder.build_driver(employee_number, company_id)
+                driver = self.builder.build_driver(
+                    employee_number, company_id, existing_supervisor_name
+                )
 
                 # Handle dry_run mode
                 if dry_run:

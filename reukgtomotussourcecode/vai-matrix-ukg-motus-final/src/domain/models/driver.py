@@ -290,6 +290,7 @@ class MotusDriver:
         project_code: str = "",
         project_label: str = "",
         derived_status: str = "Active",
+        existing_supervisor_name: str = "",
     ) -> "MotusDriver":
         """
         Create MotusDriver from UKG data sources.
@@ -299,11 +300,12 @@ class MotusDriver:
             program_id: Motus program ID
             person: UKG person details
             employment_details: UKG employment details
-            supervisor_name: Supervisor full name
+            supervisor_name: Supervisor full name from UKG
             location: UKG location details
             project_code: Primary project code
             project_label: Primary project description
             derived_status: Derived employment status
+            existing_supervisor_name: Existing supervisor name from Motus (fallback)
 
         Returns:
             MotusDriver instance
@@ -378,12 +380,21 @@ class MotusDriver:
                 value=cls._to_iso_date(employment_details.get("dateOfTermination"))
             ),
 
-            # Manager/supervisor
-            CustomVariable(name="Manager Name", value=supervisor_name),
-
             # Derived status
             CustomVariable(name="Derived Status", value=derived_status),
         ]
+
+        # Determine final supervisor name: prefer UKG, fallback to existing Motus value
+        final_supervisor_name = (
+            supervisor_name.strip() if supervisor_name and supervisor_name.strip()
+            else (existing_supervisor_name.strip() if existing_supervisor_name else "")
+        )
+
+        # Only add Manager Name if we have a supervisor name
+        if final_supervisor_name:
+            custom_variables.append(
+                CustomVariable(name="Manager Name", value=final_supervisor_name)
+            )
 
         return cls(
             client_employee_id1=employee_number,

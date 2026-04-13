@@ -40,6 +40,7 @@ class DriverBuilderService:
         self,
         employee_number: str,
         company_id: str,
+        existing_supervisor_name: str = "",
     ) -> MotusDriver:
         """
         Build a Motus driver from UKG data.
@@ -47,6 +48,7 @@ class DriverBuilderService:
         Args:
             employee_number: UKG employee number
             company_id: UKG company ID
+            existing_supervisor_name: Existing supervisor name from Motus (fallback)
 
         Returns:
             MotusDriver instance
@@ -192,6 +194,7 @@ class DriverBuilderService:
             project_code=project_code,
             project_label=project_label,
             derived_status=derived_status.value,
+            existing_supervisor_name=existing_supervisor_name,
         )
 
         self._log(f"Employee {employee_number}: === FINAL DRIVER PAYLOAD SUMMARY ===")
