@@ -5,6 +5,7 @@ Handles parallel processing of employee batches with progress tracking.
 """
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -120,8 +121,17 @@ class BatchProcessor:
         total = len(items)
         result = BatchResult()
         progress = ProcessingProgress(total=total)
+        batch_start_time = time.time()
+        last_progress_time = batch_start_time
 
-        logger.info(f"{phase_name}: Starting with {total} items, {self.workers} workers")
+        if total == 0:
+            logger.info(f"{phase_name}: No items to process")
+            return result
+
+        logger.info(f"{phase_name}: Starting batch processing")
+        logger.info(f"  Items to process: {total}")
+        logger.info(f"  Worker threads: {self.workers}")
+        logger.info(f"  Progress interval: every {self.progress_interval} items")
 
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
             # Submit all tasks
@@ -153,21 +163,36 @@ class BatchProcessor:
                         progress.processed % self.progress_interval == 0
                         or progress.processed == total
                     ):
+                        current_time = time.time()
+                        elapsed = current_time - batch_start_time
+                        interval_elapsed = current_time - last_progress_time
+                        rate = progress.processed / elapsed if elapsed > 0 else 0
+                        pct = progress.percentage
+
                         logger.info(
-                            f"{phase_name} Progress: {progress.processed}/{total} | "
-                            f"saved={result.saved} skipped={result.skipped} errors={result.errors}"
+                            f"{phase_name} Progress: {progress.processed}/{total} ({pct:.1f}%) | "
+                            f"saved={result.saved} skipped={result.skipped} errors={result.errors} | "
+                            f"elapsed={elapsed:.1f}s rate={rate:.1f}/s"
                         )
+                        last_progress_time = current_time
 
                 except Exception as e:
                     result.errors += 1
                     progress.errors += 1
                     progress.processed += 1
-                    logger.error(f"{phase_name} error processing item: {e}")
+                    logger.error(f"{phase_name} unexpected error processing item: {type(e).__name__}: {e}")
 
-        logger.info(
-            f"{phase_name} Complete: saved={result.saved} skipped={result.skipped} "
-            f"errors={result.errors} dry_run={result.dry_run}"
-        )
+        # Final summary
+        batch_elapsed = time.time() - batch_start_time
+        final_rate = total / batch_elapsed if batch_elapsed > 0 else 0
+        success_count = result.saved + result.dry_run
+        success_rate = (success_count / total * 100) if total > 0 else 100
+
+        logger.info(f"{phase_name} COMPLETE:")
+        logger.info(f"  Duration: {batch_elapsed:.2f}s")
+        logger.info(f"  Throughput: {final_rate:.1f} items/sec")
+        logger.info(f"  Results: saved={result.saved} dry_run={result.dry_run} skipped={result.skipped} errors={result.errors}")
+        logger.info(f"  Success rate: {success_rate:.1f}% ({success_count}/{total})")
 
         return result
 

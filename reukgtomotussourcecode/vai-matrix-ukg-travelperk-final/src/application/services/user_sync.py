@@ -6,6 +6,7 @@ Orchestrates the two-phase sync process from UKG to TravelPerk.
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -69,6 +70,7 @@ class UserSyncService:
         emp_id = (employee.get("employeeID") or "").strip()
 
         if not emp_number or not emp_id:
+            logger.debug(f"Skipping employee with missing number or ID")
             return ("", "", "skipped", None)
 
         state = self.state_filter.fetch_person_state(emp_id)
@@ -76,25 +78,33 @@ class UserSyncService:
         # Filter by state
         if states_filter and state not in states_filter:
             if self.debug:
-                logger.debug(f"skip emp={emp_number} state={state}")
+                logger.debug(f"Employee {emp_number} skipped: state={state} not in filter")
             return (emp_number, state, "skipped", None)
 
         try:
             # Build user
+            if self.debug:
+                logger.debug(f"Building user payload for employee {emp_number}")
             user = self.user_builder.build_user(emp_number, settings.company_id)
 
             # Set manager if provided
             if supervisor_id:
                 user.manager_id = supervisor_id
+                if self.debug:
+                    logger.debug(f"Employee {emp_number}: assigned manager ID {supervisor_id}")
 
             # Save locally if requested
             if settings.save_local:
                 file_path = out_path / f"travelperk_user_{emp_number}.json"
                 with file_path.open("w", encoding="utf-8") as f:
                     json.dump(user.to_api_payload(), f, indent=2)
+                if self.debug:
+                    logger.debug(f"Employee {emp_number}: saved payload to {file_path}")
 
             # Upsert to TravelPerk
             if settings.dry_run:
+                if self.debug:
+                    logger.debug(f"Employee {emp_number}: dry-run mode, skipping API call")
                 return (emp_number, state, "dry_run", None)
 
             result = self.travelperk_client.upsert_user(
@@ -102,14 +112,24 @@ class UserSyncService:
                 include_manager=bool(supervisor_id),
             )
             travelperk_id = result.get("id")
+            action = result.get("action", "unknown")
+
+            if self.debug:
+                logger.debug(
+                    f"Employee {emp_number}: {action} -> TravelPerk ID {travelperk_id}"
+                )
 
             return (emp_number, state, "saved", travelperk_id)
 
         except (EmployeeNotFoundError, UserValidationError) as error:
-            logger.warning(f"employeeNumber={emp_number} skipped: {error}")
+            logger.warning(
+                f"Employee {emp_number} skipped due to validation: {error}"
+            )
             return (emp_number, state, "skipped", None)
         except Exception as error:
-            logger.warning(f"employeeNumber={emp_number} error: {repr(error)}")
+            logger.error(
+                f"Employee {emp_number} failed with error: {type(error).__name__}: {error}"
+            )
             return (emp_number, state, "error", None)
 
     def sync_batch(
@@ -135,15 +155,29 @@ class UserSyncService:
         Returns:
             Mapping of employeeNumber -> TravelPerk ID
         """
+        sync_start_time = time.time()
+
         out_path = Path(settings.out_dir).resolve()
         out_path.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Output directory: {out_path}")
 
         # Get supervisor mapping
+        logger.info("Fetching supervisor mapping from UKG...")
+        supervisor_fetch_start = time.time()
         supervisor_mapping = self.supervisor_service.fetch_supervisor_mapping()
+        supervisor_fetch_elapsed = time.time() - supervisor_fetch_start
+        logger.info(
+            f"Supervisor mapping fetched: {len(supervisor_mapping)} relationships "
+            f"in {supervisor_fetch_elapsed:.2f}s"
+        )
 
         # Split by supervisor status
         users_without_supervisor, users_with_supervisor = (
             self.supervisor_service.split_by_supervisor_status(supervisor_mapping)
+        )
+        logger.info(
+            f"Employee split: {len(users_without_supervisor)} without supervisor, "
+            f"{len(users_with_supervisor)} with supervisor"
         )
 
         # Initialize mapping with pre-inserted supervisors
@@ -172,8 +206,18 @@ class UserSyncService:
             items_phase1 = items_phase1[: settings.limit]
             items_phase2 = items_phase2[: settings.limit]
 
+        # Track phase results for summary
+        phase1_stats = {"saved": 0, "skipped": 0, "errors": 0}
+        phase2_stats = {"saved": 0, "skipped": 0, "errors": 0}
+
         # Phase 1: Insert users without supervisor
-        logger.info("=== PHASE 1: Inserting users without supervisor ===")
+        logger.info("=" * 60)
+        logger.info("PHASE 1: Inserting users WITHOUT supervisor")
+        logger.info(f"  Total users to process: {len(items_phase1)}")
+        logger.info(f"  Workers: {settings.workers}")
+        logger.info("=" * 60)
+
+        phase1_start = time.time()
         phase1_result = self._process_phase(
             items_phase1,
             states_filter,
@@ -182,10 +226,24 @@ class UserSyncService:
             supervisor_mapping=None,
             employee_to_travelperk_id=employee_to_travelperk_id,
         )
+        phase1_elapsed = time.time() - phase1_start
         employee_to_travelperk_id.update(phase1_result)
 
+        logger.info("-" * 60)
+        logger.info(f"PHASE 1 COMPLETED in {phase1_elapsed:.2f}s")
+        logger.info(f"  Users mapped: {len(phase1_result)}")
+        logger.info(f"  Throughput: {len(items_phase1) / phase1_elapsed:.1f} users/sec" if phase1_elapsed > 0 else "  Throughput: N/A")
+        logger.info("-" * 60)
+
         # Phase 2: Insert users with supervisor
-        logger.info("=== PHASE 2: Inserting users with supervisor ===")
+        logger.info("=" * 60)
+        logger.info("PHASE 2: Inserting users WITH supervisor")
+        logger.info(f"  Total users to process: {len(items_phase2)}")
+        logger.info(f"  Available supervisor mappings: {len(employee_to_travelperk_id)}")
+        logger.info(f"  Workers: {settings.workers}")
+        logger.info("=" * 60)
+
+        phase2_start = time.time()
         phase2_result = self._process_phase(
             items_phase2,
             states_filter,
@@ -194,9 +252,29 @@ class UserSyncService:
             supervisor_mapping=supervisor_mapping,
             employee_to_travelperk_id=employee_to_travelperk_id,
         )
+        phase2_elapsed = time.time() - phase2_start
         employee_to_travelperk_id.update(phase2_result)
 
-        logger.info(f"=== FINAL === Mapped {len(employee_to_travelperk_id)} employees")
+        logger.info("-" * 60)
+        logger.info(f"PHASE 2 COMPLETED in {phase2_elapsed:.2f}s")
+        logger.info(f"  Users mapped: {len(phase2_result)}")
+        logger.info(f"  Throughput: {len(items_phase2) / phase2_elapsed:.1f} users/sec" if phase2_elapsed > 0 else "  Throughput: N/A")
+        logger.info("-" * 60)
+
+        # Final summary
+        total_elapsed = time.time() - sync_start_time
+        total_processed = len(items_phase1) + len(items_phase2)
+
+        logger.info("=" * 60)
+        logger.info("SYNCHRONIZATION SUMMARY")
+        logger.info("=" * 60)
+        logger.info(f"  Total employees processed: {total_processed}")
+        logger.info(f"  Phase 1 (without supervisor): {len(items_phase1)} -> {len(phase1_result)} mapped")
+        logger.info(f"  Phase 2 (with supervisor): {len(items_phase2)} -> {len(phase2_result)} mapped")
+        logger.info(f"  Total employees mapped: {len(employee_to_travelperk_id)}")
+        logger.info(f"  Total sync duration: {total_elapsed:.2f}s")
+        logger.info(f"  Overall throughput: {total_processed / total_elapsed:.1f} users/sec" if total_elapsed > 0 else "  Overall throughput: N/A")
+        logger.info("=" * 60)
 
         return employee_to_travelperk_id
 

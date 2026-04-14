@@ -25,6 +25,20 @@ Environment (.env):
     DEBUG=1
 """
 
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load environment variables from .env file before any other imports
+# This ensures all settings modules can access the env vars
+_env_file = os.getenv("ENV_FILE", ".env")
+_env_path = Path(_env_file)
+if _env_path.exists():
+    load_dotenv(_env_path)
+elif Path(".env").exists():
+    load_dotenv(Path(".env"))
+
 from src.presentation.cli.batch_runner import main
 
 if __name__ == "__main__":

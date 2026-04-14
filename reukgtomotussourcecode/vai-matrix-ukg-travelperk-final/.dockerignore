@@ -30,7 +30,7 @@ ENV/
 *.swo
 *~
 
-# Testing
+# Testing (excluded from production builds)
 tests/
 *.test.py
 conftest.py
@@ -55,16 +55,15 @@ Thumbs.db
 *.log
 logs/
 
-# Local data
+# Local data (runtime data is mounted as volume)
 data/
 *.json
 *.csv
 
-# Docker
+# Docker configuration files
 Dockerfile*
 docker-compose*.yml
 .docker/
 
-# Scraping artifacts
-scraping/screenshots/
-scraping/*.png
+# Deprecated files (should be removed from codebase)
+deprecated/

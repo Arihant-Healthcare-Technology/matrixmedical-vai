@@ -29,13 +29,18 @@ services:
       - UKG_CUSTOMER_API_KEY=${UKG_CUSTOMER_API_KEY}
       - UKG_USERNAME=${UKG_USERNAME}
       - UKG_PASSWORD=${UKG_PASSWORD}
+      - UKG_BASIC_B64=${UKG_BASIC_B64:-}
       # TravelPerk Configuration
-      - TRAVELPERK_SCIM_BASE=${TRAVELPERK_SCIM_BASE}
-      - TRAVELPERK_SCIM_TOKEN=${TRAVELPERK_SCIM_TOKEN}
-      # Optional filters
+      - TRAVELPERK_API_BASE=${TRAVELPERK_API_BASE}
+      - TRAVELPERK_API_KEY=${TRAVELPERK_API_KEY}
+      # Batch Configuration
       - COMPANY_ID=${COMPANY_ID:-}
-      - STATES_FILTER=${STATES_FILTER:-}
+      - STATES=${STATES:-}
       - EMPLOYEE_TYPE_CODES=${EMPLOYEE_TYPE_CODES:-}
+      - WORKERS=${WORKERS:-12}
+      - DRY_RUN=${DRY_RUN:-0}
+      - SAVE_LOCAL=${SAVE_LOCAL:-0}
+      - MAX_RETRIES=${MAX_RETRIES:-2}
     volumes:
       - travelperk-data:/app/data:rw
     restart: unless-stopped

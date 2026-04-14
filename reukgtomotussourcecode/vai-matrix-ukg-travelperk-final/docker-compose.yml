@@ -100,9 +100,12 @@ services:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=DEBUG
       - UKG_BASE_URL=https://test.ultipro.com
+      - UKG_USERNAME=test_user
+      - UKG_PASSWORD=test_pass
       - UKG_CUSTOMER_API_KEY=test_key
-      - TRAVELPERK_SCIM_BASE=https://test.travelperk.com/scim
-      - TRAVELPERK_SCIM_TOKEN=test_token
+      - TRAVELPERK_API_BASE=https://app.sandbox-travelperk.com
+      - TRAVELPERK_API_KEY=test_token
+      - COMPANY_ID=TEST
     volumes:
       - ./src:/app/src:ro
       - ./common:/app/common:ro
