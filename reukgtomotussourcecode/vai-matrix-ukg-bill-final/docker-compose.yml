@@ -121,9 +121,6 @@ services:
       - ./config:/app/config:ro
       # Writable data directory
       - ./data:/app/data:rw
-      # Mount legacy scripts for testing
-      - ./run-bill-batch.py:/app/run-bill-batch.py:ro
-      - ./run-ap-batch.py:/app/run-ap-batch.py:ro
     networks:
       - integration-network
     profiles:

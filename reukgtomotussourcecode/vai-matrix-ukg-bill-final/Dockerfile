@@ -49,13 +49,6 @@ COPY src/ /app/src/
 COPY common/ /app/common/
 COPY config/ /app/config/
 
-# Copy legacy scripts (deprecated but still needed for backward compatibility)
-COPY build-bill-entity.py upsert-bill-entity.py run-bill-batch.py /app/
-COPY build-bill-invoice.py upsert-bill-invoice.py /app/
-COPY build-bill-vendor.py upsert-bill-vendor.py /app/
-COPY process-bill-payment.py run-ap-batch.py /app/
-COPY orchestrate_people_import.py /app/
-
 # Create data directories and non-root user (SOW requirement 9.5)
 RUN mkdir -p /app/data/batch /app/data/reports && \
     useradd -m -u 1000 -s /bin/bash appuser && \
@@ -182,5 +175,6 @@ USER appuser
 # Verify Playwright installation
 RUN python -c "from playwright.sync_api import sync_playwright; print('Playwright installed successfully')"
 
-ENTRYPOINT ["python3", "orchestrate_people_import.py"]
-CMD ["--help"]
+# Use the scraping CLI module as entry point
+ENTRYPOINT ["python3", "-m", "scraping.cli"]
+CMD []

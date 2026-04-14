@@ -380,15 +380,15 @@ class SyncService(EmployeeSyncService):
         Returns:
             BatchSyncResult with aggregate statistics.
         """
-        logger.info(
-            f"Fetching active employees from UKG "
-            f"(company_id={company_id}, page_size={page_size})"
-        )
-
         # Fetch all active employees
         employees = []
         page = 1
         page_size = 200
+
+        logger.info(
+            f"Fetching active employees from UKG "
+            f"(company_id={company_id}, page_size={page_size})"
+        )
 
         while True:
             batch = self.employee_repo.get_active_employees(

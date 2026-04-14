@@ -26,6 +26,40 @@ from src.presentation.cli.utils import (
 logger = logging.getLogger(__name__)
 
 
+def _print_startup_banner(container: Container, operation: str, workers: int = 12, dry_run: bool = False) -> None:
+    """Print startup banner showing credentials loaded from .env."""
+    settings = container.settings
+
+    print("\n" + "=" * 60)
+    print(f"  UKG → BILL.com S&E {operation}")
+    print("=" * 60)
+
+    # Show credential status
+    logger.info("STEP 1: Loading credentials from .env")
+
+    # UKG credentials status
+    ukg_configured = bool(settings.ukg_username or settings.ukg_basic_b64) and bool(settings.ukg_api_key)
+    ukg_method = "username + password" if settings.ukg_username else "basic_b64 token"
+    ukg_status = f"CONFIGURED ({ukg_method})" if ukg_configured else "NOT CONFIGURED"
+
+    # BILL credentials status
+    bill_configured = bool(settings.bill_api_token)
+    bill_status = "CONFIGURED (API token)" if bill_configured else "NOT CONFIGURED"
+
+    print(f"  Environment: {settings.environment}")
+    print(f"  UKG API:     {settings.ukg_api_base}")
+    print(f"  UKG Creds:   {ukg_status}")
+    print(f"  BILL API:    {settings.bill_api_base}")
+    print(f"  BILL Creds:  {bill_status}")
+    print(f"  Workers:     {workers}")
+    if dry_run:
+        print(f"  Mode:        DRY RUN (no changes)")
+    print("=" * 60 + "\n")
+
+    logger.info(f"  UKG credentials: {ukg_status}")
+    logger.info(f"  BILL credentials: {bill_status}")
+
+
 def run_sync_all(
     container: Container,
     company_id: Optional[str] = None,
@@ -46,30 +80,48 @@ def run_sync_all(
     Returns:
         Exit code (0 for success).
     """
+    # Print startup banner with credential status
+    _print_startup_banner(container, "Sync", workers=workers, dry_run=dry_run)
+
     logger.info("Starting full employee sync to BILL.com S&E")
     if company_id:
         logger.info(f"Filtering by company ID: {company_id}")
-    if dry_run:
-        logger.info("DRY RUN MODE - No changes will be made")
 
     try:
         role = BillRole.from_string(default_role)
-        sync_service = container.sync_service()
+
+        # STEP 2: Fetch employees from UKG
+        logger.info("=" * 60)
+        logger.info("STEP 2: Fetching employees from UKG")
+        logger.info("=" * 60)
+        if company_id:
+            logger.info(f"  Company ID: {company_id}")
 
         if dry_run:
             # In dry run, just fetch and report what would happen
             employee_repo = container.employee_repository()
             employees = list(employee_repo.get_active_employees(company_id=company_id))
-            logger.info(f"Would sync {len(employees)} employees")
+            logger.info(f"  Fetched {len(employees)} employees")
+            logger.info("DRY RUN MODE - No changes will be made")
             print_preview(employees, "employees to sync")
             return 0
 
-        # Run full sync
+        # STEP 3: Sync employees to BILL.com S&E
+        logger.info("=" * 60)
+        logger.info("STEP 3: Syncing employees to BILL.com S&E")
+        logger.info("=" * 60)
+
+        sync_service = container.sync_service()
         result = sync_service.sync_all(
             company_id=company_id,
             default_role=role,
             workers=workers,
         )
+
+        # STEP 4: Sync Complete
+        logger.info("=" * 60)
+        logger.info("STEP 4: Sync Complete")
+        logger.info("=" * 60)
 
         print_sync_result(result)
         return 0 if result.errors == 0 else 1
@@ -115,28 +167,44 @@ def run_sync_batch(
     Returns:
         Exit code (0 for success).
     """
+    # Print startup banner with credential status
+    _print_startup_banner(container, "Batch Sync", workers=workers, dry_run=dry_run)
+
     logger.info(f"Starting batch sync from file: {employee_file}")
-    if dry_run:
-        logger.info("DRY RUN MODE - No changes will be made")
 
     try:
-        # Load employees from file
+        # STEP 2: Load employees from file
+        logger.info("=" * 60)
+        logger.info("STEP 2: Loading employees from file")
+        logger.info("=" * 60)
+        logger.info(f"  File: {employee_file}")
+
         employees = _load_employees_from_file(employee_file)
-        logger.info(f"Loaded {len(employees)} employees from file")
+        logger.info(f"  Loaded {len(employees)} employees from file")
 
         if dry_run:
+            logger.info("DRY RUN MODE - No changes will be made")
             print_preview(employees, "employees to sync")
             return 0
+
+        # STEP 3: Sync employees to BILL.com S&E
+        logger.info("=" * 60)
+        logger.info("STEP 3: Syncing employees to BILL.com S&E")
+        logger.info("=" * 60)
 
         role = BillRole.from_string(default_role)
         sync_service = container.sync_service()
 
-        # Run batch sync
         result = sync_service.sync_batch(
             employees=employees,
             default_role=role,
             workers=workers,
         )
+
+        # STEP 4: Sync Complete
+        logger.info("=" * 60)
+        logger.info("STEP 4: Sync Complete")
+        logger.info("=" * 60)
 
         print_sync_result(result)
         return 0 if result.errors == 0 else 1
@@ -185,21 +253,50 @@ def run_export_csv(
     Returns:
         Exit code (0 for success).
     """
+    # Print startup banner (only UKG credentials needed for export)
+    print("\n" + "=" * 60)
+    print("  UKG → CSV Export")
+    print("=" * 60)
+
+    settings = container.settings
+    ukg_configured = bool(settings.ukg_username or settings.ukg_basic_b64) and bool(settings.ukg_api_key)
+    ukg_method = "username + password" if settings.ukg_username else "basic_b64 token"
+    ukg_status = f"CONFIGURED ({ukg_method})" if ukg_configured else "NOT CONFIGURED"
+
+    print(f"  Environment: {settings.environment}")
+    print(f"  UKG API:     {settings.ukg_api_base}")
+    print(f"  UKG Creds:   {ukg_status}")
+    print(f"  Output:      {output_path}")
+    print("=" * 60 + "\n")
+
+    logger.info("STEP 1: Loading credentials from .env")
+    logger.info(f"  UKG credentials: {ukg_status}")
+
     logger.info(f"Exporting employees to CSV: {output_path}")
     if company_id:
         logger.info(f"Filtering by company ID: {company_id}")
 
     try:
-        # Fetch employees
+        # STEP 2: Fetch employees from UKG
+        logger.info("=" * 60)
+        logger.info("STEP 2: Fetching employees from UKG")
+        logger.info("=" * 60)
+        if company_id:
+            logger.info(f"  Company ID: {company_id}")
+
         employee_repo = container.employee_repository()
         employees = list(employee_repo.get_active_employees(company_id=company_id))
-        logger.info(f"Found {len(employees)} employees to export")
+        logger.info(f"  Fetched {len(employees)} employees")
 
         if not employees:
             logger.warning("No employees found")
             return 0
 
-        # Convert to BILL users for CSV format
+        # STEP 3: Convert and write CSV
+        logger.info("=" * 60)
+        logger.info("STEP 3: Converting and writing CSV")
+        logger.info("=" * 60)
+
         from src.infrastructure.adapters.bill.mappers import map_employee_to_bill_user
 
         bill_users = []
@@ -233,7 +330,11 @@ def run_export_csv(
                     del row["manager"]
                 writer.writerow(row)
 
-        logger.info(f"Exported {len(bill_users)} users to {output_path}")
+        # STEP 4: Export Complete
+        logger.info("=" * 60)
+        logger.info("STEP 4: Export Complete")
+        logger.info("=" * 60)
+        logger.info(f"  Exported {len(bill_users)} users to {output_path}")
         return 0
 
     except ValueError as e:
