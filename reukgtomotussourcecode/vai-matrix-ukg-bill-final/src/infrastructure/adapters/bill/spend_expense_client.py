@@ -113,11 +113,19 @@ class SpendExpenseClient(BillClient):
             Created user dict
         """
         email = payload.get("email", "unknown")
-        logger.info(f"BILL S&E creating user: email={email}")
+        role = payload.get("role", "N/A")
+        cost_center = payload.get("costCenter", "N/A")
+        logger.info(
+            f"API request: POST /users, email={email}, role={role}, "
+            f"cost_center={cost_center}"
+        )
         response = self._http.post("/users", json=payload, timeout=BATCH_TIMEOUT)
         result = self._handle_response(response, [200, 201])
         user_id = result.get("uuid") or result.get("id")
-        logger.info(f"BILL S&E user created: id={user_id} email={email}")
+        logger.info(
+            f"API response: status={response.status_code}, "
+            f"user_id={user_id}, email={email}"
+        )
         return result
 
     def update_user(self, user_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -131,10 +139,17 @@ class SpendExpenseClient(BillClient):
         Returns:
             Updated user dict
         """
-        logger.info(f"BILL S&E updating user: id={user_id}")
+        fields = list(payload.keys())
+        logger.info(
+            f"API request: PATCH /users/{user_id}, fields={fields}"
+        )
         response = self._http.patch(f"/users/{user_id}", json=payload)
         result = self._handle_response(response, [200, 204])
-        logger.info(f"BILL S&E user updated: id={user_id}")
+        response_id = result.get("uuid") or result.get("id") if result else user_id
+        logger.info(
+            f"API response: status={response.status_code}, "
+            f"user_id={response_id}, updated_fields={fields}"
+        )
         return result
 
     def retire_user(self, user_id: str) -> bool:
@@ -149,10 +164,13 @@ class SpendExpenseClient(BillClient):
         Returns:
             True if retired successfully
         """
-        logger.info(f"BILL S&E retiring user: id={user_id}")
+        logger.info(f"API request: DELETE /users/{user_id}")
         response = self._http.delete(f"/users/{user_id}")
         self._handle_response(response, [200, 204])
-        logger.info(f"BILL S&E user retired: id={user_id}")
+        logger.info(
+            f"API response: status={response.status_code}, "
+            f"user_id={user_id}, action=retired"
+        )
         return True
 
     def get_all_users(self) -> List[Dict[str, Any]]:

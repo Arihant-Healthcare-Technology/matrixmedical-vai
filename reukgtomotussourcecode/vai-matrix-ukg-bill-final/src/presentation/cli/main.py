@@ -299,40 +299,59 @@ def main(argv: Optional[list] = None) -> int:
             )
 
         elif args.command == "ap":
-            if args.ap_command == "vendors":
-                return run_vendor_sync(
-                    container=container,
-                    vendor_file=args.file,
-                    workers=args.workers,
-                    dry_run=args.dry_run,
-                )
-            elif args.ap_command == "invoices":
-                return run_invoice_sync(
-                    container=container,
-                    invoice_file=args.file,
-                    vendor_mapping_file=args.vendor_mapping,
-                    workers=args.workers,
-                    dry_run=args.dry_run,
-                )
-            elif args.ap_command == "payments":
-                return run_payment_process(
-                    container=container,
-                    invoice_ids=args.invoice_ids,
-                    pay_all_approved=args.pay_all_approved,
-                    funding_account_id=args.funding_account,
-                    dry_run=args.dry_run,
-                )
-            elif args.ap_command == "batch":
-                return run_ap_batch(
-                    container=container,
-                    include_vendors=args.vendors,
-                    include_invoices=args.invoices,
-                    include_payments=args.payments,
-                    data_dir=args.data_dir,
-                    dry_run=args.dry_run,
-                )
-            else:
-                parser.error("ap requires a subcommand (vendors, invoices, payments, batch)")
+            # ============================================================
+            # TEMPORARILY DISABLED: BILL.com Accounts Payable API calls
+            # To re-enable, uncomment the code below and remove this block
+            # ============================================================
+            logger.warning("BILL.com Accounts Payable (AP) commands are temporarily disabled")
+            print("\n" + "=" * 60)
+            print("  BILL.com AP API calls are TEMPORARILY DISABLED")
+            print("=" * 60)
+            print("\nThe following AP commands are currently disabled:")
+            print("  - ap vendors   : Vendor synchronization")
+            print("  - ap invoices  : Invoice/bill synchronization")
+            print("  - ap payments  : Payment processing")
+            print("  - ap batch     : Full AP batch operations")
+            print("\nTo re-enable, edit: src/presentation/cli/main.py")
+            print("=" * 60 + "\n")
+            return 0
+
+            # --- DISABLED AP COMMANDS (DO NOT REMOVE) ---
+            # if args.ap_command == "vendors":
+            #     return run_vendor_sync(
+            #         container=container,
+            #         vendor_file=args.file,
+            #         workers=args.workers,
+            #         dry_run=args.dry_run,
+            #     )
+            # elif args.ap_command == "invoices":
+            #     return run_invoice_sync(
+            #         container=container,
+            #         invoice_file=args.file,
+            #         vendor_mapping_file=args.vendor_mapping,
+            #         workers=args.workers,
+            #         dry_run=args.dry_run,
+            #     )
+            # elif args.ap_command == "payments":
+            #     return run_payment_process(
+            #         container=container,
+            #         invoice_ids=args.invoice_ids,
+            #         pay_all_approved=args.pay_all_approved,
+            #         funding_account_id=args.funding_account,
+            #         dry_run=args.dry_run,
+            #     )
+            # elif args.ap_command == "batch":
+            #     return run_ap_batch(
+            #         container=container,
+            #         include_vendors=args.vendors,
+            #         include_invoices=args.invoices,
+            #         include_payments=args.payments,
+            #         data_dir=args.data_dir,
+            #         dry_run=args.dry_run,
+            #     )
+            # else:
+            #     parser.error("ap requires a subcommand (vendors, invoices, payments, batch)")
+            # --- END DISABLED AP COMMANDS ---
 
         elif args.command == "status":
             return check_status(

@@ -269,6 +269,157 @@ class Settings(BaseSettings):
         """Get notification settings."""
         return NotificationSettings()
 
+    # =========================================================================
+    # Backward-compatible flat property accessors
+    # =========================================================================
+
+    @property
+    def ukg_api_base(self) -> str:
+        """UKG API base URL (backward compatible)."""
+        return self.ukg.base_url
+
+    @property
+    def ukg_username(self) -> str:
+        """UKG username (backward compatible)."""
+        return self.ukg.username
+
+    @property
+    def ukg_password(self) -> str:
+        """UKG password (backward compatible)."""
+        return self.ukg.password.get_secret_value()
+
+    @property
+    def ukg_api_key(self) -> str:
+        """UKG Customer API key (backward compatible)."""
+        return self.ukg.customer_api_key.get_secret_value()
+
+    @property
+    def ukg_basic_b64(self) -> Optional[str]:
+        """UKG Basic auth token (backward compatible)."""
+        return self.ukg.basic_auth_token
+
+    @property
+    def ukg_company_id(self) -> str:
+        """UKG company ID (backward compatible)."""
+        return self.ukg.company_id
+
+    @property
+    def bill_api_base(self) -> str:
+        """BILL API base URL (backward compatible)."""
+        return self.bill.se_api_base
+
+    @property
+    def bill_api_token(self) -> str:
+        """BILL API token (backward compatible)."""
+        return self.bill.api_token.get_secret_value()
+
+    @property
+    def bill_org_id(self) -> str:
+        """BILL org ID (backward compatible)."""
+        import os
+        return os.getenv("BILL_ORG_ID", "")
+
+    @property
+    def bill_default_funding_account(self) -> Optional[str]:
+        """BILL default funding account (backward compatible)."""
+        import os
+        return os.getenv("BILL_DEFAULT_FUNDING_ACCOUNT")
+
+    @property
+    def rate_limit_calls_per_minute(self) -> int:
+        """Rate limit (backward compatible)."""
+        return self.bill.rate_limit
+
+
+def _mask_secret(value: str, visible_chars: int = 4) -> str:
+    """Mask a secret value, showing only last few characters."""
+    if not value:
+        return "(not set)"
+    if len(value) <= visible_chars:
+        return "*" * len(value)
+    return "*" * (len(value) - visible_chars) + value[-visible_chars:]
+
+
+def validate_and_log_settings(settings: Settings) -> dict:
+    """
+    Validate settings and log configuration status.
+
+    Returns a dict with validation results.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    results = {
+        "ukg_configured": False,
+        "bill_configured": False,
+        "errors": [],
+        "warnings": [],
+    }
+
+    # Check UKG settings
+    logger.info("=" * 60)
+    logger.info("Configuration Validation")
+    logger.info("=" * 60)
+
+    logger.info("UKG Pro API Configuration:")
+    logger.info(f"  Base URL: {settings.ukg_api_base}")
+    logger.info(f"  Username: {settings.ukg_username or '(not set)'}")
+    logger.info(f"  Password: {_mask_secret(settings.ukg_password)}")
+    logger.info(f"  API Key: {_mask_secret(settings.ukg_api_key)}")
+    logger.info(f"  Basic B64: {_mask_secret(settings.ukg_basic_b64 or '')}")
+    logger.info(f"  Company ID: {settings.ukg_company_id or '(not set)'}")
+
+    if not settings.ukg_username and not settings.ukg_basic_b64:
+        results["errors"].append("UKG: Missing username or basic_b64 token")
+    elif not settings.ukg_password and not settings.ukg_basic_b64:
+        results["errors"].append("UKG: Missing password or basic_b64 token")
+    elif not settings.ukg_api_key:
+        results["errors"].append("UKG: Missing customer_api_key")
+    else:
+        results["ukg_configured"] = True
+        logger.info("  Status: CONFIGURED")
+
+    if not results["ukg_configured"]:
+        logger.warning("  Status: NOT CONFIGURED - Missing required credentials")
+
+    # Check BILL settings
+    logger.info("")
+    logger.info("BILL.com API Configuration:")
+    logger.info(f"  S&E API Base: {settings.bill_api_base}")
+    logger.info(f"  API Token: {_mask_secret(settings.bill_api_token)}")
+    logger.info(f"  Org ID: {settings.bill_org_id or '(not set)'}")
+    logger.info(f"  Rate Limit: {settings.rate_limit_calls_per_minute} calls/min")
+
+    if not settings.bill_api_token:
+        results["errors"].append("BILL: Missing api_token")
+    else:
+        results["bill_configured"] = True
+        logger.info("  Status: CONFIGURED")
+
+    if not results["bill_configured"]:
+        logger.warning("  Status: NOT CONFIGURED - Missing required credentials")
+
+    # Summary
+    logger.info("")
+    logger.info("Configuration Summary:")
+    logger.info(f"  Environment: {settings.environment}")
+    logger.info(f"  Debug Mode: {settings.debug}")
+    logger.info(f"  Batch Workers: {settings.batch_workers}")
+
+    if results["errors"]:
+        logger.error("Configuration Errors:")
+        for error in results["errors"]:
+            logger.error(f"  - {error}")
+
+    if results["warnings"]:
+        logger.warning("Configuration Warnings:")
+        for warning in results["warnings"]:
+            logger.warning(f"  - {warning}")
+
+    logger.info("=" * 60)
+
+    return results
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

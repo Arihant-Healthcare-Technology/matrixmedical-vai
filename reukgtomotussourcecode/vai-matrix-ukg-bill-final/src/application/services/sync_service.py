@@ -78,6 +78,9 @@ class SyncService(EmployeeSyncService):
         try:
             # Validate employee has required data
             if not employee.email:
+                logger.warning(
+                    f"Employee {employee.employee_number} skipped: missing email address"
+                )
                 return SyncResult(
                     success=False,
                     action="error",
@@ -88,6 +91,9 @@ class SyncService(EmployeeSyncService):
 
             # Check if user already exists in BILL
             existing_user = self.bill_user_repo.get_by_email(employee.email)
+            logger.info(
+                f"User lookup for {employee.email}: exists={existing_user is not None}"
+            )
 
             # Resolve supervisor email
             supervisor_email = self.resolve_supervisor_email(employee)
@@ -107,7 +113,10 @@ class SyncService(EmployeeSyncService):
                 return self._create_user(bill_user, employee)
 
         except Exception as e:
-            logger.error(f"Error syncing employee {employee.employee_id}: {e}")
+            logger.error(
+                f"Employee sync failed: {employee.employee_number} ({employee.email}): {e}",
+                exc_info=True,
+            )
             return SyncResult(
                 success=False,
                 action="error",
@@ -122,9 +131,15 @@ class SyncService(EmployeeSyncService):
     def _create_user(self, bill_user: BillUser, employee: Employee) -> SyncResult:
         """Create a new BILL user."""
         try:
+            logger.info(
+                f"Creating BILL user: {bill_user.email}, "
+                f"role={bill_user.role.value if bill_user.role else 'None'}, "
+                f"cost_center={bill_user.cost_center}"
+            )
             created = self.bill_user_repo.create(bill_user)
             logger.info(
-                f"Created BILL user: {created.email} (ID: {created.id})"
+                f"Employee synced: {employee.employee_number} → {created.email} "
+                f"(action=create, id={created.id})"
             )
             return SyncResult(
                 success=True,
@@ -137,7 +152,10 @@ class SyncService(EmployeeSyncService):
                 },
             )
         except Exception as e:
-            logger.error(f"Failed to create user {bill_user.email}: {e}")
+            logger.error(
+                f"Failed to create user {bill_user.email}: {e}",
+                exc_info=True,
+            )
             return SyncResult(
                 success=False,
                 action="error",
@@ -156,7 +174,10 @@ class SyncService(EmployeeSyncService):
         try:
             # Check if update is needed
             if self._users_match(existing, updated):
-                logger.debug(f"User {existing.email} unchanged, skipping")
+                logger.info(
+                    f"Employee synced: {employee.employee_number} → {existing.email} "
+                    f"(action=skip, no changes)"
+                )
                 return SyncResult(
                     success=True,
                     action="skip",
@@ -168,9 +189,20 @@ class SyncService(EmployeeSyncService):
             # Preserve existing ID
             updated.id = existing.id
 
+            # Log field changes
+            changes = self._get_changes(existing, updated)
+            changes_str = ", ".join(
+                f"{field}: '{change['old']}' → '{change['new']}'"
+                for field, change in changes.items()
+            )
+            logger.info(f"Changes detected for {existing.email}: {changes_str}")
+
             # Update user
             result = self.bill_user_repo.update(updated)
-            logger.info(f"Updated BILL user: {result.email}")
+            logger.info(
+                f"Employee synced: {employee.employee_number} → {result.email} "
+                f"(action=update, id={result.id})"
+            )
             return SyncResult(
                 success=True,
                 action="update",
@@ -178,11 +210,14 @@ class SyncService(EmployeeSyncService):
                 message=f"Updated user {result.email}",
                 details={
                     "employee_number": employee.employee_number,
-                    "changes": self._get_changes(existing, updated),
+                    "changes": changes,
                 },
             )
         except Exception as e:
-            logger.error(f"Failed to update user {existing.email}: {e}")
+            logger.error(
+                f"Failed to update user {existing.email}: {e}",
+                exc_info=True,
+            )
             return SyncResult(
                 success=False,
                 action="error",
@@ -262,6 +297,15 @@ class SyncService(EmployeeSyncService):
             return result
 
         # Process in parallel with thread pool
+        total_employees = len(employees)
+        completed_count = 0
+        progress_interval = max(1, total_employees // 10)  # Log every 10%
+
+        logger.info(
+            f"Starting batch sync: {total_employees} employees, {workers} workers "
+            f"[correlation_id={correlation_id}]"
+        )
+
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(self.sync_employee, emp, default_role): emp
@@ -270,6 +314,8 @@ class SyncService(EmployeeSyncService):
 
             for future in as_completed(futures):
                 employee = futures[future]
+                completed_count += 1
+
                 try:
                     sync_result = future.result()
                     result.results.append(sync_result)
@@ -284,7 +330,10 @@ class SyncService(EmployeeSyncService):
                         result.errors += 1
 
                 except Exception as e:
-                    logger.error(f"Unexpected error syncing {employee.email}: {e}")
+                    logger.error(
+                        f"Unexpected error syncing {employee.email}: {e}",
+                        exc_info=True,
+                    )
                     result.errors += 1
                     result.results.append(
                         SyncResult(
@@ -293,6 +342,15 @@ class SyncService(EmployeeSyncService):
                             entity_id=employee.employee_id,
                             message=str(e),
                         )
+                    )
+
+                # Log progress at intervals
+                if completed_count % progress_interval == 0 or completed_count == total_employees:
+                    percentage = (completed_count / total_employees) * 100
+                    logger.info(
+                        f"Sync progress: {completed_count}/{total_employees} ({percentage:.0f}%) "
+                        f"[created={result.created}, updated={result.updated}, "
+                        f"skipped={result.skipped}, errors={result.errors}]"
                     )
 
         result.end_time = datetime.now()
@@ -322,7 +380,10 @@ class SyncService(EmployeeSyncService):
         Returns:
             BatchSyncResult with aggregate statistics.
         """
-        logger.info(f"Fetching active employees from UKG (company_id={company_id})")
+        logger.info(
+            f"Fetching active employees from UKG "
+            f"(company_id={company_id}, page_size={page_size})"
+        )
 
         # Fetch all active employees
         employees = []
@@ -345,12 +406,20 @@ class SyncService(EmployeeSyncService):
             ]
             employees.extend(active_batch)
 
+            logger.info(
+                f"Fetched page {page}: {len(batch)} employees "
+                f"({len(active_batch)} active, total so far: {len(employees)})"
+            )
+
             if len(batch) < page_size:
                 break
 
             page += 1
 
-        logger.info(f"Found {len(employees)} active employees to sync")
+        logger.info(
+            f"UKG fetch complete: {len(employees)} active employees found "
+            f"(from {page} page(s))"
+        )
 
         return self.sync_batch(employees, default_role, workers)
 
@@ -371,22 +440,36 @@ class SyncService(EmployeeSyncService):
         """
         # Strategy 1: Direct email field
         if employee.supervisor_email:
-            logger.debug(f"Found supervisor email directly: {employee.supervisor_email}")
+            logger.debug(
+                f"Supervisor resolved for {employee.email}: "
+                f"{employee.supervisor_email} (strategy=direct)"
+            )
             return employee.supervisor_email
 
         # Strategy 2: Supervisor ID -> person details
         if employee.supervisor_id:
             email = self._lookup_supervisor_by_id(employee.supervisor_id)
             if email:
+                logger.debug(
+                    f"Supervisor resolved for {employee.email}: "
+                    f"{email} (strategy=id_lookup)"
+                )
                 return email
 
         # Strategy 3: Supervisor employee number -> employment -> person details
         if employee.supervisor_number:
             email = self._lookup_supervisor_by_number(employee.supervisor_number)
             if email:
+                logger.debug(
+                    f"Supervisor resolved for {employee.email}: "
+                    f"{email} (strategy=number_lookup)"
+                )
                 return email
 
-        logger.debug(f"Could not resolve supervisor for employee {employee.employee_id}")
+        logger.debug(
+            f"Supervisor not found for {employee.email} "
+            f"(employee_id={employee.employee_id})"
+        )
         return None
 
     def _lookup_supervisor_by_id(self, supervisor_id: str) -> Optional[str]:

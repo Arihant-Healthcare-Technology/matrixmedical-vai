@@ -10,7 +10,7 @@ import time
 import threading
 from typing import Any, Callable, Dict, Optional
 
-from src.infrastructure.config.settings import Settings, get_settings
+from src.infrastructure.config.settings import Settings, get_settings, validate_and_log_settings
 
 
 logger = logging.getLogger(__name__)
@@ -48,15 +48,33 @@ class Container:
     Manages creation and lifecycle of service instances.
     """
 
-    def __init__(self, settings: Optional[Settings] = None):
+    def __init__(self, settings: Optional[Settings] = None, validate: bool = True):
         """
         Initialize container.
 
         Args:
             settings: Application settings. Uses default if not provided.
+            validate: Whether to validate and log settings on init.
         """
         self.settings = settings or get_settings()
         self._instances: Dict[str, Any] = {}
+        self._config_validated = False
+
+        if validate:
+            self._validate_config()
+
+    def _validate_config(self) -> None:
+        """Validate and log configuration."""
+        if not self._config_validated:
+            logger.info("Initializing container with settings from .env")
+            self._config_results = validate_and_log_settings(self.settings)
+            self._config_validated = True
+
+            if self._config_results["errors"]:
+                logger.warning(
+                    f"Configuration has {len(self._config_results['errors'])} error(s). "
+                    "Some operations may fail."
+                )
 
     def _get_or_create(self, key: str, factory: Callable) -> Any:
         """Get cached instance or create new one."""
@@ -80,12 +98,34 @@ class Container:
         """Get UKG API client."""
         def factory():
             from src.infrastructure.adapters.ukg.client import UKGClient
-            return UKGClient(
+
+            # Validate UKG credentials
+            if not self.settings.ukg_username and not self.settings.ukg_basic_b64:
+                logger.error("UKG credentials not configured: UKG_USERNAME or UKG_BASIC_B64 required")
+                raise ValueError(
+                    "UKG credentials not configured. "
+                    "Please set UKG_USERNAME and UKG_PASSWORD, or UKG_BASIC_B64 in your .env file"
+                )
+
+            if not self.settings.ukg_api_key:
+                logger.error("UKG API key not configured: UKG_CUSTOMER_API_KEY required")
+                raise ValueError(
+                    "UKG API key not configured. "
+                    "Please set UKG_CUSTOMER_API_KEY in your .env file"
+                )
+
+            logger.info(
+                f"Creating UKG client: base_url={self.settings.ukg_api_base}, "
+                f"username={self.settings.ukg_username or '(using basic_b64)'}"
+            )
+            client = UKGClient(
                 base_url=self.settings.ukg_api_base,
                 username=self.settings.ukg_username,
                 password=self.settings.ukg_password,
                 api_key=self.settings.ukg_api_key,
             )
+            logger.info("UKG client initialized successfully")
+            return client
         return self._get_or_create("ukg_client", factory)
 
     def employee_repository(self):
@@ -101,23 +141,60 @@ class Container:
         """Get BILL.com base client."""
         def factory():
             from src.infrastructure.adapters.bill.client import BillClient
-            return BillClient(
+
+            # Validate BILL credentials
+            if not self.settings.bill_api_token:
+                logger.error("BILL.com API token not configured: BILL_API_TOKEN required")
+                raise ValueError(
+                    "BILL.com API token not configured. "
+                    "Please set BILL_API_TOKEN in your .env file"
+                )
+
+            logger.info(
+                f"Creating BILL client: base_url={self.settings.bill_api_base}, "
+                f"org_id={self.settings.bill_org_id or '(not set)'}"
+            )
+            client = BillClient(
                 base_url=self.settings.bill_api_base,
                 api_token=self.settings.bill_api_token,
                 org_id=self.settings.bill_org_id,
             )
+            logger.info("BILL client initialized successfully")
+            return client
         return self._get_or_create("bill_client", factory)
 
     def spend_expense_client(self):
         """Get BILL.com Spend & Expense client."""
         def factory():
-            from src.infrastructure.adapters.bill.spend_expense import SpendExpenseClient
-            return SpendExpenseClient(
-                base_url=self.settings.bill_api_base,
-                api_token=self.settings.bill_api_token,
-                org_id=self.settings.bill_org_id,
+            from src.infrastructure.adapters.bill.spend_expense_client import SpendExpenseClient
+
+            # Validate BILL credentials
+            if not self.settings.bill_api_token:
+                logger.error("BILL.com API token not configured: BILL_API_TOKEN required")
+                raise ValueError(
+                    "BILL.com API token not configured. "
+                    "Please set BILL_API_TOKEN in your .env file"
+                )
+
+            logger.info(
+                f"Creating BILL S&E client: base_url={self.settings.bill_api_base}"
             )
+            client = SpendExpenseClient(
+                api_base=self.settings.bill_api_base,
+                api_token=self.settings.bill_api_token,
+            )
+            logger.info("BILL S&E client initialized successfully")
+            return client
         return self._get_or_create("spend_expense_client", factory)
+
+    def bill_user_repository(self):
+        """Get BILL.com user repository (uses S&E client)."""
+        def factory():
+            from src.infrastructure.adapters.bill.spend_expense import BillUserRepositoryImpl
+            client = self.spend_expense_client()
+            logger.info("Creating BILL user repository")
+            return BillUserRepositoryImpl(client=client)
+        return self._get_or_create("bill_user_repository", factory)
 
     def accounts_payable_client(self):
         """Get BILL.com Accounts Payable client."""
@@ -136,9 +213,10 @@ class Container:
         """Get employee sync service."""
         def factory():
             from src.application.services.sync_service import SyncService
+            logger.info("Creating sync service with employee and BILL user repositories")
             return SyncService(
                 employee_repository=self.employee_repository(),
-                bill_user_repository=self.spend_expense_client(),
+                bill_user_repository=self.bill_user_repository(),
                 rate_limiter=self.rate_limiter().acquire,
             )
         return self._get_or_create("sync_service", factory)

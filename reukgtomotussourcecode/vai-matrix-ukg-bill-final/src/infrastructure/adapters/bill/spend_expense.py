@@ -64,16 +64,20 @@ class BillUserRepositoryImpl(BillUserRepository):
         email_lower = email.lower().strip()
         if email_lower in self._email_cache:
             user_id = self._email_cache[email_lower]
+            logger.debug(f"Email cache hit: {email} → user_id={user_id}")
             return self.get_by_id(user_id)
 
         # Search via API
+        logger.debug(f"Email cache miss: {email}, searching API")
         data = self._client.get_user_by_email(email)
         if data:
             user = BillUser.from_bill_api(data)
             if user.id:
                 self._email_cache[email_lower] = user.id
+                logger.debug(f"Email cache populated: {email} → {user.id}")
             return user
 
+        logger.debug(f"User not found in BILL.com: {email}")
         return None
 
     def get_active_users(self) -> List[BillUser]:
@@ -260,11 +264,17 @@ class BillUserRepositoryImpl(BillUserRepository):
 
         Useful before batch operations to reduce API calls.
         """
+        logger.info("Building email cache from BILL.com users...")
         all_users = self._client.get_all_users()
+        cached_count = 0
         for data in all_users:
             email = data.get("email", "").lower().strip()
             user_id = data.get("id") or data.get("uuid")
             if email and user_id:
                 self._email_cache[email] = user_id
+                cached_count += 1
 
-        logger.info(f"Built email cache with {len(self._email_cache)} entries")
+        logger.info(
+            f"Email cache built: {cached_count} users cached "
+            f"(from {len(all_users)} total users)"
+        )

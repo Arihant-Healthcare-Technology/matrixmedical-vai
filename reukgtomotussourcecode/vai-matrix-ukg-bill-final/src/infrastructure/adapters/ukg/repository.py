@@ -51,9 +51,12 @@ class UKGEmployeeRepository(EmployeeRepository):
         Returns:
             Employee if found, None otherwise
         """
+        logger.debug(f"UKG API: Looking up employee by ID: {entity_id}")
+
         # First, get person details
         person = self._client.get_person_details(entity_id)
         if not person:
+            logger.debug(f"UKG API: Employee not found by ID: {entity_id}")
             return None
 
         # Try to find employment details
@@ -63,9 +66,16 @@ class UKGEmployeeRepository(EmployeeRepository):
         if employee_number and company_id:
             employment = self._client.get_employment_details(employee_number, company_id)
             if employment:
-                return Employee.from_ukg(employment, person)
+                employee = Employee.from_ukg(employment, person)
+                logger.debug(
+                    f"UKG API: Employee found: {employee_number}, email={employee.email}"
+                )
+                return employee
 
         # Return basic employee from person data only
+        logger.debug(
+            f"UKG API: Returning partial employee data for {entity_id}"
+        )
         return Employee(
             employee_id=entity_id,
             employee_number=person.get("employeeNumber", ""),
@@ -91,14 +101,22 @@ class UKGEmployeeRepository(EmployeeRepository):
             Employee if found, None otherwise
         """
         cid = self._get_company_id(company_id)
+        logger.debug(f"Fetching UKG employee: {employee_number} from company {cid}")
 
         try:
             full_data = self._client.get_employee_full_data(employee_number, cid)
-            return Employee.from_ukg(
+            employee = Employee.from_ukg(
                 full_data["employment"],
                 full_data.get("person"),
             )
+            logger.debug(
+                f"Employee fetched: {employee_number}, "
+                f"status={employee.status.value if employee.status else 'unknown'}, "
+                f"email={employee.email}"
+            )
+            return employee
         except ValueError:
+            logger.debug(f"Employee not found in UKG: {employee_number}")
             return None
 
     def get_by_email(self, email: str) -> Optional[Employee]:
@@ -160,6 +178,10 @@ class UKGEmployeeRepository(EmployeeRepository):
             List of active employees
         """
         cid = company_id or self._default_company_id
+        logger.debug(
+            f"UKG API: Fetching active employees "
+            f"(company_id={cid}, page={page}, page_size={page_size})"
+        )
 
         active_data = self._client.list_active_employees(
             company_id=cid,
@@ -173,6 +195,9 @@ class UKGEmployeeRepository(EmployeeRepository):
             person = self._get_cached_person(emp_id) if emp_id else None
             employees.append(Employee.from_ukg(emp_data, person))
 
+        logger.debug(
+            f"UKG API: Fetched {len(employees)} employees from page {page}"
+        )
         return employees
 
     def get_employees_with_supervisor(

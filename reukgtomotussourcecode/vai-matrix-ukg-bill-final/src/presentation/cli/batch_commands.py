@@ -74,8 +74,24 @@ def run_sync_all(
         print_sync_result(result)
         return 0 if result.errors == 0 else 1
 
+    except ValueError as e:
+        # Configuration/credential errors
+        logger.error(f"Configuration error: {e}")
+        print("\n" + "=" * 60)
+        print("  CONFIGURATION ERROR")
+        print("=" * 60)
+        print(f"\n{e}\n")
+        print("Please check your .env file and ensure all required")
+        print("credentials are set correctly.")
+        print("\nRequired environment variables:")
+        print("  - UKG_USERNAME and UKG_PASSWORD (or UKG_BASIC_B64)")
+        print("  - UKG_CUSTOMER_API_KEY")
+        print("  - BILL_API_TOKEN")
+        print("=" * 60 + "\n")
+        return 1
+
     except Exception as e:
-        logger.error(f"Sync failed: {e}")
+        logger.error(f"Sync failed: {e}", exc_info=True)
         return 1
 
 
@@ -131,8 +147,23 @@ def run_sync_batch(
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in {employee_file}: {e}")
         return 1
+    except ValueError as e:
+        # Configuration/credential errors
+        logger.error(f"Configuration error: {e}")
+        print("\n" + "=" * 60)
+        print("  CONFIGURATION ERROR")
+        print("=" * 60)
+        print(f"\n{e}\n")
+        print("Please check your .env file and ensure all required")
+        print("credentials are set correctly.")
+        print("\nRequired environment variables:")
+        print("  - UKG_USERNAME and UKG_PASSWORD (or UKG_BASIC_B64)")
+        print("  - UKG_CUSTOMER_API_KEY")
+        print("  - BILL_API_TOKEN")
+        print("=" * 60 + "\n")
+        return 1
     except Exception as e:
-        logger.error(f"Batch sync failed: {e}")
+        logger.error(f"Batch sync failed: {e}", exc_info=True)
         return 1
 
 
@@ -205,8 +236,22 @@ def run_export_csv(
         logger.info(f"Exported {len(bill_users)} users to {output_path}")
         return 0
 
+    except ValueError as e:
+        # Configuration/credential errors
+        logger.error(f"Configuration error: {e}")
+        print("\n" + "=" * 60)
+        print("  CONFIGURATION ERROR")
+        print("=" * 60)
+        print(f"\n{e}\n")
+        print("Please check your .env file and ensure all required")
+        print("credentials are set correctly.")
+        print("\nRequired environment variables for CSV export:")
+        print("  - UKG_USERNAME and UKG_PASSWORD (or UKG_BASIC_B64)")
+        print("  - UKG_CUSTOMER_API_KEY")
+        print("=" * 60 + "\n")
+        return 1
     except Exception as e:
-        logger.error(f"Export failed: {e}")
+        logger.error(f"Export failed: {e}", exc_info=True)
         return 1
 
 

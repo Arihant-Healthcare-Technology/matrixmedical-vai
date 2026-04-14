@@ -1,0 +1,1545 @@
+{
+	"info": {
+		"_postman_id": "ukg-bill-api-collection-v1",
+		"name": "UKG & BILL.com API Collection",
+		"description": "Comprehensive API collection for UKG Pro and BILL.com integration.\n\n## Overview\nThis collection contains all API endpoints used in the UKG to BILL.com integration batch job:\n- **UKG Pro API**: Employee data retrieval\n- **BILL.com Spend & Expense API**: User management\n- **BILL.com Accounts Payable API**: Vendors, Bills/Invoices, and Payments\n\n## Authentication\n- **UKG**: Basic Auth + Customer API Key\n- **BILL.com**: API Token in header\n\n## Environment Variables Required\nSet up the following variables in your Postman environment:\n- `UKG_BASE_URL`\n- `UKG_USERNAME`\n- `UKG_PASSWORD`\n- `UKG_CUSTOMER_API_KEY`\n- `BILL_BASE_URL`\n- `BILL_API_TOKEN`",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "UKG_BASE_URL",
+			"value": "https://service4.ultipro.com",
+			"type": "string"
+		},
+		{
+			"key": "BILL_BASE_URL",
+			"value": "https://gateway.stage.bill.com/connect/v3",
+			"type": "string"
+		},
+		{
+			"key": "UKG_CUSTOMER_API_KEY",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "BILL_API_TOKEN",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "employee_id",
+			"value": "sample-employee-uuid",
+			"type": "string"
+		},
+		{
+			"key": "employee_number",
+			"value": "12345",
+			"type": "string"
+		},
+		{
+			"key": "company_id",
+			"value": "COMP1",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "sample-user-uuid",
+			"type": "string"
+		},
+		{
+			"key": "vendor_id",
+			"value": "sample-vendor-id",
+			"type": "string"
+		},
+		{
+			"key": "bill_id",
+			"value": "sample-bill-id",
+			"type": "string"
+		},
+		{
+			"key": "payment_id",
+			"value": "sample-payment-id",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "noauth"
+	},
+	"item": [
+		{
+			"name": "UKG Pro API",
+			"description": "UKG Pro (Ultipro) Personnel API endpoints for retrieving employee data.",
+			"item": [
+				{
+					"name": "Get Employment Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Basic {{UKG_BASIC_AUTH}}",
+								"description": "Base64 encoded username:password"
+							},
+							{
+								"key": "US-Customer-Api-Key",
+								"value": "{{UKG_CUSTOMER_API_KEY}}",
+								"description": "UKG Customer API Key"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{UKG_BASE_URL}}/personnel/v1/employment-details?employeeNumber={{employee_number}}&companyID={{company_id}}",
+							"host": ["{{UKG_BASE_URL}}"],
+							"path": ["personnel", "v1", "employment-details"],
+							"query": [
+								{
+									"key": "employeeNumber",
+									"value": "{{employee_number}}",
+									"description": "Employee number (required)"
+								},
+								{
+									"key": "companyID",
+									"value": "{{company_id}}",
+									"description": "Company ID (required)"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number for pagination",
+									"disabled": true
+								},
+								{
+									"key": "per_page",
+									"value": "200",
+									"description": "Page size (default 200)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Retrieves employment details for a specific employee including status, supervisor information, and employment dates."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{UKG_BASE_URL}}/personnel/v1/employment-details?employeeNumber=12345&companyID=COMP1",
+									"host": ["{{UKG_BASE_URL}}"],
+									"path": ["personnel", "v1", "employment-details"],
+									"query": [
+										{"key": "employeeNumber", "value": "12345"},
+										{"key": "companyID", "value": "COMP1"}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"employeeNumber\": \"12345\",\n  \"companyID\": \"COMP1\",\n  \"companyId\": \"COMP1\",\n  \"employeeId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"employeeStatusCode\": \"A\",\n  \"employeeStatusDescription\": \"Active\",\n  \"hireDate\": \"2020-01-15\",\n  \"terminationDate\": null,\n  \"jobTitle\": \"Software Engineer\",\n  \"departmentCode\": \"IT\",\n  \"departmentDescription\": \"Information Technology\",\n  \"locationCode\": \"HQ\",\n  \"locationDescription\": \"Headquarters\",\n  \"supervisorEmployeeId\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"supervisorEmployeeNumber\": \"54321\",\n  \"supervisorEmailAddress\": \"supervisor@example.com\",\n  \"supervisor\": {\n    \"employeeId\": \"550e8400-e29b-41d4-a716-446655440001\",\n    \"employeeNumber\": \"54321\",\n    \"emailAddress\": \"supervisor@example.com\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Manager\"\n  },\n  \"primaryProjectCode\": \"PROJ001\",\n  \"employeeTypeCode\": \"FT\",\n  \"employeeTypeDescription\": \"Full-Time\",\n  \"payGroupCode\": \"BI-WEEKLY\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Employee-Employment Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Basic {{UKG_BASIC_AUTH}}",
+								"description": "Base64 encoded username:password"
+							},
+							{
+								"key": "US-Customer-Api-Key",
+								"value": "{{UKG_CUSTOMER_API_KEY}}",
+								"description": "UKG Customer API Key"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{UKG_BASE_URL}}/personnel/v1/employee-employment-details?companyId={{company_id}}",
+							"host": ["{{UKG_BASE_URL}}"],
+							"path": ["personnel", "v1", "employee-employment-details"],
+							"query": [
+								{
+									"key": "companyId",
+									"value": "{{company_id}}",
+									"description": "Company ID to fetch all employees"
+								},
+								{
+									"key": "employeeNumber",
+									"value": "{{employee_number}}",
+									"description": "Filter by specific employee number",
+									"disabled": true
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number for pagination",
+									"disabled": true
+								},
+								{
+									"key": "per_page",
+									"value": "200",
+									"description": "Page size (default 200)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Retrieves combined employee and employment details. Used in batch sync to fetch all employees for a company."
+					},
+					"response": [
+						{
+							"name": "Success Response - List",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{UKG_BASE_URL}}/personnel/v1/employee-employment-details?companyId=COMP1",
+									"host": ["{{UKG_BASE_URL}}"],
+									"path": ["personnel", "v1", "employee-employment-details"],
+									"query": [
+										{"key": "companyId", "value": "COMP1"}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "[\n  {\n    \"employeeNumber\": \"12345\",\n    \"companyID\": \"COMP1\",\n    \"employeeId\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"emailAddress\": \"john.doe@example.com\",\n    \"employeeStatusCode\": \"A\",\n    \"employeeStatusDescription\": \"Active\",\n    \"hireDate\": \"2020-01-15\",\n    \"terminationDate\": null,\n    \"jobTitle\": \"Software Engineer\",\n    \"departmentCode\": \"IT\",\n    \"departmentDescription\": \"Information Technology\",\n    \"supervisorEmployeeId\": \"550e8400-e29b-41d4-a716-446655440001\",\n    \"supervisorEmployeeNumber\": \"54321\",\n    \"primaryProjectCode\": \"PROJ001\",\n    \"employeeTypeCode\": \"FT\"\n  },\n  {\n    \"employeeNumber\": \"12346\",\n    \"companyID\": \"COMP1\",\n    \"employeeId\": \"550e8400-e29b-41d4-a716-446655440002\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Smith\",\n    \"emailAddress\": \"jane.smith@example.com\",\n    \"employeeStatusCode\": \"A\",\n    \"employeeStatusDescription\": \"Active\",\n    \"hireDate\": \"2019-06-01\",\n    \"terminationDate\": null,\n    \"jobTitle\": \"Product Manager\",\n    \"departmentCode\": \"PM\",\n    \"departmentDescription\": \"Product Management\",\n    \"supervisorEmployeeId\": \"550e8400-e29b-41d4-a716-446655440003\",\n    \"supervisorEmployeeNumber\": \"54322\",\n    \"primaryProjectCode\": \"PROJ002\",\n    \"employeeTypeCode\": \"FT\"\n  }\n]"
+						}
+					]
+				},
+				{
+					"name": "Get Person Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Basic {{UKG_BASIC_AUTH}}",
+								"description": "Base64 encoded username:password"
+							},
+							{
+								"key": "US-Customer-Api-Key",
+								"value": "{{UKG_CUSTOMER_API_KEY}}",
+								"description": "UKG Customer API Key"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{UKG_BASE_URL}}/personnel/v1/person-details?employeeId={{employee_id}}",
+							"host": ["{{UKG_BASE_URL}}"],
+							"path": ["personnel", "v1", "person-details"],
+							"query": [
+								{
+									"key": "employeeId",
+									"value": "{{employee_id}}",
+									"description": "Employee ID (UUID format)"
+								}
+							]
+						},
+						"description": "Retrieves personal details for an employee including contact information, address, and supervisor email."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{UKG_BASE_URL}}/personnel/v1/person-details?employeeId=550e8400-e29b-41d4-a716-446655440000",
+									"host": ["{{UKG_BASE_URL}}"],
+									"path": ["personnel", "v1", "person-details"],
+									"query": [
+										{"key": "employeeId", "value": "550e8400-e29b-41d4-a716-446655440000"}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"employeeId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"firstName\": \"John\",\n  \"middleName\": \"Robert\",\n  \"lastName\": \"Doe\",\n  \"preferredName\": \"Johnny\",\n  \"emailAddress\": \"john.doe@example.com\",\n  \"workPhone\": \"555-123-4567\",\n  \"mobilePhone\": \"555-987-6543\",\n  \"homePhone\": \"555-111-2222\",\n  \"supervisorEmailAddress\": \"supervisor@example.com\",\n  \"address1\": \"123 Main Street\",\n  \"address2\": \"Apt 4B\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"stateCode\": \"NY\",\n  \"zip\": \"10001\",\n  \"postalCode\": \"10001\",\n  \"country\": \"United States\",\n  \"countryCode\": \"US\",\n  \"dateOfBirth\": \"1985-03-15\",\n  \"gender\": \"M\",\n  \"maritalStatus\": \"Married\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "BILL.com Spend & Expense API",
+			"description": "BILL.com Spend & Expense API endpoints for user management in the expense tracking system.",
+			"item": [
+				{
+					"name": "List Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiToken",
+								"value": "{{BILL_API_TOKEN}}",
+								"description": "BILL.com API Token"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{BILL_BASE_URL}}/spend/users?page=1&pageSize=100",
+							"host": ["{{BILL_BASE_URL}}"],
+							"path": ["spend", "users"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (default 1)"
+								},
+								{
+									"key": "pageSize",
+									"value": "100",
+									"description": "Page size (default 100)"
+								},
+								{
+									"key": "email",
+									"value": "",
+									"description": "Filter by email address",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Retrieves a list of all users in the Spend & Expense system. Used to check if a user already exists before creating."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/spend/users?page=1&pageSize=100",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["spend", "users"],
+									"query": [
+										{"key": "page", "value": "1"},
+										{"key": "pageSize", "value": "100"}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"users\": [\n    {\n      \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"email\": \"john.doe@example.com\",\n      \"firstName\": \"John\",\n      \"lastName\": \"Doe\",\n      \"role\": \"MEMBER\",\n      \"status\": \"ACTIVE\",\n      \"retired\": false,\n      \"createdAt\": \"2024-01-15T10:30:00Z\",\n      \"updatedAt\": \"2024-01-15T10:30:00Z\"\n    },\n    {\n      \"uuid\": \"usr_550e8400e29b41d4a716446655440001\",\n      \"id\": \"usr_550e8400e29b41d4a716446655440001\",\n      \"email\": \"jane.smith@example.com\",\n      \"firstName\": \"Jane\",\n      \"lastName\": \"Smith\",\n      \"role\": \"ADMIN\",\n      \"status\": \"ACTIVE\",\n      \"retired\": false,\n      \"createdAt\": \"2024-01-10T08:00:00Z\",\n      \"updatedAt\": \"2024-01-12T14:20:00Z\"\n    }\n  ],\n  \"pagination\": {\n    \"page\": 1,\n    \"pageSize\": 100,\n    \"totalCount\": 2,\n    \"totalPages\": 1\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get User by Email",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiToken",
+								"value": "{{BILL_API_TOKEN}}",
+								"description": "BILL.com API Token"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{BILL_BASE_URL}}/spend/users?email=john.doe@example.com",
+							"host": ["{{BILL_BASE_URL}}"],
+							"path": ["spend", "users"],
+							"query": [
+								{
+									"key": "email",
+									"value": "john.doe@example.com",
+									"description": "Email address to search for"
+								}
+							]
+						},
+						"description": "Search for a user by email address. Used in sync process to check if user exists before creating."
+					},
+					"response": [
+						{
+							"name": "User Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/spend/users?email=john.doe@example.com",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["spend", "users"],
+									"query": [
+										{"key": "email", "value": "john.doe@example.com"}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"users\": [\n    {\n      \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"email\": \"john.doe@example.com\",\n      \"firstName\": \"John\",\n      \"lastName\": \"Doe\",\n      \"role\": \"MEMBER\",\n      \"status\": \"ACTIVE\",\n      \"retired\": false\n    }\n  ]\n}"
+						},
+						{
+							"name": "User Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/spend/users?email=notfound@example.com",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["spend", "users"],
+									"query": [
+										{"key": "email", "value": "notfound@example.com"}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"users\": []\n}"
+						}
+					]
+				},
+				{
+					"name": "Get User by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiToken",
+								"value": "{{BILL_API_TOKEN}}",
+								"description": "BILL.com API Token"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{BILL_BASE_URL}}/spend/users/{{user_id}}",
+							"host": ["{{BILL_BASE_URL}}"],
+							"path": ["spend", "users", "{{user_id}}"]
+						},
+						"description": "Retrieves a specific user by their UUID."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/spend/users/usr_550e8400e29b41d4a716446655440000",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["spend", "users", "usr_550e8400e29b41d4a716446655440000"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"email\": \"john.doe@example.com\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"role\": \"MEMBER\",\n  \"status\": \"ACTIVE\",\n  \"retired\": false,\n  \"manager\": {\n    \"uuid\": \"usr_550e8400e29b41d4a716446655440001\",\n    \"email\": \"supervisor@example.com\"\n  },\n  \"costCenter\": \"PROJ001\",\n  \"externalId\": \"12345\",\n  \"createdAt\": \"2024-01-15T10:30:00Z\",\n  \"updatedAt\": \"2024-01-15T10:30:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Create User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apiToken",
+								"value": "{{BILL_API_TOKEN}}",
+								"description": "BILL.com API Token"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"new.user@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"role\": \"MEMBER\",\n  \"retired\": false,\n  \"manager_email\": \"supervisor@example.com\",\n  \"cost_center\": \"PROJ001\",\n  \"external_id\": \"12345\"\n}"
+						},
+						"url": {
+							"raw": "{{BILL_BASE_URL}}/spend/users",
+							"host": ["{{BILL_BASE_URL}}"],
+							"path": ["spend", "users"]
+						},
+						"description": "Creates a new user in the Spend & Expense system. Used during batch sync to create users that don't exist in BILL.com."
+					},
+					"response": [
+						{
+							"name": "Success - User Created",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"new.user@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"role\": \"MEMBER\",\n  \"retired\": false\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/spend/users",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["spend", "users"]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"uuid\": \"usr_660e8400e29b41d4a716446655440099\",\n  \"id\": \"usr_660e8400e29b41d4a716446655440099\",\n  \"email\": \"new.user@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"role\": \"MEMBER\",\n  \"status\": \"PENDING_INVITE\",\n  \"retired\": false,\n  \"createdAt\": \"2024-02-01T14:00:00Z\",\n  \"updatedAt\": \"2024-02-01T14:00:00Z\"\n}"
+						},
+						{
+							"name": "Error - User Already Exists",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"existing.user@example.com\",\n  \"firstName\": \"Existing\",\n  \"lastName\": \"User\"\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/spend/users",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["spend", "users"]
+								}
+							},
+							"status": "Conflict",
+							"code": 409,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"error\": {\n    \"code\": \"USER_ALREADY_EXISTS\",\n    \"message\": \"A user with this email address already exists\",\n    \"details\": {\n      \"email\": \"existing.user@example.com\"\n    }\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Update User",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apiToken",
+								"value": "{{BILL_API_TOKEN}}",
+								"description": "BILL.com API Token"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe Updated\",\n  \"role\": \"MEMBER\",\n  \"retired\": false,\n  \"manager_email\": \"new.supervisor@example.com\",\n  \"cost_center\": \"PROJ002\"\n}"
+						},
+						"url": {
+							"raw": "{{BILL_BASE_URL}}/spend/users/{{user_id}}",
+							"host": ["{{BILL_BASE_URL}}"],
+							"path": ["spend", "users", "{{user_id}}"]
+						},
+						"description": "Updates an existing user. Used during batch sync when user data has changed in UKG."
+					},
+					"response": [
+						{
+							"name": "Success - User Updated",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe Updated\"\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/spend/users/usr_550e8400e29b41d4a716446655440000",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["spend", "users", "usr_550e8400e29b41d4a716446655440000"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"email\": \"john.doe@example.com\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe Updated\",\n  \"role\": \"MEMBER\",\n  \"status\": \"ACTIVE\",\n  \"retired\": false,\n  \"updatedAt\": \"2024-02-01T15:30:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Retire User (Deactivate)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apiToken",
+								"value": "{{BILL_API_TOKEN}}",
+								"description": "BILL.com API Token"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{BILL_BASE_URL}}/spend/users/{{user_id}}",
+							"host": ["{{BILL_BASE_URL}}"],
+							"path": ["spend", "users", "{{user_id}}"]
+						},
+						"description": "Deactivates/retires a user. Used when an employee is terminated in UKG."
+					},
+					"response": [
+						{
+							"name": "Success - User Retired",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/spend/users/usr_550e8400e29b41d4a716446655440000",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["spend", "users", "usr_550e8400e29b41d4a716446655440000"]
+								}
+							},
+							"status": "No Content",
+							"code": 204,
+							"_postman_previewlanguage": "text",
+							"header": [],
+							"body": ""
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "BILL.com Accounts Payable API",
+			"description": "BILL.com Accounts Payable API endpoints for managing vendors, bills/invoices, and payments.",
+			"item": [
+				{
+					"name": "Vendors",
+					"description": "Vendor management endpoints",
+					"item": [
+						{
+							"name": "List Vendors",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/vendors?page=1&pageSize=100",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["vendors"],
+									"query": [
+										{
+											"key": "page",
+											"value": "1",
+											"description": "Page number"
+										},
+										{
+											"key": "pageSize",
+											"value": "100",
+											"description": "Page size"
+										},
+										{
+											"key": "status",
+											"value": "active",
+											"description": "Filter by status (active, inactive, archived)",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Retrieves a list of all vendors."
+							},
+							"response": [
+								{
+									"name": "Success Response",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/vendors?page=1&pageSize=100",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["vendors"],
+											"query": [
+												{"key": "page", "value": "1"},
+												{"key": "pageSize", "value": "100"}
+											]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"vendors\": [\n    {\n      \"id\": \"vnd_550e8400e29b41d4a716446655440000\",\n      \"name\": \"Acme Supplies Inc\",\n      \"shortName\": \"ACME\",\n      \"externalId\": \"VND-001\",\n      \"status\": \"active\",\n      \"email\": \"billing@acmesupplies.com\",\n      \"phone\": \"555-123-4567\",\n      \"address\": {\n        \"line1\": \"100 Industrial Way\",\n        \"line2\": \"Suite 200\",\n        \"city\": \"Chicago\",\n        \"state\": \"IL\",\n        \"zip\": \"60601\",\n        \"country\": \"US\"\n      },\n      \"paymentTermDays\": 30,\n      \"taxId\": \"XX-XXXXXXX\",\n      \"createdAt\": \"2024-01-01T00:00:00Z\",\n      \"updatedAt\": \"2024-01-15T10:30:00Z\"\n    },\n    {\n      \"id\": \"vnd_550e8400e29b41d4a716446655440001\",\n      \"name\": \"Tech Solutions LLC\",\n      \"shortName\": \"TECHSOL\",\n      \"externalId\": \"VND-002\",\n      \"status\": \"active\",\n      \"email\": \"ap@techsolutions.com\",\n      \"phone\": \"555-987-6543\",\n      \"address\": {\n        \"line1\": \"500 Tech Park Drive\",\n        \"city\": \"San Francisco\",\n        \"state\": \"CA\",\n        \"zip\": \"94105\",\n        \"country\": \"US\"\n      },\n      \"paymentTermDays\": 45,\n      \"createdAt\": \"2024-01-05T00:00:00Z\",\n      \"updatedAt\": \"2024-01-10T08:00:00Z\"\n    }\n  ],\n  \"pagination\": {\n    \"page\": 1,\n    \"pageSize\": 100,\n    \"totalCount\": 2,\n    \"totalPages\": 1\n  }\n}"
+								}
+							]
+						},
+						{
+							"name": "Get Vendor by ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/vendors/{{vendor_id}}",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["vendors", "{{vendor_id}}"]
+								},
+								"description": "Retrieves a specific vendor by ID."
+							},
+							"response": [
+								{
+									"name": "Success Response",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/vendors/vnd_550e8400e29b41d4a716446655440000",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["vendors", "vnd_550e8400e29b41d4a716446655440000"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"id\": \"vnd_550e8400e29b41d4a716446655440000\",\n  \"name\": \"Acme Supplies Inc\",\n  \"shortName\": \"ACME\",\n  \"externalId\": \"VND-001\",\n  \"status\": \"active\",\n  \"email\": \"billing@acmesupplies.com\",\n  \"phone\": \"555-123-4567\",\n  \"fax\": \"555-123-4568\",\n  \"address\": {\n    \"line1\": \"100 Industrial Way\",\n    \"line2\": \"Suite 200\",\n    \"city\": \"Chicago\",\n    \"state\": \"IL\",\n    \"zip\": \"60601\",\n    \"country\": \"US\"\n  },\n  \"paymentTermDays\": 30,\n  \"taxId\": \"XX-XXXXXXX\",\n  \"accountNumber\": \"ACCT-12345\",\n  \"notes\": \"Preferred supplier for office supplies\",\n  \"createdAt\": \"2024-01-01T00:00:00Z\",\n  \"updatedAt\": \"2024-01-15T10:30:00Z\"\n}"
+								}
+							]
+						},
+						{
+							"name": "Create Vendor",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"New Vendor Corp\",\n  \"shortName\": \"NEWVND\",\n  \"externalId\": \"VND-003\",\n  \"email\": \"ap@newvendor.com\",\n  \"phone\": \"555-111-2222\",\n  \"address\": {\n    \"line1\": \"789 Business Blvd\",\n    \"line2\": \"\",\n    \"city\": \"Austin\",\n    \"state\": \"TX\",\n    \"zip\": \"78701\",\n    \"country\": \"US\"\n  },\n  \"paymentTermDays\": 30,\n  \"taxId\": \"12-3456789\"\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/vendors",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["vendors"]
+								},
+								"description": "Creates a new vendor in the Accounts Payable system."
+							},
+							"response": [
+								{
+									"name": "Success - Vendor Created",
+									"originalRequest": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"name\": \"New Vendor Corp\",\n  \"shortName\": \"NEWVND\",\n  \"email\": \"ap@newvendor.com\",\n  \"phone\": \"555-111-2222\",\n  \"address\": {\n    \"line1\": \"789 Business Blvd\",\n    \"city\": \"Austin\",\n    \"state\": \"TX\",\n    \"zip\": \"78701\",\n    \"country\": \"US\"\n  },\n  \"paymentTermDays\": 30\n}"
+										},
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/vendors",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["vendors"]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"id\": \"vnd_770e8400e29b41d4a716446655440099\",\n  \"name\": \"New Vendor Corp\",\n  \"shortName\": \"NEWVND\",\n  \"externalId\": \"VND-003\",\n  \"status\": \"active\",\n  \"email\": \"ap@newvendor.com\",\n  \"phone\": \"555-111-2222\",\n  \"address\": {\n    \"line1\": \"789 Business Blvd\",\n    \"city\": \"Austin\",\n    \"state\": \"TX\",\n    \"zip\": \"78701\",\n    \"country\": \"US\"\n  },\n  \"paymentTermDays\": 30,\n  \"createdAt\": \"2024-02-01T12:00:00Z\",\n  \"updatedAt\": \"2024-02-01T12:00:00Z\"\n}"
+								}
+							]
+						},
+						{
+							"name": "Update Vendor",
+							"request": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"updated.email@vendor.com\",\n  \"phone\": \"555-999-8888\",\n  \"paymentTermDays\": 45,\n  \"address\": {\n    \"line1\": \"Updated Address 123\",\n    \"city\": \"New City\",\n    \"state\": \"CA\",\n    \"zip\": \"90210\",\n    \"country\": \"US\"\n  }\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/vendors/{{vendor_id}}",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["vendors", "{{vendor_id}}"]
+								},
+								"description": "Updates an existing vendor."
+							},
+							"response": [
+								{
+									"name": "Success - Vendor Updated",
+									"originalRequest": {
+										"method": "PATCH",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"email\": \"updated.email@vendor.com\",\n  \"paymentTermDays\": 45\n}"
+										},
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/vendors/vnd_550e8400e29b41d4a716446655440000",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["vendors", "vnd_550e8400e29b41d4a716446655440000"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"id\": \"vnd_550e8400e29b41d4a716446655440000\",\n  \"name\": \"Acme Supplies Inc\",\n  \"shortName\": \"ACME\",\n  \"email\": \"updated.email@vendor.com\",\n  \"paymentTermDays\": 45,\n  \"updatedAt\": \"2024-02-01T14:30:00Z\"\n}"
+								}
+							]
+						}
+					]
+				},
+				{
+					"name": "Bills / Invoices",
+					"description": "Bill and invoice management endpoints",
+					"item": [
+						{
+							"name": "List Bills",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/bills?page=1&pageSize=100",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["bills"],
+									"query": [
+										{
+											"key": "page",
+											"value": "1",
+											"description": "Page number"
+										},
+										{
+											"key": "pageSize",
+											"value": "100",
+											"description": "Page size"
+										},
+										{
+											"key": "vendorId",
+											"value": "",
+											"description": "Filter by vendor ID",
+											"disabled": true
+										},
+										{
+											"key": "status",
+											"value": "open",
+											"description": "Filter by status (open, approved, scheduled, paid, voided)",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Retrieves a list of all bills/invoices."
+							},
+							"response": [
+								{
+									"name": "Success Response",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/bills?page=1&pageSize=100",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["bills"],
+											"query": [
+												{"key": "page", "value": "1"},
+												{"key": "pageSize", "value": "100"}
+											]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"bills\": [\n    {\n      \"id\": \"bill_550e8400e29b41d4a716446655440000\",\n      \"vendorId\": \"vnd_550e8400e29b41d4a716446655440000\",\n      \"externalId\": \"BILL-001\",\n      \"invoice\": {\n        \"number\": \"INV-2024-001\",\n        \"date\": \"2024-01-15\"\n      },\n      \"amount\": 1500.00,\n      \"status\": \"open\",\n      \"dueDate\": \"2024-02-15\",\n      \"poNumber\": \"PO-12345\",\n      \"description\": \"Office supplies for Q1\",\n      \"lineItems\": [\n        {\n          \"amount\": 1000.00,\n          \"description\": \"Printer paper - 50 boxes\",\n          \"glAccountId\": \"6100\",\n          \"departmentId\": \"ADMIN\"\n        },\n        {\n          \"amount\": 500.00,\n          \"description\": \"Ink cartridges - 20 units\",\n          \"glAccountId\": \"6100\",\n          \"departmentId\": \"ADMIN\"\n        }\n      ],\n      \"createdAt\": \"2024-01-16T10:00:00Z\",\n      \"updatedAt\": \"2024-01-16T10:00:00Z\"\n    },\n    {\n      \"id\": \"bill_550e8400e29b41d4a716446655440001\",\n      \"vendorId\": \"vnd_550e8400e29b41d4a716446655440001\",\n      \"externalId\": \"BILL-002\",\n      \"invoice\": {\n        \"number\": \"INV-2024-002\",\n        \"date\": \"2024-01-20\"\n      },\n      \"amount\": 5000.00,\n      \"status\": \"approved\",\n      \"dueDate\": \"2024-03-05\",\n      \"poNumber\": \"PO-12346\",\n      \"description\": \"IT consulting services\",\n      \"createdAt\": \"2024-01-21T08:00:00Z\",\n      \"updatedAt\": \"2024-01-25T14:00:00Z\"\n    }\n  ],\n  \"pagination\": {\n    \"page\": 1,\n    \"pageSize\": 100,\n    \"totalCount\": 2,\n    \"totalPages\": 1\n  }\n}"
+								}
+							]
+						},
+						{
+							"name": "Get Bill by ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/bills/{{bill_id}}",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["bills", "{{bill_id}}"]
+								},
+								"description": "Retrieves a specific bill by ID."
+							},
+							"response": [
+								{
+									"name": "Success Response",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/bills/bill_550e8400e29b41d4a716446655440000",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["bills", "bill_550e8400e29b41d4a716446655440000"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"id\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"vendorId\": \"vnd_550e8400e29b41d4a716446655440000\",\n  \"vendorName\": \"Acme Supplies Inc\",\n  \"externalId\": \"BILL-001\",\n  \"invoice\": {\n    \"number\": \"INV-2024-001\",\n    \"date\": \"2024-01-15\"\n  },\n  \"amount\": 1500.00,\n  \"amountDue\": 1500.00,\n  \"status\": \"open\",\n  \"dueDate\": \"2024-02-15\",\n  \"poNumber\": \"PO-12345\",\n  \"description\": \"Office supplies for Q1\",\n  \"memo\": \"Approved by Finance\",\n  \"lineItems\": [\n    {\n      \"id\": \"li_001\",\n      \"amount\": 1000.00,\n      \"description\": \"Printer paper - 50 boxes\",\n      \"quantity\": 50,\n      \"unitPrice\": 20.00,\n      \"glAccountId\": \"6100\",\n      \"glAccountName\": \"Office Supplies\",\n      \"departmentId\": \"ADMIN\",\n      \"departmentName\": \"Administration\",\n      \"locationId\": \"HQ\",\n      \"classId\": \"OPS\"\n    },\n    {\n      \"id\": \"li_002\",\n      \"amount\": 500.00,\n      \"description\": \"Ink cartridges - 20 units\",\n      \"quantity\": 20,\n      \"unitPrice\": 25.00,\n      \"glAccountId\": \"6100\",\n      \"departmentId\": \"ADMIN\"\n    }\n  ],\n  \"attachments\": [],\n  \"approvalStatus\": \"pending\",\n  \"createdAt\": \"2024-01-16T10:00:00Z\",\n  \"updatedAt\": \"2024-01-16T10:00:00Z\"\n}"
+								}
+							]
+						},
+						{
+							"name": "Create Bill",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"vendorId\": \"vnd_550e8400e29b41d4a716446655440000\",\n  \"externalId\": \"BILL-003\",\n  \"invoice\": {\n    \"number\": \"INV-2024-003\",\n    \"date\": \"2024-02-01\"\n  },\n  \"dueDate\": \"2024-03-01\",\n  \"amount\": 2500.00,\n  \"poNumber\": \"PO-12347\",\n  \"description\": \"Monthly maintenance services\",\n  \"lineItems\": [\n    {\n      \"amount\": 2000.00,\n      \"description\": \"HVAC maintenance\",\n      \"glAccountId\": \"6200\",\n      \"departmentId\": \"FACILITIES\",\n      \"locationId\": \"HQ\",\n      \"classId\": \"MAINT\"\n    },\n    {\n      \"amount\": 500.00,\n      \"description\": \"Plumbing inspection\",\n      \"glAccountId\": \"6200\",\n      \"departmentId\": \"FACILITIES\"\n    }\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/bills",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["bills"]
+								},
+								"description": "Creates a new bill/invoice in the Accounts Payable system."
+							},
+							"response": [
+								{
+									"name": "Success - Bill Created",
+									"originalRequest": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"vendorId\": \"vnd_550e8400e29b41d4a716446655440000\",\n  \"invoice\": {\n    \"number\": \"INV-2024-003\",\n    \"date\": \"2024-02-01\"\n  },\n  \"dueDate\": \"2024-03-01\",\n  \"amount\": 2500.00,\n  \"lineItems\": [\n    {\n      \"amount\": 2500.00,\n      \"description\": \"Monthly maintenance services\",\n      \"glAccountId\": \"6200\"\n    }\n  ]\n}"
+										},
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/bills",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["bills"]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"id\": \"bill_880e8400e29b41d4a716446655440099\",\n  \"vendorId\": \"vnd_550e8400e29b41d4a716446655440000\",\n  \"externalId\": \"BILL-003\",\n  \"invoice\": {\n    \"number\": \"INV-2024-003\",\n    \"date\": \"2024-02-01\"\n  },\n  \"amount\": 2500.00,\n  \"amountDue\": 2500.00,\n  \"status\": \"open\",\n  \"dueDate\": \"2024-03-01\",\n  \"poNumber\": \"PO-12347\",\n  \"description\": \"Monthly maintenance services\",\n  \"lineItems\": [\n    {\n      \"id\": \"li_099\",\n      \"amount\": 2000.00,\n      \"description\": \"HVAC maintenance\",\n      \"glAccountId\": \"6200\",\n      \"departmentId\": \"FACILITIES\"\n    },\n    {\n      \"id\": \"li_100\",\n      \"amount\": 500.00,\n      \"description\": \"Plumbing inspection\",\n      \"glAccountId\": \"6200\",\n      \"departmentId\": \"FACILITIES\"\n    }\n  ],\n  \"createdAt\": \"2024-02-01T09:00:00Z\",\n  \"updatedAt\": \"2024-02-01T09:00:00Z\"\n}"
+								}
+							]
+						},
+						{
+							"name": "Update Bill",
+							"request": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"dueDate\": \"2024-03-15\",\n  \"description\": \"Updated description - Monthly maintenance services (revised)\",\n  \"memo\": \"Extended payment terms approved\"\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/bills/{{bill_id}}",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["bills", "{{bill_id}}"]
+								},
+								"description": "Updates an existing bill."
+							},
+							"response": [
+								{
+									"name": "Success - Bill Updated",
+									"originalRequest": {
+										"method": "PATCH",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"dueDate\": \"2024-03-15\",\n  \"memo\": \"Extended payment terms approved\"\n}"
+										},
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/bills/bill_550e8400e29b41d4a716446655440000",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["bills", "bill_550e8400e29b41d4a716446655440000"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"id\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"vendorId\": \"vnd_550e8400e29b41d4a716446655440000\",\n  \"invoice\": {\n    \"number\": \"INV-2024-001\",\n    \"date\": \"2024-01-15\"\n  },\n  \"amount\": 1500.00,\n  \"status\": \"open\",\n  \"dueDate\": \"2024-03-15\",\n  \"memo\": \"Extended payment terms approved\",\n  \"updatedAt\": \"2024-02-01T16:00:00Z\"\n}"
+								}
+							]
+						}
+					]
+				},
+				{
+					"name": "Payments",
+					"description": "Payment processing endpoints",
+					"item": [
+						{
+							"name": "Get Payment Options",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/payments/options?billId={{bill_id}}",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["payments", "options"],
+									"query": [
+										{
+											"key": "billId",
+											"value": "{{bill_id}}",
+											"description": "Bill ID to get payment options for"
+										}
+									]
+								},
+								"description": "Retrieves available payment options for a bill including funding accounts and payment methods."
+							},
+							"response": [
+								{
+									"name": "Success Response",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/payments/options?billId=bill_550e8400e29b41d4a716446655440000",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["payments", "options"],
+											"query": [
+												{"key": "billId", "value": "bill_550e8400e29b41d4a716446655440000"}
+											]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"fundingAccounts\": [\n    {\n      \"id\": \"fa_001\",\n      \"type\": \"BANK_ACCOUNT\",\n      \"name\": \"Operating Account\",\n      \"lastFour\": \"1234\",\n      \"bankName\": \"Chase Bank\",\n      \"availableBalance\": 150000.00,\n      \"isDefault\": true\n    },\n    {\n      \"id\": \"fa_002\",\n      \"type\": \"BANK_ACCOUNT\",\n      \"name\": \"Payroll Account\",\n      \"lastFour\": \"5678\",\n      \"bankName\": \"Bank of America\",\n      \"availableBalance\": 75000.00,\n      \"isDefault\": false\n    }\n  ],\n  \"paymentMethods\": [\n    {\n      \"type\": \"ACH\",\n      \"description\": \"ACH Transfer\",\n      \"fee\": 0.00,\n      \"estimatedDeliveryDays\": 3\n    },\n    {\n      \"type\": \"CHECK\",\n      \"description\": \"Physical Check\",\n      \"fee\": 1.50,\n      \"estimatedDeliveryDays\": 7\n    },\n    {\n      \"type\": \"WIRE\",\n      \"description\": \"Wire Transfer\",\n      \"fee\": 25.00,\n      \"estimatedDeliveryDays\": 1\n    },\n    {\n      \"type\": \"VIRTUAL_CARD\",\n      \"description\": \"Virtual Card Payment\",\n      \"fee\": 0.00,\n      \"estimatedDeliveryDays\": 0\n    }\n  ],\n  \"vendorPaymentPreferences\": {\n    \"preferredMethod\": \"ACH\",\n    \"achEnabled\": true,\n    \"checkEnabled\": true\n  }\n}"
+								}
+							]
+						},
+						{
+							"name": "List Payments",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/payments?page=1&pageSize=100",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["payments"],
+									"query": [
+										{
+											"key": "page",
+											"value": "1",
+											"description": "Page number"
+										},
+										{
+											"key": "pageSize",
+											"value": "100",
+											"description": "Page size"
+										},
+										{
+											"key": "billId",
+											"value": "",
+											"description": "Filter by bill ID",
+											"disabled": true
+										},
+										{
+											"key": "status",
+											"value": "",
+											"description": "Filter by status (PENDING, PROCESSING, COMPLETED, FAILED, VOIDED)",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Retrieves a list of all payments."
+							},
+							"response": [
+								{
+									"name": "Success Response",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/payments?page=1&pageSize=100",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["payments"],
+											"query": [
+												{"key": "page", "value": "1"},
+												{"key": "pageSize", "value": "100"}
+											]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"payments\": [\n    {\n      \"id\": \"pmt_550e8400e29b41d4a716446655440000\",\n      \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n      \"vendorId\": \"vnd_550e8400e29b41d4a716446655440000\",\n      \"vendorName\": \"Acme Supplies Inc\",\n      \"amount\": 1500.00,\n      \"status\": \"COMPLETED\",\n      \"paymentMethod\": \"ACH\",\n      \"fundingAccountId\": \"fa_001\",\n      \"processDate\": \"2024-02-15\",\n      \"completedDate\": \"2024-02-18\",\n      \"confirmationNumber\": \"ACH-123456789\",\n      \"createdAt\": \"2024-02-14T10:00:00Z\",\n      \"updatedAt\": \"2024-02-18T09:00:00Z\"\n    },\n    {\n      \"id\": \"pmt_550e8400e29b41d4a716446655440001\",\n      \"billId\": \"bill_550e8400e29b41d4a716446655440001\",\n      \"vendorId\": \"vnd_550e8400e29b41d4a716446655440001\",\n      \"vendorName\": \"Tech Solutions LLC\",\n      \"amount\": 5000.00,\n      \"status\": \"PENDING\",\n      \"paymentMethod\": \"ACH\",\n      \"fundingAccountId\": \"fa_001\",\n      \"processDate\": \"2024-03-05\",\n      \"createdAt\": \"2024-02-25T14:00:00Z\",\n      \"updatedAt\": \"2024-02-25T14:00:00Z\"\n    }\n  ],\n  \"pagination\": {\n    \"page\": 1,\n    \"pageSize\": 100,\n    \"totalCount\": 2,\n    \"totalPages\": 1\n  }\n}"
+								}
+							]
+						},
+						{
+							"name": "Get Payment by ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/payments/{{payment_id}}",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["payments", "{{payment_id}}"]
+								},
+								"description": "Retrieves a specific payment by ID."
+							},
+							"response": [
+								{
+									"name": "Success Response",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/payments/pmt_550e8400e29b41d4a716446655440000",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["payments", "pmt_550e8400e29b41d4a716446655440000"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"id\": \"pmt_550e8400e29b41d4a716446655440000\",\n  \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"vendorId\": \"vnd_550e8400e29b41d4a716446655440000\",\n  \"vendorName\": \"Acme Supplies Inc\",\n  \"amount\": 1500.00,\n  \"status\": \"COMPLETED\",\n  \"paymentMethod\": \"ACH\",\n  \"fundingAccountId\": \"fa_001\",\n  \"fundingAccountName\": \"Operating Account\",\n  \"processDate\": \"2024-02-15\",\n  \"completedDate\": \"2024-02-18\",\n  \"confirmationNumber\": \"ACH-123456789\",\n  \"trackingNumber\": null,\n  \"memo\": \"Payment for invoice INV-2024-001\",\n  \"audit\": {\n    \"createdBy\": \"user@example.com\",\n    \"approvedBy\": \"approver@example.com\",\n    \"approvedAt\": \"2024-02-14T11:00:00Z\"\n  },\n  \"createdAt\": \"2024-02-14T10:00:00Z\",\n  \"updatedAt\": \"2024-02-18T09:00:00Z\"\n}"
+								}
+							]
+						},
+						{
+							"name": "Create Payment",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"amount\": 1500.00,\n  \"paymentMethod\": \"ACH\",\n  \"fundingAccountId\": \"fa_001\",\n  \"processDate\": \"2024-02-20\",\n  \"memo\": \"Payment for Q1 office supplies\"\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/payments",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["payments"]
+								},
+								"description": "Creates a new payment for a bill. NOTE: This endpoint may require MFA-trusted API session for production use."
+							},
+							"response": [
+								{
+									"name": "Success - Payment Created",
+									"originalRequest": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"amount\": 1500.00,\n  \"paymentMethod\": \"ACH\",\n  \"fundingAccountId\": \"fa_001\",\n  \"processDate\": \"2024-02-20\"\n}"
+										},
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/payments",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["payments"]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"id\": \"pmt_990e8400e29b41d4a716446655440099\",\n  \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"vendorId\": \"vnd_550e8400e29b41d4a716446655440000\",\n  \"amount\": 1500.00,\n  \"status\": \"PENDING\",\n  \"paymentMethod\": \"ACH\",\n  \"fundingAccountId\": \"fa_001\",\n  \"processDate\": \"2024-02-20\",\n  \"estimatedArrival\": \"2024-02-23\",\n  \"memo\": \"Payment for Q1 office supplies\",\n  \"createdAt\": \"2024-02-19T10:00:00Z\",\n  \"updatedAt\": \"2024-02-19T10:00:00Z\"\n}"
+								},
+								{
+									"name": "Error - MFA Required",
+									"originalRequest": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"amount\": 1500.00,\n  \"paymentMethod\": \"ACH\",\n  \"fundingAccountId\": \"fa_001\"\n}"
+										},
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/payments",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["payments"]
+										}
+									},
+									"status": "Forbidden",
+									"code": 403,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"error\": {\n    \"code\": \"MFA_REQUIRED\",\n    \"message\": \"Multi-factor authentication is required for payment operations. Please authenticate through the BILL.com web application first.\"\n  }\n}"
+								}
+							]
+						},
+						{
+							"name": "Create Bulk Payments",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"payments\": [\n    {\n      \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n      \"amount\": 1500.00,\n      \"paymentMethod\": \"ACH\",\n      \"fundingAccountId\": \"fa_001\",\n      \"processDate\": \"2024-02-20\"\n    },\n    {\n      \"billId\": \"bill_550e8400e29b41d4a716446655440001\",\n      \"amount\": 5000.00,\n      \"paymentMethod\": \"ACH\",\n      \"fundingAccountId\": \"fa_001\",\n      \"processDate\": \"2024-02-20\"\n    },\n    {\n      \"billId\": \"bill_550e8400e29b41d4a716446655440002\",\n      \"amount\": 2500.00,\n      \"paymentMethod\": \"CHECK\",\n      \"fundingAccountId\": \"fa_001\",\n      \"processDate\": \"2024-02-20\"\n    }\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/payments/bulk",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["payments", "bulk"]
+								},
+								"description": "Creates multiple payments in a single request. Useful for batch payment processing. Timeout is extended to 120 seconds."
+							},
+							"response": [
+								{
+									"name": "Success - Bulk Payments Created",
+									"originalRequest": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"payments\": [\n    {\n      \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n      \"amount\": 1500.00,\n      \"paymentMethod\": \"ACH\",\n      \"fundingAccountId\": \"fa_001\",\n      \"processDate\": \"2024-02-20\"\n    },\n    {\n      \"billId\": \"bill_550e8400e29b41d4a716446655440001\",\n      \"amount\": 5000.00,\n      \"paymentMethod\": \"ACH\",\n      \"fundingAccountId\": \"fa_001\",\n      \"processDate\": \"2024-02-20\"\n    }\n  ]\n}"
+										},
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/payments/bulk",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["payments", "bulk"]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"results\": [\n    {\n      \"id\": \"pmt_990e8400e29b41d4a716446655440001\",\n      \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n      \"status\": \"PENDING\",\n      \"amount\": 1500.00,\n      \"success\": true\n    },\n    {\n      \"id\": \"pmt_990e8400e29b41d4a716446655440002\",\n      \"billId\": \"bill_550e8400e29b41d4a716446655440001\",\n      \"status\": \"PENDING\",\n      \"amount\": 5000.00,\n      \"success\": true\n    }\n  ],\n  \"summary\": {\n    \"total\": 2,\n    \"successful\": 2,\n    \"failed\": 0,\n    \"totalAmount\": 6500.00\n  }\n}"
+								}
+							]
+						},
+						{
+							"name": "Record External Payment",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "apiToken",
+										"value": "{{BILL_API_TOKEN}}",
+										"description": "BILL.com API Token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"amount\": 1500.00,\n  \"paymentDate\": \"2024-02-10\",\n  \"paymentMethod\": \"CHECK\",\n  \"reference\": \"External Check #12345\",\n  \"memo\": \"Payment made outside of BILL.com system\"\n}"
+								},
+								"url": {
+									"raw": "{{BILL_BASE_URL}}/bills/record-payment",
+									"host": ["{{BILL_BASE_URL}}"],
+									"path": ["bills", "record-payment"]
+								},
+								"description": "Records a payment that was made outside of the BILL.com system (e.g., manual check, wire transfer). This updates the bill status without initiating a new payment."
+							},
+							"response": [
+								{
+									"name": "Success - External Payment Recorded",
+									"originalRequest": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"amount\": 1500.00,\n  \"paymentDate\": \"2024-02-10\",\n  \"reference\": \"External Check #12345\"\n}"
+										},
+										"url": {
+											"raw": "{{BILL_BASE_URL}}/bills/record-payment",
+											"host": ["{{BILL_BASE_URL}}"],
+											"path": ["bills", "record-payment"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{"key": "Content-Type", "value": "application/json"}
+									],
+									"body": "{\n  \"billId\": \"bill_550e8400e29b41d4a716446655440000\",\n  \"paymentRecorded\": true,\n  \"amount\": 1500.00,\n  \"paymentDate\": \"2024-02-10\",\n  \"reference\": \"External Check #12345\",\n  \"billStatus\": \"paid\",\n  \"amountDue\": 0.00,\n  \"recordedAt\": \"2024-02-11T09:00:00Z\"\n}"
+								}
+							]
+						}
+					]
+				}
+			]
+		}
+	]
+}
