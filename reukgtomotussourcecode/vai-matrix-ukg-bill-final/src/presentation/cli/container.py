@@ -122,7 +122,7 @@ class Container:
                 base_url=self.settings.ukg_api_base,
                 username=self.settings.ukg_username,
                 password=self.settings.ukg_password,
-                api_key=self.settings.ukg_api_key,
+                customer_api_key=self.settings.ukg_api_key,
             )
             logger.info("UKG client initialized successfully")
             return client

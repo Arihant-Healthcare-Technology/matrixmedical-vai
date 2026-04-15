@@ -10,19 +10,23 @@ from .orchestrator import BillScraperOrchestrator
 
 def main() -> None:
     """Main CLI entry point."""
-    if len(sys.argv) < 2:
-        print('[ERROR] You must provide a URL')
-        print('Usage: python -m scraping.cli <URL> [CSV_FILE_PATH]')
-        print('   or: python run-bill-user-scrape.py <URL> [CSV_FILE_PATH]')
-        sys.exit(1)
+    # URL is optional - if not provided, scraping will be skipped
+    url = None
+    csv_file_override = None
 
-    url = sys.argv[1]
+    if len(sys.argv) >= 2:
+        url = sys.argv[1]
 
     # Get CSV file path from argument or environment
-    csv_file_override = None
     if len(sys.argv) >= 3:
         csv_file_override = sys.argv[2]
         print(f'[INFO] CSV file path from argument: {csv_file_override}')
+
+    if not url:
+        print('[INFO] No URL provided - scraping functionality will be skipped')
+        print('[INFO] Usage: python -m scraping.cli [URL] [CSV_FILE_PATH]')
+        print('[INFO] For S&E API operations, use: python -m src.presentation.cli.main sync --all')
+        sys.exit(0)
 
     try:
         # Load settings
