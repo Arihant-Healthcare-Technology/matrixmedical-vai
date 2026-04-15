@@ -54,17 +54,19 @@ RUN mkdir -p /app/data/batch /app/data/reports && \
     useradd -m -u 1000 -s /bin/bash appuser && \
     chown -R appuser:appuser /app
 
-# Health check - validates environment and data directory
+# Health check - validates required environment variables
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import os, sys; \
-        missing = [v for v in ['UKG_BASE_URL', 'BILL_API_BASE'] if not os.getenv(v)]; \
-        sys.exit(1 if missing else 0)"
+        required = ['UKG_USERNAME', 'UKG_CUSTOMER_API_KEY']; \
+        bill_token = os.getenv('BILL_SE_API_TOKEN') or os.getenv('BILL_AP_API_TOKEN') or os.getenv('BILL_API_TOKEN'); \
+        missing = [v for v in required if not os.getenv(v)]; \
+        sys.exit(1 if missing or not bill_token else 0)"
 
 # Switch to non-root user
 USER appuser
 
 # Default entrypoint - uses new CLI
-ENTRYPOINT ["python3", "-m", "src.presentation.cli.main"]
+ENTRYPOINT ["python3", "-m", "src"]
 CMD ["--help"]
 
 # -----------------------------------------------------------------------------

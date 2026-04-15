@@ -31,13 +31,21 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATA_DIR=/app/data
       - BILL_MODE=spend_expense
+      # UKG credentials (from .env or override here)
+      - UKG_USERNAME=${UKG_USERNAME}
+      - UKG_PASSWORD=${UKG_PASSWORD}
+      - UKG_CUSTOMER_API_KEY=${UKG_CUSTOMER_API_KEY}
+      # BILL.com S&E credentials
+      - BILL_SE_API_TOKEN=${BILL_SE_API_TOKEN}
+      - BILL_API_TOKEN=${BILL_API_TOKEN}
+      - BILL_ORG_ID=${BILL_ORG_ID}
     volumes:
       - bill-data:/app/data:rw
     networks:
       - integration-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import os, sys; sys.exit(0 if os.getenv('UKG_BASE_URL') and os.getenv('BILL_API_BASE') else 1)"]
+      test: ["CMD", "python", "-c", "import os, sys; sys.exit(0 if os.getenv('UKG_USERNAME') and (os.getenv('BILL_SE_API_TOKEN') or os.getenv('BILL_API_TOKEN')) else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -73,13 +81,21 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATA_DIR=/app/data
       - BILL_MODE=accounts_payable
+      # UKG credentials (from .env or override here)
+      - UKG_USERNAME=${UKG_USERNAME}
+      - UKG_PASSWORD=${UKG_PASSWORD}
+      - UKG_CUSTOMER_API_KEY=${UKG_CUSTOMER_API_KEY}
+      # BILL.com AP credentials
+      - BILL_AP_API_TOKEN=${BILL_AP_API_TOKEN}
+      - BILL_API_TOKEN=${BILL_API_TOKEN}
+      - BILL_ORG_ID=${BILL_ORG_ID}
     volumes:
       - bill-data:/app/data:rw
     networks:
       - integration-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import os, sys; sys.exit(0 if os.getenv('UKG_BASE_URL') and os.getenv('BILL_AP_API_BASE') else 1)"]
+      test: ["CMD", "python", "-c", "import os, sys; sys.exit(0 if os.getenv('UKG_USERNAME') and (os.getenv('BILL_AP_API_TOKEN') or os.getenv('BILL_API_TOKEN')) else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -184,10 +200,17 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=DEBUG
+      # Test credentials (mock values for unit tests)
       - UKG_BASE_URL=https://test.ultipro.com
-      - UKG_CUSTOMER_API_KEY=test_key
-      - BILL_API_BASE=https://test.bill.com/api
+      - UKG_USERNAME=test_user
+      - UKG_PASSWORD=test_password
+      - UKG_CUSTOMER_API_KEY=test_api_key
+      - BILL_API_BASE=https://test.bill.com/api/spend
+      - BILL_SE_API_TOKEN=test_se_token
+      - BILL_AP_API_BASE=https://test.bill.com/api
+      - BILL_AP_API_TOKEN=test_ap_token
       - BILL_API_TOKEN=test_token
+      - BILL_ORG_ID=test_org_id
     volumes:
       - ./src:/app/src:ro
       - ./common:/app/common:ro
