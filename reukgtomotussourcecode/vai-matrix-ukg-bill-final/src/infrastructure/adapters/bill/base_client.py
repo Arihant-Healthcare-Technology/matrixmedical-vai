@@ -118,7 +118,7 @@ class BillClient:
             raise RateLimitError(
                 message=f"BILL API rate limit exceeded: {error_message}",
                 limit=60,
-                window_seconds=60,
+                retry_after=60,
             )
         else:
             raise ApiError(

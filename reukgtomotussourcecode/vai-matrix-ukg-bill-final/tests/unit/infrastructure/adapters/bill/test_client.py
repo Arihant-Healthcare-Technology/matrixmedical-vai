@@ -127,12 +127,8 @@ class TestHandleResponse:
         with pytest.raises(NotFoundError):
             client._handle_response(mock_response)
 
-    @pytest.mark.skip(reason="Source code bug: RateLimitError doesn't accept 'limit'/'window_seconds' parameters")
     def test_error_429_raises_rate_limit(self, client):
-        """Test 429 raises RateLimitError.
-
-        Note: Currently skipped due to source code bug.
-        """
+        """Test 429 raises RateLimitError."""
         mock_response = MagicMock()
         mock_response.status_code = 429
         mock_response.json.return_value = {"message": "Too many requests"}
