@@ -9,7 +9,13 @@ version: "3.8"
 #   Production (AP):   docker-compose up -d bill-ap-sync
 #   Development:       docker-compose --profile dev up bill-dev
 #   Scraping:          docker-compose --profile scraping up bill-scrape
-#   One-off run:       docker-compose run --rm bill-se-sync batch sync --company-id J9A6Y
+#
+# One-off commands:
+#   Sync all:          docker-compose run --rm bill-se-sync sync --all
+#   Sync with filter:  docker-compose run --rm bill-se-sync sync --all --company-id J9A6Y
+#   Dry run:           docker-compose run --rm bill-se-sync --dry-run sync --all
+#   Check status:      docker-compose run --rm bill-se-sync status
+#   Export CSV:        docker-compose run --rm bill-se-sync export --output /app/data/users.csv
 #
 # =============================================================================
 
@@ -39,6 +45,8 @@ services:
       - BILL_SE_API_TOKEN=${BILL_SE_API_TOKEN}
       - BILL_API_TOKEN=${BILL_API_TOKEN}
       - BILL_ORG_ID=${BILL_ORG_ID}
+    # Default command: sync all employees from UKG to BILL.com S&E
+    command: ["sync", "--all"]
     volumes:
       - bill-data:/app/data:rw
     networks:
@@ -89,6 +97,8 @@ services:
       - BILL_AP_API_TOKEN=${BILL_AP_API_TOKEN}
       - BILL_API_TOKEN=${BILL_API_TOKEN}
       - BILL_ORG_ID=${BILL_ORG_ID}
+    # Default command: sync vendors from UKG to BILL.com AP
+    command: ["ap", "sync", "--all"]
     volumes:
       - bill-data:/app/data:rw
     networks:

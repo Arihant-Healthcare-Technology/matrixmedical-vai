@@ -66,8 +66,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 USER appuser
 
 # Default entrypoint - uses new CLI
+# Override CMD with specific command: docker run ... sync --all --company-id J9A6Y
 ENTRYPOINT ["python3", "-m", "src"]
-CMD ["--help"]
+CMD ["sync", "--all"]
 
 # -----------------------------------------------------------------------------
 # Stage 3: Development - Includes dev tools
