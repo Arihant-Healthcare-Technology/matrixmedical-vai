@@ -132,7 +132,10 @@ class Container:
         """Get UKG employee repository."""
         def factory():
             from src.infrastructure.adapters.ukg.repository import UKGEmployeeRepository
-            return UKGEmployeeRepository(client=self.ukg_client())
+            return UKGEmployeeRepository(
+                client=self.ukg_client(),
+                default_company_id=self.settings.ukg_company_id,
+            )
         return self._get_or_create("employee_repository", factory)
 
     # BILL Components

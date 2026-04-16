@@ -185,6 +185,15 @@ def map_employee_from_ukg(
         or emp_emp.get("employeeTypeCode")
         or ""
     )
+    # Full/Part Time - try multiple possible field names
+    full_or_part_time = (
+        employment_data.get("fullOrPartTime")
+        or employment_data.get("fullPartTimeDescription")
+        or employment_data.get("fullPartTime")
+        or emp_emp.get("fullOrPartTime")
+        or emp_emp.get("fullPartTimeDescription")
+        or ""
+    )
     pay_frequency = (
         employment_data.get("payFrequency")
         or emp_emp.get("payFrequency")
@@ -223,6 +232,7 @@ def map_employee_from_ukg(
         company_id=company_id,
         address=address,
         employee_type_code=employee_type_code,
+        full_or_part_time=full_or_part_time,
         pay_frequency=pay_frequency,
         cost_center=cost_center,
         cost_center_description=cost_center_description,

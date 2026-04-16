@@ -419,16 +419,17 @@ class SyncService(EmployeeSyncService):
             if not batch:
                 break
 
-            # Filter for only active employees
-            active_batch = [
+            # Filter for only active employees that should be synced to BILL
+            # Criteria: PRD employee type + Full Time only
+            eligible_batch = [
                 emp for emp in batch
-                if emp.status == EmployeeStatus.ACTIVE
+                if emp.status == EmployeeStatus.ACTIVE and emp.should_sync_to_bill
             ]
-            employees.extend(active_batch)
+            employees.extend(eligible_batch)
 
             logger.info(
                 f"Fetched page {page}: {len(batch)} employees "
-                f"({len(active_batch)} active, total so far: {len(employees)})"
+                f"({len(eligible_batch)} eligible for BILL sync, total so far: {len(employees)})"
             )
 
             if len(batch) < page_size:
@@ -437,8 +438,8 @@ class SyncService(EmployeeSyncService):
             page += 1
 
         logger.info(
-            f"UKG fetch complete: {len(employees)} active employees found "
-            f"(from {page} page(s))"
+            f"UKG fetch complete: {len(employees)} eligible employees found "
+            f"(PRD + Full Time only, from {page} page(s))"
         )
 
         return self.sync_batch(employees, default_role, workers)

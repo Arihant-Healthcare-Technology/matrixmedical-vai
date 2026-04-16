@@ -146,6 +146,7 @@ class Employee:
     # Classification
     employee_type: Optional[EmployeeType] = None
     employee_type_code: str = ""  # UKG employeeTypeCode (PRD, FTC, HRC)
+    full_or_part_time: str = ""  # UKG fullOrPartTime (Full Time, Part Time)
     pay_frequency: str = ""  # UKG payFrequency (Hourly/Salaried)
     cost_center: str = ""
     cost_center_description: str = ""
@@ -199,6 +200,24 @@ class Employee:
     def has_supervisor(self) -> bool:
         """Check if employee has a supervisor assigned."""
         return bool(self.supervisor_email or self.supervisor_id)
+
+    @property
+    def is_full_time(self) -> bool:
+        """Check if employee is full time."""
+        if not self.full_or_part_time:
+            return True  # Default to True if not specified
+        return self.full_or_part_time.lower().strip() in ("full time", "fulltime", "full", "ft", "f")
+
+    @property
+    def should_sync_to_bill(self) -> bool:
+        """
+        Check if employee should be synced to BILL.com.
+
+        Criteria:
+        - employee_type_code must be 'PRD' (Production)
+        - Must be Full Time (not Part Time)
+        """
+        return self.employee_type_code == "PRD" and self.is_full_time
 
     def validate(self) -> List[str]:
         """
@@ -265,6 +284,9 @@ class Employee:
             "company_id": self.company_id,
             "address": self.address.to_dict(),
             "employee_type_code": self.employee_type_code,
+            "full_or_part_time": self.full_or_part_time,
+            "is_full_time": self.is_full_time,
+            "should_sync_to_bill": self.should_sync_to_bill,
             "pay_frequency": self.pay_frequency,
             "cost_center": self.cost_center,
             "cost_center_description": self.cost_center_description,
@@ -348,6 +370,7 @@ class Employee:
             company_id=data.get("companyId", "") or data.get("coid", ""),
             address=address,
             employee_type_code=data.get("employeeTypeCode", "") or "",
+            full_or_part_time=data.get("fullOrPartTime", "") or data.get("fullPartTimeDescription", "") or "",
             pay_frequency=data.get("payFrequency", "") or "",
             cost_center=data.get("costCenter", "") or data.get("costCenterCode", ""),
             cost_center_description=data.get("costCenterDescription", "") or data.get("primaryProjectDescription", ""),
