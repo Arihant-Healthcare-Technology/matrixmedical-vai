@@ -178,6 +178,7 @@ USER appuser
 # Verify Playwright installation
 RUN python -c "from playwright.sync_api import sync_playwright; print('Playwright installed successfully')"
 
-# Use the scraping CLI module as entry point
-ENTRYPOINT ["python3", "-m", "scraping.cli"]
-CMD []
+# Use the same entrypoint as production for S&E sync
+# Scraping functionality is available via: docker run ... python3 -m scraping.cli [URL]
+ENTRYPOINT ["python3", "-m", "src"]
+CMD ["sync", "--all"]

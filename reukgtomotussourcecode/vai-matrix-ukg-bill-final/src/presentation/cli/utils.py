@@ -115,6 +115,7 @@ def print_preview(
     label: str,
     max_items: int = 10,
     formatter: Optional[Callable[[Any], str]] = None,
+    show_all: bool = False,
 ) -> None:
     """
     Print preview of items to be processed.
@@ -122,13 +123,17 @@ def print_preview(
     Args:
         items: List of items to preview.
         label: Label describing what's being previewed.
-        max_items: Maximum items to show.
+        max_items: Maximum items to show (ignored if show_all=True).
         formatter: Optional function to format each item.
+        show_all: If True, show all items without limit.
     """
-    preview_items = items[:max_items]
+    if show_all:
+        preview_items = items
+    else:
+        preview_items = items[:max_items]
     remaining = len(items) - len(preview_items)
 
-    print(f"\n=== Preview: {label} (showing {len(preview_items)} of {len(items)}) ===")
+    print(f"\n=== Preview: {label} ({len(items)} total) ===")
 
     for item in preview_items:
         if formatter:

@@ -103,7 +103,7 @@ def run_sync_all(
             employees = list(employee_repo.get_active_employees(company_id=company_id))
             logger.info(f"  Fetched {len(employees)} employees")
             logger.info("DRY RUN MODE - No changes will be made")
-            print_preview(employees, "employees to sync")
+            print_preview(employees, "employees to sync to BILL.com", show_all=True)
             return 0
 
         # STEP 3: Sync employees to BILL.com S&E
@@ -184,7 +184,7 @@ def run_sync_batch(
 
         if dry_run:
             logger.info("DRY RUN MODE - No changes will be made")
-            print_preview(employees, "employees to sync")
+            print_preview(employees, "employees to sync to BILL.com", show_all=True)
             return 0
 
         # STEP 3: Sync employees to BILL.com S&E

@@ -311,6 +311,11 @@ class SyncService(EmployeeSyncService):
             result.end_time = datetime.now()
             return result
 
+        # Pre-populate email cache to avoid concurrent API lookups
+        # This prevents race conditions when multiple workers check for existing users
+        logger.info("Pre-populating BILL.com email cache...")
+        self.bill_user_repo.build_email_cache()
+
         # Process in parallel with thread pool
         total_employees = len(employees)
         completed_count = 0

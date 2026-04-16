@@ -123,6 +123,12 @@ Examples:
         default="MEMBER",
         help="Default role for new users (default: MEMBER)",
     )
+    sync_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="sync_dry_run",
+        help="Preview changes without making them",
+    )
 
     # Export command
     export_parser = subparsers.add_parser(
@@ -273,13 +279,15 @@ def main(argv: Optional[list] = None) -> int:
         if args.command == "sync":
             # Use company_id from CLI arg, or fall back to env variable
             company_id = args.company_id or container.settings.ukg_company_id
+            # Check both global and subparser dry_run flags
+            dry_run = args.dry_run or getattr(args, 'sync_dry_run', False)
             if args.all or company_id:
                 return run_sync_all(
                     container=container,
                     company_id=company_id,
                     workers=args.workers,
                     default_role=args.default_role,
-                    dry_run=args.dry_run,
+                    dry_run=dry_run,
                 )
             elif args.employee_file:
                 return run_sync_batch(
@@ -287,7 +295,7 @@ def main(argv: Optional[list] = None) -> int:
                     employee_file=args.employee_file,
                     workers=args.workers,
                     default_role=args.default_role,
-                    dry_run=args.dry_run,
+                    dry_run=dry_run,
                 )
             else:
                 parser.error("sync requires --all, --company-id, or --employee-file")
