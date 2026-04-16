@@ -63,7 +63,8 @@ def build_bill_user_csv_row(user: BillUser) -> Dict[str, str]:
     """
     Build CSV row for BILL bulk import.
 
-    Uses BillUser.to_csv_row() which includes cost center and budget assignment.
+    Uses BillUser.to_csv_row() which includes all fields required
+    for BILL.com CSV bulk import.
 
     Args:
         user: BillUser to export
@@ -71,7 +72,10 @@ def build_bill_user_csv_row(user: BillUser) -> Dict[str, str]:
     Returns:
         Dict suitable for csv.DictWriter with columns:
         - first name, last name, email address, role, manager
-        - cost center (formatted as "CODE - Description")
+        - cost center (formatted as "CODE – Description")
         - budget count ("Direct" or "Indirect")
+        - company (CCHN from UKG companyID)
+        - employee type (PRD, FTC, HRC from UKG employeeTypeCode)
+        - sal ("Salaried" or "Hourly" from UKG payFrequency)
     """
     return user.to_csv_row()

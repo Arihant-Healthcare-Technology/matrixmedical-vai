@@ -145,6 +145,8 @@ class Employee:
 
     # Classification
     employee_type: Optional[EmployeeType] = None
+    employee_type_code: str = ""  # UKG employeeTypeCode (PRD, FTC, HRC)
+    pay_frequency: str = ""  # UKG payFrequency (Hourly/Salaried)
     cost_center: str = ""
     cost_center_description: str = ""
     direct_labor: bool = False
@@ -262,6 +264,8 @@ class Employee:
             "supervisor_number": self.supervisor_number,
             "company_id": self.company_id,
             "address": self.address.to_dict(),
+            "employee_type_code": self.employee_type_code,
+            "pay_frequency": self.pay_frequency,
             "cost_center": self.cost_center,
             "cost_center_description": self.cost_center_description,
             "direct_labor": self.direct_labor,
@@ -343,6 +347,8 @@ class Employee:
             supervisor_number=supervisor_number,
             company_id=data.get("companyId", "") or data.get("coid", ""),
             address=address,
+            employee_type_code=data.get("employeeTypeCode", "") or "",
+            pay_frequency=data.get("payFrequency", "") or "",
             cost_center=data.get("costCenter", "") or data.get("costCenterCode", ""),
             cost_center_description=data.get("costCenterDescription", "") or data.get("primaryProjectDescription", ""),
             direct_labor=bool(data.get("directLabor") or data.get("isDirectLabor", False)),

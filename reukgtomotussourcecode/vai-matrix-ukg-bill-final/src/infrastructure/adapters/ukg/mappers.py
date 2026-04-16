@@ -179,6 +179,18 @@ def map_employee_from_ukg(
         or False
     )
 
+    # Employee type and pay frequency
+    employee_type_code = (
+        employment_data.get("employeeTypeCode")
+        or emp_emp.get("employeeTypeCode")
+        or ""
+    )
+    pay_frequency = (
+        employment_data.get("payFrequency")
+        or emp_emp.get("payFrequency")
+        or ""
+    )
+
     # Supervisor
     supervisor_email = (
         employment_data.get("supervisorEmailAddress")
@@ -210,6 +222,8 @@ def map_employee_from_ukg(
         supervisor_id=supervisor_id,
         company_id=company_id,
         address=address,
+        employee_type_code=employee_type_code,
+        pay_frequency=pay_frequency,
         cost_center=cost_center,
         cost_center_description=cost_center_description,
         direct_labor=direct_labor,

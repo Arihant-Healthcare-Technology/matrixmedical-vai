@@ -214,6 +214,9 @@ class TestBillUser:
             "manager": "boss@example.com",
             "cost center": "",
             "budget count": "Indirect",
+            "company": "",
+            "employee type": "",
+            "sal": "Hourly",
         }
 
     def test_to_csv_row_no_access(self):

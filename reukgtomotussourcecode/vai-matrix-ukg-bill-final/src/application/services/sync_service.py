@@ -236,6 +236,9 @@ class SyncService(EmployeeSyncService):
             and existing.cost_center == updated.cost_center
             and existing.cost_center_description == updated.cost_center_description
             and existing.direct_labor == updated.direct_labor
+            and existing.company == updated.company
+            and existing.employee_type_code == updated.employee_type_code
+            and existing.pay_frequency == updated.pay_frequency
         )
 
     def _get_changes(self, existing: BillUser, updated: BillUser) -> Dict[str, Any]:
@@ -261,6 +264,18 @@ class SyncService(EmployeeSyncService):
             }
         if existing.direct_labor != updated.direct_labor:
             changes["direct_labor"] = {"old": existing.direct_labor, "new": updated.direct_labor}
+        if existing.company != updated.company:
+            changes["company"] = {"old": existing.company, "new": updated.company}
+        if existing.employee_type_code != updated.employee_type_code:
+            changes["employee_type_code"] = {
+                "old": existing.employee_type_code,
+                "new": updated.employee_type_code,
+            }
+        if existing.pay_frequency != updated.pay_frequency:
+            changes["pay_frequency"] = {
+                "old": existing.pay_frequency,
+                "new": updated.pay_frequency,
+            }
         return changes
 
     def sync_batch(

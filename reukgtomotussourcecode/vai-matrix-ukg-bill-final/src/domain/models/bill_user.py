@@ -87,6 +87,11 @@ class BillUser:
     cost_center_description: str = ""
     direct_labor: bool = False
 
+    # Additional UKG fields for CSV export
+    company: str = ""  # UKG companyID (CCHN)
+    employee_type_code: str = ""  # UKG employeeTypeCode (PRD, FTC, HRC)
+    pay_frequency: str = ""  # UKG payFrequency (Hourly/Salaried)
+
     # Additional data
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -195,6 +200,10 @@ class BillUser:
             else:
                 formatted_cost_center = self.cost_center
 
+        # Determine sal value based on pay_frequency
+        pay_freq_lower = (self.pay_frequency or "").lower()
+        sal_value = "Salaried" if pay_freq_lower in ("salary", "salaried", "s") else "Hourly"
+
         return {
             "first name": self.first_name,
             "last name": self.last_name,
@@ -203,6 +212,9 @@ class BillUser:
             "manager": self.manager_email,
             "cost center": formatted_cost_center,
             "budget count": "Direct" if self.direct_labor else "Indirect",
+            "company": self.company,  # CCHN
+            "employee type": self.employee_type_code,  # PRD, FTC, HRC
+            "sal": sal_value,  # Salaried or Hourly
         }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -222,6 +234,9 @@ class BillUser:
             "cost_center": self.cost_center,
             "cost_center_description": self.cost_center_description,
             "direct_labor": self.direct_labor,
+            "company": self.company,
+            "employee_type_code": self.employee_type_code,
+            "pay_frequency": self.pay_frequency,
         }
 
     def diff(self, other: "BillUser") -> Dict[str, tuple]:
@@ -297,6 +312,9 @@ class BillUser:
             cost_center=employee.cost_center,
             cost_center_description=employee.cost_center_description,
             direct_labor=employee.direct_labor,
+            company=employee.company_id,
+            employee_type_code=employee.employee_type_code,
+            pay_frequency=employee.pay_frequency,
             metadata={"source_employee_id": employee.employee_id},
         )
 

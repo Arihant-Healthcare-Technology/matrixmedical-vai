@@ -271,10 +271,12 @@ def main(argv: Optional[list] = None) -> int:
 
         # Route to appropriate command handler
         if args.command == "sync":
-            if args.all or args.company_id:
+            # Use company_id from CLI arg, or fall back to env variable
+            company_id = args.company_id or container.settings.ukg_company_id
+            if args.all or company_id:
                 return run_sync_all(
                     container=container,
-                    company_id=args.company_id,
+                    company_id=company_id,
                     workers=args.workers,
                     default_role=args.default_role,
                     dry_run=args.dry_run,
@@ -294,7 +296,7 @@ def main(argv: Optional[list] = None) -> int:
             return run_export_csv(
                 container=container,
                 output_path=args.output,
-                company_id=args.company_id,
+                company_id=args.company_id or container.settings.ukg_company_id,
                 include_managers=args.include_managers,
             )
 
