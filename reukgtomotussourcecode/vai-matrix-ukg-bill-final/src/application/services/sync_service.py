@@ -152,6 +152,28 @@ class SyncService(EmployeeSyncService):
                 },
             )
         except Exception as e:
+            error_msg = str(e).lower()
+            # Handle "User already exists" error - fall back to update
+            if "already exists" in error_msg or "user already exists" in error_msg:
+                logger.warning(
+                    f"User {bill_user.email} already exists, falling back to update"
+                )
+                # Fetch the existing user and update
+                existing_user = self.bill_user_repo.get_by_email(bill_user.email)
+                if existing_user:
+                    return self._update_user(existing_user, bill_user, employee)
+                else:
+                    logger.error(
+                        f"User {bill_user.email} exists but could not be fetched"
+                    )
+                    return SyncResult(
+                        success=False,
+                        action="error",
+                        entity_id=employee.employee_id,
+                        message=f"User exists but could not be fetched: {e}",
+                        details={"email": bill_user.email},
+                    )
+
             logger.error(
                 f"Failed to create user {bill_user.email}: {e}",
                 exc_info=True,
