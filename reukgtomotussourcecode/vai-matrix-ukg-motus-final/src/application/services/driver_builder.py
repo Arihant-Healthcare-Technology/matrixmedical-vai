@@ -160,6 +160,24 @@ class DriverBuilderService:
         project_code = employee_employment.get("primaryProjectCode") or ""
         project_label = employee_employment.get("primaryProjectDescription") or ""
 
+        # 8.5) Get org-level descriptions (only if codes exist)
+        org_codes = [
+            employment_details.get("orgLevel1Code"),
+            employment_details.get("orgLevel2Code"),
+            employment_details.get("orgLevel3Code"),
+            employment_details.get("orgLevel4Code"),
+        ]
+        if any(code for code in org_codes if code):
+            org_level_descriptions = {
+                1: self.ukg_client.get_org_level_description(1, org_codes[0]),
+                2: self.ukg_client.get_org_level_description(2, org_codes[1]),
+                3: self.ukg_client.get_org_level_description(3, org_codes[2]),
+                4: self.ukg_client.get_org_level_description(4, org_codes[3]),
+            }
+        else:
+            org_level_descriptions = {}
+        self._log(f"Employee {employee_number}: org_level_descriptions = {org_level_descriptions}")
+
         # 9) Resolve program ID from job code
         job_code = employment_details.get("primaryJobCode")
         program_id = resolve_program_id_from_job_code(job_code)
@@ -195,6 +213,7 @@ class DriverBuilderService:
             project_label=project_label,
             derived_status=derived_status.value,
             existing_supervisor_name=existing_supervisor_name,
+            org_level_descriptions=org_level_descriptions,
         )
 
         self._log(f"Employee {employee_number}: === FINAL DRIVER PAYLOAD SUMMARY ===")

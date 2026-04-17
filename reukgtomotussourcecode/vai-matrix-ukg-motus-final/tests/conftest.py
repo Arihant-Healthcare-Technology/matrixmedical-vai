@@ -155,13 +155,17 @@ def sample_location() -> Dict[str, Any]:
 
 @pytest.fixture
 def sample_supervisor_details() -> Dict[str, Any]:
-    """Sample UKG supervisor-details response."""
+    """Sample UKG employee-supervisor-details response."""
     return {
-        "employeeId": "EMP001",
+        "employeeID": "EMP001",
+        "companyID": "J9A6Y",
+        "employeeNumber": "12345",
+        "supervisorEmployeeID": "MGR001",
         "supervisorFirstName": "Jane",
         "supervisorLastName": "Manager",
-        "supervisorEmployeeId": "MGR001",
         "supervisorEmployeeNumber": "99999",
+        "supervisorCompanyID": "J9A6Y",
+        "supervisorEmail": "jane.manager@example.com",
     }
 
 

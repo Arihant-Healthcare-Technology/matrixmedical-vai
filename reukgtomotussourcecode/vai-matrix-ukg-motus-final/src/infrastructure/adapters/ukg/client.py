@@ -29,6 +29,7 @@ class UKGClient:
         """
         self.settings = settings or UKGSettings.from_env()
         self.debug = debug
+        self._org_levels_cache: Optional[Dict[int, Dict[str, str]]] = None
 
     def _headers(self) -> Dict[str, str]:
         """Get request headers."""
@@ -193,7 +194,7 @@ class UKGClient:
             Supervisor details dict (empty if not found)
         """
         correlation_id = get_correlation_id()
-        url = f"{self.settings.base_url.rstrip('/')}/personnel/v1/supervisor-details"
+        url = f"{self.settings.base_url.rstrip('/')}/personnel/v1/employee-supervisor-details"
 
         try:
             response = requests.get(
@@ -219,7 +220,8 @@ class UKGClient:
             )
 
             for item in items:
-                if str(item.get("employeeId")) == str(employee_id):
+                # Response uses employeeID (uppercase)
+                if str(item.get("employeeID")) == str(employee_id):
                     return item
             return items[0] if items else {}
 
@@ -284,3 +286,65 @@ class UKGClient:
         if isinstance(data, dict):
             return data.get("items", []) if isinstance(data.get("items"), list) else [data]
         return []
+
+    def get_org_levels(self, force_refresh: bool = False) -> Dict[int, Dict[str, str]]:
+        """
+        Get all org-levels from UKG configuration.
+
+        Results are cached for the lifetime of this client instance.
+
+        Args:
+            force_refresh: Force re-fetch even if cached
+
+        Returns:
+            Nested dict: {level: {code: description, ...}, ...}
+            Example: {1: {"DIV1": "Division One"}, 2: {"DEPT1": "Dept A"}}
+        """
+        if not force_refresh and self._org_levels_cache is not None:
+            return self._org_levels_cache
+
+        correlation_id = get_correlation_id()
+
+        try:
+            data = self._get("/configuration/v1/org-levels")
+        except UkgApiError as e:
+            logger.warning(
+                f"[{correlation_id}] Failed to fetch org-levels: {e}. Using empty cache."
+            )
+            self._org_levels_cache = {}
+            return self._org_levels_cache
+
+        # Build nested lookup dictionary
+        cache: Dict[int, Dict[str, str]] = {}
+        items = data if isinstance(data, list) else []
+
+        for item in items:
+            level = item.get("level")
+            code = item.get("code")
+            description = item.get("description", "")
+
+            if level is not None and code:
+                if level not in cache:
+                    cache[level] = {}
+                cache[level][str(code)] = str(description)
+
+        self._org_levels_cache = cache
+        return self._org_levels_cache
+
+    def get_org_level_description(self, level: int, code: Optional[str]) -> str:
+        """
+        Get description for an org-level code.
+
+        Args:
+            level: Org level number (1, 2, 3, or 4)
+            code: Org level code
+
+        Returns:
+            Description string, or empty string if not found
+        """
+        if not code:
+            return ""
+
+        org_levels = self.get_org_levels()
+        level_codes = org_levels.get(level, {})
+        return level_codes.get(str(code), "")

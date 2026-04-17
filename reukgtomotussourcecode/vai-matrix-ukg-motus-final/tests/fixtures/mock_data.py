@@ -150,14 +150,18 @@ class UKGMockDataFactory:
             **kwargs: Additional fields
 
         Returns:
-            Supervisor details dictionary
+            Supervisor details dictionary (employee-supervisor-details format)
         """
         return {
-            "employeeId": employee_id,
+            "employeeID": employee_id,
+            "companyID": kwargs.get("company_id", "J9A6Y"),
+            "employeeNumber": kwargs.get("employee_number", "12345"),
+            "supervisorEmployeeID": kwargs.get("supervisor_id", "MGR001"),
             "supervisorFirstName": supervisor_first_name,
             "supervisorLastName": supervisor_last_name,
-            "supervisorEmployeeId": kwargs.get("supervisor_id", "MGR001"),
             "supervisorEmployeeNumber": kwargs.get("supervisor_number", "99999"),
+            "supervisorCompanyID": kwargs.get("supervisor_company_id", "J9A6Y"),
+            "supervisorEmail": kwargs.get("supervisor_email", f"{supervisor_first_name.lower()}.{supervisor_last_name.lower()}@example.com"),
         }
 
     @staticmethod

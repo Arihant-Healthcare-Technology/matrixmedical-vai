@@ -79,9 +79,10 @@ def sample_person_details():
 
 @pytest.fixture
 def sample_supervisor_details():
-    """Sample UKG supervisor details."""
+    """Sample UKG employee-supervisor-details response."""
     return {
-        "employeeId": "emp-123",
+        "employeeID": "emp-123",
+        "supervisorEmployeeID": "MGR001",
         "supervisorFirstName": "Jane",
         "supervisorLastName": "Smith",
     }

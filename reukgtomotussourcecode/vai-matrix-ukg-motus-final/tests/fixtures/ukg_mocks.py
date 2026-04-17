@@ -125,7 +125,7 @@ class UKGMockServer:
         employee_id: Optional[str] = None,
     ) -> None:
         """
-        Mock supervisor-details endpoint.
+        Mock employee-supervisor-details endpoint.
 
         Args:
             data: Response data (defaults to sample data)
@@ -135,7 +135,7 @@ class UKGMockServer:
         if data is None:
             data = [self.factory.supervisor_details(employee_id=employee_id or "EMP001")]
 
-        pattern = rf"{re.escape(self.base_url)}/personnel/v1/supervisor-details.*"
+        pattern = rf"{re.escape(self.base_url)}/personnel/v1/employee-supervisor-details.*"
 
         responses.add(
             responses.GET,
@@ -145,8 +145,8 @@ class UKGMockServer:
         )
 
     def mock_supervisor_not_found(self) -> None:
-        """Mock supervisor-details endpoint returning 404."""
-        pattern = rf"{re.escape(self.base_url)}/personnel/v1/supervisor-details.*"
+        """Mock employee-supervisor-details endpoint returning 404."""
+        pattern = rf"{re.escape(self.base_url)}/personnel/v1/employee-supervisor-details.*"
 
         responses.add(
             responses.GET,
@@ -319,7 +319,7 @@ class UKGMockServer:
             r"/personnel/v1/employment-details",
             r"/personnel/v1/employee-employment-details",
             r"/personnel/v1/person-details",
-            r"/personnel/v1/supervisor-details",
+            r"/personnel/v1/employee-supervisor-details",
             r"/configuration/v1/locations",
         ]
 
@@ -338,7 +338,7 @@ class UKGMockServer:
             r"/personnel/v1/employment-details",
             r"/personnel/v1/employee-employment-details",
             r"/personnel/v1/person-details",
-            r"/personnel/v1/supervisor-details",
+            r"/personnel/v1/employee-supervisor-details",
             r"/configuration/v1/locations",
         ]
 

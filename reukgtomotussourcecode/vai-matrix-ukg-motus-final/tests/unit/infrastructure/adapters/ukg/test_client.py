@@ -271,14 +271,14 @@ class TestUKGClient:
         """Test getting supervisor details successfully."""
         responses.add(
             responses.GET,
-            re.compile(r".*/personnel/v1/supervisor-details.*"),
+            re.compile(r".*/personnel/v1/employee-supervisor-details.*"),
             json=[sample_supervisor_details],
             status=200,
         )
 
         result = ukg_client.get_supervisor_details("EMP001")
 
-        assert result["employeeId"] == "EMP001"
+        assert result["employeeID"] == "EMP001"
         assert result["supervisorFirstName"] == "Jane"
 
     @responses.activate
@@ -286,7 +286,7 @@ class TestUKGClient:
         """Test getting supervisor details when not found."""
         responses.add(
             responses.GET,
-            re.compile(r".*/personnel/v1/supervisor-details.*"),
+            re.compile(r".*/personnel/v1/employee-supervisor-details.*"),
             json={"error": "Not found"},
             status=404,
         )
@@ -302,7 +302,7 @@ class TestUKGClient:
 
         responses.add(
             responses.GET,
-            re.compile(r".*/personnel/v1/supervisor-details.*"),
+            re.compile(r".*/personnel/v1/employee-supervisor-details.*"),
             json={"error": "Not found"},
             status=404,
         )

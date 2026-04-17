@@ -291,6 +291,7 @@ class MotusDriver:
         project_label: str = "",
         derived_status: str = "Active",
         existing_supervisor_name: str = "",
+        org_level_descriptions: Optional[Dict[int, str]] = None,
     ) -> "MotusDriver":
         """
         Create MotusDriver from UKG data sources.
@@ -338,7 +339,7 @@ class MotusDriver:
                 value=str(location.get("description", "") or "")
             ),
 
-            # Organizational structure
+            # Organizational structure - Codes
             CustomVariable(
                 name="Org Level 1 Code",
                 value=str(employment_details.get("orgLevel1Code", "") or "")
@@ -394,6 +395,25 @@ class MotusDriver:
         if final_supervisor_name:
             custom_variables.append(
                 CustomVariable(name="Manager Name", value=final_supervisor_name)
+            )
+
+        # Org Level Descriptions - only add if description exists
+        org_descs = org_level_descriptions or {}
+        if org_descs.get(1):
+            custom_variables.append(
+                CustomVariable(name="Org Level 1 Description", value=org_descs[1])
+            )
+        if org_descs.get(2):
+            custom_variables.append(
+                CustomVariable(name="Org Level 2 Description", value=org_descs[2])
+            )
+        if org_descs.get(3):
+            custom_variables.append(
+                CustomVariable(name="Org Level 3 Description", value=org_descs[3])
+            )
+        if org_descs.get(4):
+            custom_variables.append(
+                CustomVariable(name="Org Level 4 Description", value=org_descs[4])
             )
 
         return cls(
