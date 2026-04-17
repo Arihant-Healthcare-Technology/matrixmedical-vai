@@ -304,7 +304,7 @@ class SyncService(EmployeeSyncService):
         self,
         employees: List[Employee],
         default_role: BillRole = BillRole.MEMBER,
-        workers: int = 6,
+        workers: int = 1,
     ) -> BatchSyncResult:
         """
         Sync multiple employees to BILL.com.
@@ -410,7 +410,7 @@ class SyncService(EmployeeSyncService):
         self,
         company_id: Optional[str] = None,
         default_role: BillRole = BillRole.MEMBER,
-        workers: int = 6,
+        workers: int = 1,
     ) -> BatchSyncResult:
         """
         Sync all active employees from UKG to BILL.com.
