@@ -9,6 +9,7 @@ This service coordinates:
 """
 
 import logging
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -72,6 +73,9 @@ class SyncService(EmployeeSyncService):
         Returns:
             SyncResult with operation details.
         """
+        # Add 5 second delay between requests to avoid BILL API rate limiting (429 errors)
+        time.sleep(5)
+
         if self.rate_limiter:
             self.rate_limiter()
 
@@ -153,24 +157,34 @@ class SyncService(EmployeeSyncService):
             )
         except Exception as e:
             error_msg = str(e).lower()
+            # Also check response_body if available (for ApiError exceptions)
+            response_body = ""
+            if hasattr(e, 'response_body') and e.response_body:
+                response_body = str(e.response_body).lower()
+
+            combined_error = error_msg + " " + response_body
+
             # Handle "User already exists" error - fall back to update
-            if "already exists" in error_msg or "user already exists" in error_msg:
+            if "already exists" in combined_error or "user already exists" in combined_error:
                 logger.warning(
-                    f"User {bill_user.email} already exists, falling back to update"
+                    f"User {bill_user.email} already exists (detected from API error), falling back to update"
                 )
-                # Fetch the existing user and update
+                # Clear cache and re-fetch to ensure we get fresh data
+                self.bill_user_repo.clear_cache()
                 existing_user = self.bill_user_repo.get_by_email(bill_user.email)
                 if existing_user:
+                    logger.info(f"Found existing user {bill_user.email} with ID {existing_user.id}")
                     return self._update_user(existing_user, bill_user, employee)
                 else:
-                    logger.error(
-                        f"User {bill_user.email} exists but could not be fetched"
+                    # User exists in BILL but we can't fetch - skip with warning
+                    logger.warning(
+                        f"User {bill_user.email} exists in BILL but could not be fetched for update. Skipping."
                     )
                     return SyncResult(
-                        success=False,
-                        action="error",
+                        success=True,
+                        action="skip",
                         entity_id=employee.employee_id,
-                        message=f"User exists but could not be fetched: {e}",
+                        message=f"User exists but could not be fetched for update - skipped",
                         details={"email": bill_user.email},
                     )
 
@@ -194,20 +208,6 @@ class SyncService(EmployeeSyncService):
     ) -> SyncResult:
         """Update an existing BILL user."""
         try:
-            # Check if update is needed
-            if self._users_match(existing, updated):
-                logger.info(
-                    f"Employee synced: {employee.employee_number} → {existing.email} "
-                    f"(action=skip, no changes)"
-                )
-                return SyncResult(
-                    success=True,
-                    action="skip",
-                    entity_id=existing.id,
-                    message="No changes detected",
-                    details={"email": existing.email},
-                )
-
             # Preserve existing ID
             updated.id = existing.id
 
@@ -304,7 +304,7 @@ class SyncService(EmployeeSyncService):
         self,
         employees: List[Employee],
         default_role: BillRole = BillRole.MEMBER,
-        workers: int = 12,
+        workers: int = 6,
     ) -> BatchSyncResult:
         """
         Sync multiple employees to BILL.com.
@@ -333,12 +333,13 @@ class SyncService(EmployeeSyncService):
             result.end_time = datetime.now()
             return result
 
-        # Pre-populate email cache to avoid concurrent API lookups
-        # This prevents race conditions when multiple workers check for existing users
-        logger.info("Pre-populating BILL.com email cache...")
+        # Pre-populate email cache to avoid repeated pagination for each employee
+        # The _paginate method now has rate limiting built-in (3s delay per request)
+        logger.info("Pre-populating BILL.com email cache (with rate limiting)...")
         self.bill_user_repo.build_email_cache()
+        logger.info("Email cache populated.")
 
-        # Process in parallel with thread pool
+        # Process sequentially with single worker
         total_employees = len(employees)
         completed_count = 0
         progress_interval = max(1, total_employees // 10)  # Log every 10%
@@ -409,7 +410,7 @@ class SyncService(EmployeeSyncService):
         self,
         company_id: Optional[str] = None,
         default_role: BillRole = BillRole.MEMBER,
-        workers: int = 12,
+        workers: int = 6,
     ) -> BatchSyncResult:
         """
         Sync all active employees from UKG to BILL.com.

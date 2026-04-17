@@ -114,8 +114,8 @@ Examples:
     sync_parser.add_argument(
         "--workers",
         type=int,
-        default=12,
-        help="Number of concurrent workers (default: 12)",
+        default=6,
+        help="Number of concurrent workers (default: 6)",
     )
     sync_parser.add_argument(
         "--default-role",

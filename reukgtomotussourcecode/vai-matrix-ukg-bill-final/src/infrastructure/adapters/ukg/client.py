@@ -243,6 +243,38 @@ class UKGClient:
 
         return None
 
+    def get_supervisor_details(
+        self,
+        employee_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get supervisor details for an employee.
+
+        This endpoint returns supervisor information for the given employee.
+
+        Args:
+            employee_id: Employee ID (UUID format)
+
+        Returns:
+            Supervisor details dict or None if not found
+        """
+        if not employee_id:
+            return None
+
+        params = {"employeeId": employee_id}
+        data = self._get_data("/personnel/v1/employee-supervisor-details", params)
+        items = self._extract_list(data)
+
+        for item in items:
+            if str(item.get("employeeId")) == str(employee_id):
+                return item
+
+        # If only one result, return it
+        if len(items) == 1:
+            return items[0]
+
+        return None
+
     # =========================================================================
     # List Operations
     # =========================================================================
@@ -319,10 +351,11 @@ class UKGClient:
         """
         Resolve supervisor email using multiple fallback strategies.
 
-        Implements the supervisor resolution logic from run-bill-batch.py:
+        Implements the supervisor resolution logic:
         1. Direct supervisorEmailAddress field
-        2. Supervisor employee ID -> person details
-        3. Supervisor employee number -> employment -> person details
+        2. Employee supervisor details endpoint
+        3. Supervisor employee ID -> person details
+        4. Supervisor employee number -> employment -> person details
 
         Args:
             employment_data: Employment details dict
@@ -348,7 +381,24 @@ class UKGClient:
         if person_data and person_data.get("supervisorEmailAddress"):
             return person_data["supervisorEmailAddress"]
 
-        # Strategy 2: Supervisor employee ID -> person details
+        # Strategy 2: Use employee-supervisor-details endpoint
+        employee_id = (
+            employment_data.get("employeeId")
+            or employment_data.get("employeeID")
+        )
+        if employee_id:
+            sup_details = self.get_supervisor_details(employee_id)
+            if sup_details:
+                # Try various email fields from supervisor details
+                email = (
+                    sup_details.get("supervisorEmailAddress")
+                    or sup_details.get("emailAddress")
+                    or sup_details.get("supervisorEmail")
+                )
+                if email:
+                    return email
+
+        # Strategy 3: Supervisor employee ID -> person details
         supervisor_emp_id = (
             employment_data.get("supervisorEmployeeId")
             or supervisor.get("employeeId")

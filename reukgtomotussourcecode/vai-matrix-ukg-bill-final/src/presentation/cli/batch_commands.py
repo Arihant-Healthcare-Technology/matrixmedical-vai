@@ -26,7 +26,7 @@ from src.presentation.cli.utils import (
 logger = logging.getLogger(__name__)
 
 
-def _print_startup_banner(container: Container, operation: str, workers: int = 12, dry_run: bool = False) -> None:
+def _print_startup_banner(container: Container, operation: str, workers: int = 6, dry_run: bool = False) -> None:
     """Print startup banner showing credentials loaded from .env."""
     settings = container.settings
 
@@ -63,7 +63,7 @@ def _print_startup_banner(container: Container, operation: str, workers: int = 1
 def run_sync_all(
     container: Container,
     company_id: Optional[str] = None,
-    workers: int = 12,
+    workers: int = 6,
     default_role: str = "MEMBER",
     dry_run: bool = False,
 ) -> int:
@@ -156,7 +156,7 @@ def run_sync_all(
 def run_sync_batch(
     container: Container,
     employee_file: str,
-    workers: int = 12,
+    workers: int = 6,
     default_role: str = "MEMBER",
     dry_run: bool = False,
 ) -> int:

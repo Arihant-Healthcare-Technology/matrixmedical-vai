@@ -104,21 +104,22 @@ class TestSyncEmployee:
         assert result.action == "update"
         mock_bill_user_repo.update.assert_called_once()
 
-    def test_skips_unchanged_user(
+    def test_updates_unchanged_user(
         self,
         sync_service,
         mock_bill_user_repo,
         sample_employee,
         sample_bill_user,
     ):
-        """Should skip when no changes detected."""
+        """Should always update existing user even when no changes detected."""
         mock_bill_user_repo.get_by_email.return_value = sample_bill_user
+        mock_bill_user_repo.update.return_value = sample_bill_user
 
         result = sync_service.sync_employee(sample_employee)
 
         assert result.success is True
-        assert result.action == "skip"
-        mock_bill_user_repo.update.assert_not_called()
+        assert result.action == "update"
+        mock_bill_user_repo.update.assert_called_once()
 
     def test_error_missing_email(self, sync_service, sample_employee):
         """Should return error for employee without email."""
@@ -196,17 +197,17 @@ class TestSyncBatch:
             for i in range(3)
         ]
 
-        # First creates, second updates, third skips
+        # First creates, second and third update (always update existing users)
         mock_bill_user_repo.get_by_email.side_effect = [
             None,  # First - will create
-            BillUser(  # Second - will update (different name)
+            BillUser(  # Second - will update
                 id="EXISTING",
                 email="emp1@example.com",
                 first_name="Different",
                 last_name="Name",
                 role=BillRole.MEMBER,
             ),
-            BillUser(  # Third - will skip (same data)
+            BillUser(  # Third - will also update (no skip)
                 id="EXISTING2",
                 email="emp2@example.com",
                 first_name="Test",
@@ -227,8 +228,8 @@ class TestSyncBatch:
 
         assert result.total == 3
         assert result.created == 1
-        assert result.updated == 1
-        assert result.skipped == 1
+        assert result.updated == 2  # Now always updates existing users
+        assert result.skipped == 0  # No skips anymore
         assert result.errors == 0
 
     def test_batch_has_correlation_id(self, sync_service):
@@ -438,18 +439,18 @@ class TestSyncBatchCounters:
             for i in range(5)
         ]
 
-        # Set up returns: create, update, skip, create (fails), error (no email)
+        # Set up returns: create, update, update, create (fails), error (no email)
         existing_user = BillUser(
             id="EXIST1",
             email="emp1@example.com",
-            first_name="Different",  # Different to trigger update
+            first_name="Different",  # Different name
             last_name="Name",
             role=BillRole.MEMBER,
         )
         unchanged_user = BillUser(
             id="EXIST2",
             email="emp2@example.com",
-            first_name="Test",  # Same as employee
+            first_name="Test",  # Same as employee - but we still update
             last_name="User2",  # Same as employee
             role=BillRole.MEMBER,
         )
@@ -457,7 +458,7 @@ class TestSyncBatchCounters:
         mock_bill_user_repo.get_by_email.side_effect = [
             None,  # emp0 - create
             existing_user,  # emp1 - update
-            unchanged_user,  # emp2 - skip
+            unchanged_user,  # emp2 - update (always update existing users)
             None,  # emp3 - create (will fail)
         ]
         mock_bill_user_repo.create.side_effect = [
@@ -470,8 +471,8 @@ class TestSyncBatchCounters:
 
         assert result.total == 5
         assert result.created == 1  # emp0
-        assert result.updated == 1  # emp1
-        assert result.skipped == 1  # emp2
+        assert result.updated == 2  # emp1 + emp2 (always update existing)
+        assert result.skipped == 0  # No skips anymore
         assert result.errors == 2  # emp3 (create failed) + emp4 (no email)
 
     def test_batch_parallel_execution(

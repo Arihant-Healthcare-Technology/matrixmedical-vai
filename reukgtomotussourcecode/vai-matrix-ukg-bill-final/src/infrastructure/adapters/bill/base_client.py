@@ -6,6 +6,7 @@ by the S&E and AP adapters.
 """
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from src.domain.exceptions import (
@@ -214,6 +215,9 @@ class BillClient:
         params = params or {}
 
         while True:
+            # Add delay before EVERY pagination request to avoid rate limiting
+            time.sleep(5)
+
             page_params = {**params, "page": page, "pageSize": page_size}
             response = self._http.get(endpoint, params=page_params)
             data = self._handle_response(response)
