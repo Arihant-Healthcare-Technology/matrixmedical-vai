@@ -184,15 +184,36 @@ class DriverSyncService:
                     f"Employee: {employee_number} | Reason: {e}"
                 )
                 return (employee_number, "skipped")
-            except (MotusApiError, AuthenticationError, RateLimitError) as e:
-                # CRITICAL: Re-raise Motus API errors to trigger fail-fast
+            except MotusApiError as e:
+                # Log error with full details but continue processing other employees
                 logger.error(
-                    f"[{correlation_id}] MOTUS API FAILURE | "
+                    f"[{correlation_id}] MOTUS API ERROR | "
+                    f"Employee: {employee_number} | "
+                    f"Status: {getattr(e, 'status_code', 'N/A')} | "
+                    f"Error: {repr(e)} | "
+                    f"Response: {getattr(e, 'response_body', {})} | "
+                    f"Action: CONTINUING WITH OTHER EMPLOYEES"
+                )
+                return (employee_number, "error")
+            except AuthenticationError as e:
+                # Log auth error but continue - don't stop the batch
+                logger.error(
+                    f"[{correlation_id}] MOTUS AUTH ERROR | "
                     f"Employee: {employee_number} | "
                     f"Error: {repr(e)} | "
-                    f"Action: STOPPING BATCH"
+                    f"Action: CONTINUING WITH OTHER EMPLOYEES"
                 )
-                raise  # Re-raise to trigger fail-fast in sync_batch()
+                return (employee_number, "error")
+            except RateLimitError as e:
+                # Log rate limit error but continue - don't stop the batch
+                logger.error(
+                    f"[{correlation_id}] MOTUS RATE LIMIT | "
+                    f"Employee: {employee_number} | "
+                    f"Error: {repr(e)} | "
+                    f"Retry after: {getattr(e, 'retry_after', 60)}s | "
+                    f"Action: CONTINUING WITH OTHER EMPLOYEES"
+                )
+                return (employee_number, "error")
             except Exception as e:
                 logger.error(
                     f"[{correlation_id}] SYNC ERROR | "
@@ -273,15 +294,16 @@ class DriverSyncService:
                             f"(terminated={stats['skipped_terminated']}) "
                             f"errors={stats['errors']}"
                         )
-                    except (MotusApiError, AuthenticationError, RateLimitError) as e:
+                    except Exception as e:
+                        # Log any unexpected error but continue processing
+                        emp_num = emp.get("employeeNumber", "UNKNOWN")
                         logger.error(
-                            f"[{batch_correlation_id}] BATCH FAILED | "
-                            f"Motus API error encountered. Stopping immediately. | "
-                            f"Processed: {processed}/{total} | "
-                            f"Error: {repr(e)}"
+                            f"[{batch_correlation_id}] UNEXPECTED ERROR | "
+                            f"Employee: {emp_num} | "
+                            f"Error: {repr(e)} | "
+                            f"Action: CONTINUING WITH OTHER EMPLOYEES"
                         )
-                        stats["errors"] += 1
-                        raise SystemExit(1)
+                        update_stats(emp_num, "error")
             else:
                 # Threaded processing mode (default)
                 logger.info(
@@ -301,37 +323,30 @@ class DriverSyncService:
                         for emp in employees
                     }
 
-                    try:
-                        for future in as_completed(futures):
-                            try:
-                                employee_number, status = future.result()
-                            except (MotusApiError, AuthenticationError, RateLimitError):
-                                # Re-raise to outer try/except for fail-fast handling
-                                raise
-
+                    for future in as_completed(futures):
+                        try:
+                            employee_number, status = future.result()
                             update_stats(employee_number, status)
+                        except Exception as e:
+                            # Log any error but continue processing all employees
+                            emp_data = futures[future]
+                            emp_num = emp_data.get("employeeNumber", "UNKNOWN")
+                            logger.error(
+                                f"[{batch_correlation_id}] EMPLOYEE ERROR | "
+                                f"Employee: {emp_num} | Error: {repr(e)} | "
+                                f"Action: CONTINUING WITH OTHER EMPLOYEES"
+                            )
+                            update_stats(emp_num, "error")
 
-                            # Log progress every 100 employees or at the end
-                            if processed % 100 == 0 or processed == total:
-                                logger.info(
-                                    f"[{batch_correlation_id}] BATCH PROGRESS | "
-                                    f"{processed}/{total} | "
-                                    f"saved={stats['saved']} skipped={stats['skipped']} "
-                                    f"(terminated={stats['skipped_terminated']}) "
-                                    f"errors={stats['errors']}"
-                                )
-                    except (MotusApiError, AuthenticationError, RateLimitError) as e:
-                        logger.error(
-                            f"[{batch_correlation_id}] BATCH FAILED | "
-                            f"Motus API error encountered. Cancelling remaining tasks. | "
-                            f"Processed: {processed}/{total} | "
-                            f"Error: {repr(e)}"
-                        )
-                        # Cancel remaining futures
-                        for f in futures:
-                            f.cancel()
-                        stats["errors"] += 1
-                        raise SystemExit(1)
+                        # Log progress every 100 employees or at the end
+                        if processed % 100 == 0 or processed == total:
+                            logger.info(
+                                f"[{batch_correlation_id}] BATCH PROGRESS | "
+                                f"{processed}/{total} | "
+                                f"saved={stats['saved']} skipped={stats['skipped']} "
+                                f"(terminated={stats['skipped_terminated']}) "
+                                f"errors={stats['errors']}"
+                            )
 
             logger.info(
                 f"[{batch_correlation_id}] BATCH COMPLETE | "

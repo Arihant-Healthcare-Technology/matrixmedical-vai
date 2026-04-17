@@ -368,7 +368,8 @@ class MotusClient:
             logger.error(
                 f"[{correlation_id}] MOTUS POST EXCEPTION | "
                 f"Employee: {driver.client_employee_id1} | "
-                f"Error: {str(e)}"
+                f"Error: {str(e)} | "
+                f"FULL PAYLOAD: {json.dumps(payload, default=str)}"
             )
             raise MotusApiError(
                 f"Request failed: {str(e)}",
@@ -376,6 +377,20 @@ class MotusClient:
                 response_body={"error": str(e)},
                 driver_id=driver.client_employee_id1,
             ) from e
+
+        # Log full payload on error responses for debugging
+        if response.status_code >= 400:
+            try:
+                error_body = response.json()
+            except Exception:
+                error_body = {"text": response.text[:1000]}
+            logger.error(
+                f"[{correlation_id}] MOTUS POST ERROR | "
+                f"Status: {response.status_code} | "
+                f"Employee: {driver.client_employee_id1} | "
+                f"RESPONSE: {json.dumps(error_body, default=str)} | "
+                f"FULL PAYLOAD: {json.dumps(payload, default=str)}"
+            )
 
         result = self._handle_response(response, driver_id=driver.client_employee_id1, method="POST")
 
@@ -437,7 +452,8 @@ class MotusClient:
             logger.error(
                 f"[{correlation_id}] MOTUS PUT EXCEPTION | "
                 f"Employee: {driver.client_employee_id1} | "
-                f"Error: {str(e)}"
+                f"Error: {str(e)} | "
+                f"FULL PAYLOAD: {json.dumps(payload, default=str)}"
             )
             raise MotusApiError(
                 f"Request failed: {str(e)}",
@@ -445,6 +461,20 @@ class MotusClient:
                 response_body={"error": str(e)},
                 driver_id=driver.client_employee_id1,
             ) from e
+
+        # Log full payload on error responses for debugging
+        if response.status_code >= 400:
+            try:
+                error_body = response.json()
+            except Exception:
+                error_body = {"text": response.text[:1000]}
+            logger.error(
+                f"[{correlation_id}] MOTUS PUT ERROR | "
+                f"Status: {response.status_code} | "
+                f"Employee: {driver.client_employee_id1} | "
+                f"RESPONSE: {json.dumps(error_body, default=str)} | "
+                f"FULL PAYLOAD: {json.dumps(payload, default=str)}"
+            )
 
         result = self._handle_response(response, driver_id=driver.client_employee_id1, method="PUT")
 
