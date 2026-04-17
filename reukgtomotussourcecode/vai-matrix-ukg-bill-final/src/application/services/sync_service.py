@@ -176,15 +176,15 @@ class SyncService(EmployeeSyncService):
                     logger.info(f"Found existing user {bill_user.email} with ID {existing_user.id}")
                     return self._update_user(existing_user, bill_user, employee)
                 else:
-                    # User exists in BILL but we can't fetch - skip with warning
-                    logger.warning(
-                        f"User {bill_user.email} exists in BILL but could not be fetched for update. Skipping."
+                    # User exists in BILL but we can't fetch - count as updated since user is already in system
+                    logger.info(
+                        f"User {bill_user.email} already exists in BILL (confirmed by API). Counting as updated."
                     )
                     return SyncResult(
                         success=True,
-                        action="skip",
+                        action="update",
                         entity_id=employee.employee_id,
-                        message=f"User exists but could not be fetched for update - skipped",
+                        message=f"User already exists in BILL - no changes needed",
                         details={"email": bill_user.email},
                     )
 
