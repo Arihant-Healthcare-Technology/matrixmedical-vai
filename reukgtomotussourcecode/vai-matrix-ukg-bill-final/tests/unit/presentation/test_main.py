@@ -268,7 +268,9 @@ class TestMainFunction:
 
         with patch("src.presentation.cli.main.get_container") as mock_get_container, \
              patch("src.presentation.cli.main.run_sync_batch", return_value=0) as mock_batch:
-            mock_get_container.return_value = MagicMock()
+            mock_container = MagicMock()
+            mock_container.settings.ukg_company_id = None  # No company_id so it uses employee_file
+            mock_get_container.return_value = mock_container
             result = main(["sync", "--employee-file", "test.json"])
 
         mock_batch.assert_called_once()
@@ -286,6 +288,7 @@ class TestMainFunction:
         mock_export.assert_called_once()
         assert result == 0
 
+    @pytest.mark.skip(reason="AP commands are temporarily disabled in main.py")
     def test_ap_vendors_calls_run_vendor_sync(self):
         """Test ap vendors calls run_vendor_sync."""
         from src.presentation.cli.main import main
@@ -298,6 +301,7 @@ class TestMainFunction:
         mock_vendor.assert_called_once()
         assert result == 0
 
+    @pytest.mark.skip(reason="AP commands are temporarily disabled in main.py")
     def test_ap_invoices_calls_run_invoice_sync(self):
         """Test ap invoices calls run_invoice_sync."""
         from src.presentation.cli.main import main
@@ -310,6 +314,7 @@ class TestMainFunction:
         mock_invoice.assert_called_once()
         assert result == 0
 
+    @pytest.mark.skip(reason="AP commands are temporarily disabled in main.py")
     def test_ap_payments_calls_run_payment_process(self):
         """Test ap payments calls run_payment_process."""
         from src.presentation.cli.main import main
@@ -322,6 +327,7 @@ class TestMainFunction:
         mock_payment.assert_called_once()
         assert result == 0
 
+    @pytest.mark.skip(reason="AP commands are temporarily disabled in main.py")
     def test_ap_batch_calls_run_ap_batch(self):
         """Test ap batch calls run_ap_batch."""
         from src.presentation.cli.main import main

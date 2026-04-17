@@ -126,7 +126,20 @@ class TestContainer:
         """Test rate_limiter uses default when setting not present."""
         from src.presentation.cli.container import Container
 
-        mock_settings = MagicMock(spec=[])  # No rate_limit attribute
+        mock_settings = MagicMock()
+        mock_settings.ukg_api_base = "https://ukg.example.com"
+        mock_settings.ukg_username = "user"
+        mock_settings.ukg_password = "pass"
+        mock_settings.ukg_api_key = "key123"
+        mock_settings.ukg_basic_b64 = None
+        mock_settings.ukg_company_id = "J9A6Y"
+        mock_settings.bill_api_base = "https://bill.example.com"
+        mock_settings.bill_api_token = "token123"
+        mock_settings.bill_org_id = "org123"
+        mock_settings.rate_limit_calls_per_minute = 60  # Default value
+        mock_settings.environment = "test"
+        mock_settings.debug = False
+        mock_settings.batch_workers = 12
         container = Container(settings=mock_settings)
 
         limiter = container.rate_limiter()
@@ -151,7 +164,7 @@ class TestContainer:
                 base_url="https://ukg.example.com",
                 username="user",
                 password="pass",
-                api_key="key123",
+                customer_api_key="key123",
             )
 
     def test_employee_repository_creates_instance(self):
@@ -195,18 +208,27 @@ class TestContainer:
         from src.presentation.cli.container import Container
 
         mock_settings = MagicMock()
+        mock_settings.ukg_api_base = "https://ukg.example.com"
+        mock_settings.ukg_username = "user"
+        mock_settings.ukg_password = "pass"
+        mock_settings.ukg_api_key = "key123"
+        mock_settings.ukg_basic_b64 = None
+        mock_settings.ukg_company_id = "J9A6Y"
         mock_settings.bill_api_base = "https://bill.example.com"
         mock_settings.bill_api_token = "token123"
         mock_settings.bill_org_id = "org123"
+        mock_settings.rate_limit_calls_per_minute = 60
+        mock_settings.environment = "test"
+        mock_settings.debug = False
+        mock_settings.batch_workers = 12
         container = Container(settings=mock_settings)
 
-        with patch("src.infrastructure.adapters.bill.spend_expense.SpendExpenseClient") as MockClient:
+        with patch("src.infrastructure.adapters.bill.spend_expense_client.SpendExpenseClient") as MockClient:
             client = container.spend_expense_client()
 
             MockClient.assert_called_once_with(
-                base_url="https://bill.example.com",
+                api_base="https://bill.example.com",
                 api_token="token123",
-                org_id="org123",
             )
 
     def test_accounts_payable_client_creates_instance(self):

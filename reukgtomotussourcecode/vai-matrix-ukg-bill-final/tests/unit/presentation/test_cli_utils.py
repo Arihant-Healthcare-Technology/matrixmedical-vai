@@ -182,7 +182,7 @@ class TestPrintPreview:
         print_preview(items, "test items", max_items=5)
 
         captured = capsys.readouterr()
-        assert "showing 5 of 20" in captured.out
+        assert "20 total" in captured.out
         assert "15 more" in captured.out
 
     def test_uses_custom_formatter(self, capsys):

@@ -507,3 +507,47 @@ class TestBillUser:
         )
         user = BillUser.from_employee(emp)
         assert user.direct_labor is False
+
+    def test_to_csv_row_with_salaried_pay_frequency(self):
+        """Test CSV row shows Salaried for salaried pay frequency."""
+        user = BillUser(
+            email="john@example.com",
+            first_name="John",
+            last_name="Doe",
+            pay_frequency="Salary",
+        )
+        row = user.to_csv_row()
+        assert row["sal"] == "Salaried"
+
+    def test_to_csv_row_with_hourly_pay_frequency(self):
+        """Test CSV row shows Hourly for hourly pay frequency."""
+        user = BillUser(
+            email="john@example.com",
+            first_name="John",
+            last_name="Doe",
+            pay_frequency="Hourly",
+        )
+        row = user.to_csv_row()
+        assert row["sal"] == "Hourly"
+
+    def test_to_csv_row_with_employee_type_code(self):
+        """Test CSV row includes employee type code."""
+        user = BillUser(
+            email="john@example.com",
+            first_name="John",
+            last_name="Doe",
+            employee_type_code="PRD",
+        )
+        row = user.to_csv_row()
+        assert row["employee type"] == "PRD"
+
+    def test_to_csv_row_with_company(self):
+        """Test CSV row includes company."""
+        user = BillUser(
+            email="john@example.com",
+            first_name="John",
+            last_name="Doe",
+            company="CCHN",
+        )
+        row = user.to_csv_row()
+        assert row["company"] == "CCHN"

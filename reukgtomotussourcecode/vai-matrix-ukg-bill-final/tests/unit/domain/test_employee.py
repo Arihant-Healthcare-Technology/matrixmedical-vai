@@ -321,3 +321,78 @@ class TestEmployee:
         )
         assert emp.status == EmployeeStatus.TERMINATED
         assert emp.is_active is False
+
+    def test_is_full_time_with_full_time(self):
+        """Test is_full_time returns True for Full Time employees."""
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            full_or_part_time="Full Time",
+        )
+        assert emp.is_full_time is True
+
+    def test_is_full_time_with_part_time(self):
+        """Test is_full_time returns False for Part Time employees."""
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            full_or_part_time="Part Time",
+        )
+        assert emp.is_full_time is False
+
+    def test_is_full_time_defaults_to_true_when_empty(self):
+        """Test is_full_time defaults to True when field is empty."""
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            full_or_part_time="",
+        )
+        assert emp.is_full_time is True
+
+    def test_should_sync_to_bill_prd_full_time(self):
+        """Test should_sync_to_bill returns True for PRD + Full Time."""
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            employee_type_code="PRD",
+            full_or_part_time="Full Time",
+        )
+        assert emp.should_sync_to_bill is True
+
+    def test_should_sync_to_bill_prd_part_time(self):
+        """Test should_sync_to_bill returns False for PRD + Part Time."""
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            employee_type_code="PRD",
+            full_or_part_time="Part Time",
+        )
+        assert emp.should_sync_to_bill is False
+
+    def test_should_sync_to_bill_ftc_full_time(self):
+        """Test should_sync_to_bill returns False for FTC (non-PRD)."""
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            employee_type_code="FTC",
+            full_or_part_time="Full Time",
+        )
+        assert emp.should_sync_to_bill is False
