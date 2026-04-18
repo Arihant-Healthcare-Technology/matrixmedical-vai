@@ -134,6 +134,7 @@ class Employee:
 
     # Organization
     department: str = ""
+    location: str = ""  # UKG work location/facility
     job_title: str = ""
     supervisor_email: str = ""
     supervisor_id: str = ""
@@ -277,6 +278,7 @@ class Employee:
             "hire_date": self.hire_date.isoformat() if self.hire_date else None,
             "termination_date": self.termination_date.isoformat() if self.termination_date else None,
             "department": self.department,
+            "location": self.location,
             "job_title": self.job_title,
             "supervisor_email": self.supervisor_email,
             "supervisor_id": self.supervisor_id,
@@ -363,6 +365,7 @@ class Employee:
             hire_date=hire_date,
             termination_date=termination_date,
             department=data.get("departmentDescription", "") or data.get("department", ""),
+            location=data.get("locationDescription", "") or data.get("workLocation", "") or data.get("facilityDescription", "") or data.get("orgLevel1Description", "") or "",
             job_title=data.get("jobDescription", "") or data.get("jobTitle", ""),
             supervisor_email=supervisor_email,
             supervisor_id=supervisor_id,

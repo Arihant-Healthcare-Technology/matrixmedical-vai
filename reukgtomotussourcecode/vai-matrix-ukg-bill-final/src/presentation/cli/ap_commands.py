@@ -386,6 +386,10 @@ def _load_invoices_from_file(file_path: str) -> List[Invoice]:
                         description=li.get("description", ""),
                         amount=Decimal(str(li.get("amount", 0))),
                         quantity=li.get("quantity", 1),
+                        gl_account_id=li.get("gl_account_id", "") or li.get("glAccountId", "") or "",
+                        department_id=li.get("department_id", "") or li.get("departmentId", "") or "",
+                        location_id=li.get("location_id", "") or li.get("locationId", "") or "",
+                        class_id=li.get("class_id", "") or li.get("classId", "") or "",
                     )
                 )
 

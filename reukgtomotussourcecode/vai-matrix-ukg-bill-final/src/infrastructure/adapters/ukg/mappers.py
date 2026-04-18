@@ -150,6 +150,15 @@ def map_employee_from_ukg(
         or emp_emp.get("departmentDescription")
         or ""
     )
+    location = (
+        employment_data.get("locationDescription")
+        or employment_data.get("workLocation")
+        or employment_data.get("facilityDescription")
+        or employment_data.get("orgLevel1Description")
+        or emp_emp.get("locationDescription")
+        or emp_emp.get("workLocation")
+        or ""
+    )
     job_title = (
         employment_data.get("jobDescription")
         or employment_data.get("jobTitle")
@@ -226,6 +235,7 @@ def map_employee_from_ukg(
         hire_date=hire_date.date() if hire_date else None,
         termination_date=termination_date.date() if termination_date else None,
         department=department,
+        location=location,
         job_title=job_title,
         supervisor_email=supervisor_email,
         supervisor_id=supervisor_id,
