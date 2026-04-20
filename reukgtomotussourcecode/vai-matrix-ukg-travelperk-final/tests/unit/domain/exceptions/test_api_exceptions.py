@@ -27,7 +27,7 @@ class TestApiError:
         error = ApiError("Test error", status_code=500)
 
         assert error.status_code == 500
-        assert str(error) == "Test error (HTTP 500)"
+        assert str(error) == "[API_ERROR_500] Test error (HTTP 500)"
 
     def test_create_with_response_body(self):
         """Test creating ApiError with response body."""
@@ -39,12 +39,12 @@ class TestApiError:
     def test_str_without_status(self):
         """Test string representation without status code."""
         error = ApiError("Test error")
-        assert str(error) == "Test error"
+        assert str(error) == "[API_ERROR_UNKNOWN] Test error"
 
     def test_str_with_status(self):
         """Test string representation with status code."""
         error = ApiError("Test error", status_code=404)
-        assert str(error) == "Test error (HTTP 404)"
+        assert str(error) == "[API_ERROR_404] Test error (HTTP 404)"
 
     def test_is_exception(self):
         """Test ApiError is an Exception."""
@@ -67,7 +67,7 @@ class TestUkgApiError:
         error = UkgApiError("UKG API error", status_code=404)
 
         assert error.status_code == 404
-        assert str(error) == "UKG API error (HTTP 404)"
+        assert str(error) == "[UKG_ERROR_404] UKG API error (HTTP 404)"
 
     def test_inherits_from_api_error(self):
         """Test UkgApiError inherits from ApiError."""
@@ -125,7 +125,7 @@ class TestAuthenticationError:
     def test_str_representation(self):
         """Test string representation."""
         error = AuthenticationError("Auth failed")
-        assert str(error) == "Auth failed (HTTP 401)"
+        assert str(error) == "[AUTH_ERROR] Auth failed (HTTP 401)"
 
     def test_inherits_from_api_error(self):
         """Test AuthenticationError inherits from ApiError."""
@@ -155,7 +155,7 @@ class TestRateLimitError:
     def test_str_representation(self):
         """Test string representation."""
         error = RateLimitError()
-        assert str(error) == "Rate limit exceeded (HTTP 429)"
+        assert str(error) == "[RATE_LIMIT_ERROR] Rate limit exceeded (HTTP 429)"
 
     def test_inherits_from_api_error(self):
         """Test RateLimitError inherits from ApiError."""

@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from common.rate_limiter import RateLimiter, get_rate_limiter
-from common.secrets_manager import get_secrets_manager, EnvSecretsProvider
+from common.secrets_manager import get_secrets_manager, EnvSecretsManager
 from common.metrics import MetricsCollector
 from common.redaction import redact_pii, RedactingFilter
 from common.report_generator import ReportGenerator
@@ -91,13 +91,13 @@ class TestSecretsManager:
     def test_secrets_manager_env_provider(self):
         """Test environment variable secrets provider."""
         with patch.dict(os.environ, {"TEST_SECRET": "secret_value"}):
-            provider = EnvSecretsProvider()
+            provider = EnvSecretsManager()
             value = provider.get_secret("TEST_SECRET")
             assert value == "secret_value"
 
     def test_secrets_manager_env_provider_default(self):
         """Test environment variable provider with default."""
-        provider = EnvSecretsProvider()
+        provider = EnvSecretsManager()
         value = provider.get_secret("NONEXISTENT_SECRET", default="default")
         assert value == "default"
 

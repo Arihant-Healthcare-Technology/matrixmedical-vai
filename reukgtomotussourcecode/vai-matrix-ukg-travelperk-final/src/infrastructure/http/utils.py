@@ -4,9 +4,13 @@ Shared HTTP utilities.
 Provides common functions used across HTTP clients and error handlers.
 """
 
+import logging
 from typing import Any, Dict
 
 import requests
+
+
+logger = logging.getLogger(__name__)
 
 
 def parse_json_response(response: requests.Response) -> Dict[str, Any]:
@@ -21,8 +25,9 @@ def parse_json_response(response: requests.Response) -> Dict[str, Any]:
     """
     try:
         return response.json()
-    except Exception:
-        return {"raw_text": response.text[:500]}
+    except Exception as e:
+        logger.warning(f"Failed to parse JSON response: {type(e).__name__}: {e}")
+        return {"raw_text": response.text[:500], "parse_error": str(e)}
 
 
 def sanitize_url_for_logging(url: str) -> str:
@@ -54,5 +59,5 @@ def extract_retry_after(response: requests.Response, default: int = 60) -> int:
         try:
             return int(retry_after)
         except ValueError:
-            pass
+            logger.debug(f"Invalid Retry-After header value: {retry_after}, using default: {default}")
     return default

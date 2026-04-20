@@ -48,7 +48,8 @@ class TestParseJsonResponse:
 
         result = parse_json_response(mock_response)
 
-        assert result == {"raw_text": "Not valid JSON content"}
+        assert result["raw_text"] == "Not valid JSON content"
+        assert "parse_error" in result
 
     def test_parse_invalid_json_truncates_long_text(self):
         """Test that long error text is truncated to 500 chars."""
@@ -71,7 +72,8 @@ class TestParseJsonResponse:
 
         result = parse_json_response(mock_response)
 
-        assert result == {"raw_text": "HTML error page"}
+        assert result["raw_text"] == "HTML error page"
+        assert "parse_error" in result
 
 
 class TestSanitizeUrlForLogging:

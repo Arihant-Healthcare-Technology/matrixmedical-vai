@@ -207,5 +207,5 @@ def get_retry_after_seconds(
         try:
             return float(retry_after)
         except ValueError:
-            pass
+            logger.debug(f"Invalid Retry-After header value: {retry_after}, using default: {default}")
     return default

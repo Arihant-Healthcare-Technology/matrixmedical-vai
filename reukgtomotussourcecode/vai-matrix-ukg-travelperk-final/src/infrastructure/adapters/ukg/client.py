@@ -34,9 +34,21 @@ class UKGClient:
         Args:
             settings: UKG API settings. If None, loads from environment.
             debug: Enable debug logging
+
+        Raises:
+            ValueError: If required settings are missing
         """
         self.settings = settings or UKGSettings.from_env()
         self.debug = debug
+
+        # Validate settings early to fail fast
+        try:
+            self.settings.validate()
+            logger.debug("UKG settings validation passed")
+        except ValueError as e:
+            logger.error(f"UKG settings validation failed: {e}")
+            raise
+
         self._authenticator = UKGAuthenticator(
             username=self.settings.username,
             password=self.settings.password,

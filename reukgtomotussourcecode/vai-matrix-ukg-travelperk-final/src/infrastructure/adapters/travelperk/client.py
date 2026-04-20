@@ -37,9 +37,21 @@ class TravelPerkClient:
         Args:
             settings: TravelPerk API settings. If None, loads from environment.
             debug: Enable debug logging
+
+        Raises:
+            ValueError: If required settings are missing
         """
         self.settings = settings or TravelPerkSettings.from_env()
         self.debug = debug
+
+        # Validate settings early to fail fast
+        try:
+            self.settings.validate()
+            logger.debug("TravelPerk settings validation passed")
+        except ValueError as e:
+            logger.error(f"TravelPerk settings validation failed: {e}")
+            raise
+
         self._rate_limiter = get_rate_limiter("travelperk")
 
     def _headers(self) -> Dict[str, str]:

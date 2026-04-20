@@ -11,7 +11,7 @@ import responses
 
 from src.infrastructure.adapters.travelperk.client import TravelPerkClient
 from src.infrastructure.config.settings import TravelPerkSettings
-from src.domain.models.travelperk_user import TravelPerkUser, TravelPerkUserName
+from src.domain.models.travelperk_user import TravelPerkUser, UserName
 from src.domain.exceptions.api_exceptions import TravelPerkApiError, RateLimitError
 
 
@@ -38,7 +38,7 @@ def sample_travelperk_user():
     return TravelPerkUser(
         external_id="12345",
         user_name="john.doe@example.com",
-        name=TravelPerkUserName(given_name="John", family_name="Doe"),
+        name=UserName(given_name="John", family_name="Doe"),
         active=True,
         cost_center="PROJ001",
     )
@@ -194,7 +194,7 @@ class TestTravelPerkCreateUser:
         user_with_manager = TravelPerkUser(
             external_id="12345",
             user_name="john.doe@example.com",
-            name=TravelPerkUserName(given_name="John", family_name="Doe"),
+            name=UserName(given_name="John", family_name="Doe"),
             active=True,
             cost_center="PROJ001",
             manager_id="tp-manager-123",

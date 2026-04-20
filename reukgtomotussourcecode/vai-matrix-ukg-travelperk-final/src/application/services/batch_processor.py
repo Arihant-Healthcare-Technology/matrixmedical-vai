@@ -180,7 +180,13 @@ class BatchProcessor:
                     result.errors += 1
                     progress.errors += 1
                     progress.processed += 1
-                    logger.error(f"{phase_name} unexpected error processing item: {type(e).__name__}: {e}")
+                    # Get item details for better error context
+                    item = future_to_item[future]
+                    if isinstance(item, dict):
+                        item_id = item.get("employeeID") or item.get("employeeNumber") or "unknown"
+                    else:
+                        item_id = str(item)
+                    logger.error(f"{phase_name} unexpected error processing item={item_id}: {type(e).__name__}: {e}")
 
         # Final summary
         batch_elapsed = time.time() - batch_start_time

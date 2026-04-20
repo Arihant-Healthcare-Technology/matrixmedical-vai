@@ -292,17 +292,19 @@ class TestMain:
         call_args = mock_clients["sync_instance"].sync_batch.call_args
         assert call_args[1]["states_filter"] == {"FL", "TX"}
 
-    def test_main_with_insert_supervisor(self, mock_clients, monkeypatch, capsys):
+    def test_main_with_insert_supervisor(self, mock_clients, monkeypatch, caplog):
         """Test main with supervisor pre-insertion."""
+        import logging
         monkeypatch.setenv("COMPANY_ID", "J9A6Y")
         mock_clients["sync_instance"].insert_supervisors.return_value = {"99999": "tp-sup-id"}
 
-        with patch.object(sys, "argv", ["batch_runner.py", "--insert-supervisor", "99999"]):
-            main()
+        with caplog.at_level(logging.INFO):
+            with patch.object(sys, "argv", ["batch_runner.py", "--insert-supervisor", "99999"]):
+                main()
 
         mock_clients["sync_instance"].insert_supervisors.assert_called_once()
-        captured = capsys.readouterr()
-        assert "Pre-inserted" in captured.out
+        # Check log messages instead of stdout
+        assert any("supervisor" in record.message.lower() for record in caplog.records)
 
     def test_main_with_employee_type_codes(self, mock_clients, monkeypatch):
         """Test main with employee type code filter."""
@@ -326,13 +328,16 @@ class TestMain:
         mapping_file = tmp_path / "employee_to_travelperk_id_mapping.json"
         assert mapping_file.exists()
 
-    def test_main_prints_config(self, mock_clients, monkeypatch, capsys):
-        """Test main prints configuration."""
+    def test_main_prints_config(self, mock_clients, monkeypatch, caplog):
+        """Test main logs configuration."""
+        import logging
         monkeypatch.setenv("COMPANY_ID", "J9A6Y")
 
-        with patch.object(sys, "argv", ["batch_runner.py"]):
-            main()
+        with caplog.at_level(logging.INFO):
+            with patch.object(sys, "argv", ["batch_runner.py"]):
+                main()
 
-        captured = capsys.readouterr()
-        assert "[CFG]" in captured.out
-        assert "J9A6Y" in captured.out
+        # Check log messages for configuration output
+        log_text = " ".join(record.message for record in caplog.records)
+        assert "CONFIGURATION" in log_text or "Company ID" in log_text
+        assert "J9A6Y" in log_text

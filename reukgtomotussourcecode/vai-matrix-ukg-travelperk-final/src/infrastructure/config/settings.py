@@ -1,10 +1,14 @@
 """Configuration settings dataclasses."""
 
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Optional, List
 
 from common import get_secrets_manager
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -21,8 +25,9 @@ class UKGSettings:
     @classmethod
     def from_env(cls) -> "UKGSettings":
         """Create settings from environment variables."""
+        logger.debug("Loading UKG settings from environment")
         secrets = get_secrets_manager()
-        return cls(
+        settings = cls(
             base_url=secrets.get_secret("UKG_BASE_URL") or "https://service4.ultipro.com",
             username=secrets.get_secret("UKG_USERNAME") or "",
             password=secrets.get_secret("UKG_PASSWORD") or "",
@@ -30,6 +35,8 @@ class UKGSettings:
             customer_api_key=secrets.get_secret("UKG_CUSTOMER_API_KEY") or "",
             timeout=float(secrets.get_secret("UKG_TIMEOUT") or "45"),
         )
+        logger.debug(f"UKG settings loaded: base_url={settings.base_url}, timeout={settings.timeout}")
+        return settings
 
     def validate(self) -> None:
         """Validate required settings."""
@@ -51,13 +58,16 @@ class TravelPerkSettings:
     @classmethod
     def from_env(cls) -> "TravelPerkSettings":
         """Create settings from environment variables."""
+        logger.debug("Loading TravelPerk settings from environment")
         secrets = get_secrets_manager()
-        return cls(
+        settings = cls(
             api_base=secrets.get_secret("TRAVELPERK_API_BASE") or "https://app.sandbox-travelperk.com",
             api_key=secrets.get_secret("TRAVELPERK_API_KEY") or "",
             timeout=float(secrets.get_secret("TRAVELPERK_TIMEOUT") or "60"),
             max_retries=int(secrets.get_secret("MAX_RETRIES") or "2"),
         )
+        logger.debug(f"TravelPerk settings loaded: api_base={settings.api_base}, timeout={settings.timeout}")
+        return settings
 
     def validate(self) -> None:
         """Validate required settings."""
@@ -82,6 +92,7 @@ class BatchSettings:
     @classmethod
     def from_env(cls) -> "BatchSettings":
         """Create settings from environment variables."""
+        logger.debug("Loading batch settings from environment")
         employee_type_codes = None
         type_codes_env = os.getenv("EMPLOYEE_TYPE_CODES", "")
         if type_codes_env:
@@ -89,7 +100,7 @@ class BatchSettings:
                 code.strip() for code in type_codes_env.split(",") if code.strip()
             ]
 
-        return cls(
+        settings = cls(
             company_id=os.getenv("COMPANY_ID", ""),
             states_filter=os.getenv("STATES", "") or None,
             employee_type_codes=employee_type_codes,
@@ -99,3 +110,5 @@ class BatchSettings:
             limit=int(os.getenv("LIMIT", "0")),
             out_dir=os.getenv("OUT_DIR", "data/batch"),
         )
+        logger.debug(f"Batch settings loaded: workers={settings.workers}, dry_run={settings.dry_run}")
+        return settings

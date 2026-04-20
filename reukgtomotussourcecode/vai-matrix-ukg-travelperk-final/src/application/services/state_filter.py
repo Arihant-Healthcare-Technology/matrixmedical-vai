@@ -8,6 +8,9 @@ import logging
 import time
 from typing import Any, Dict, Optional, Set
 
+import requests
+
+from ...domain.exceptions import ApiError, TimeoutError, ServerError, RateLimitError
 from ...infrastructure.adapters.ukg import UKGClient
 
 
@@ -59,21 +62,28 @@ class StateFilterService:
                 state = (person.get("addressState") or "").strip().upper()
                 self._person_cache[employee_id] = state
                 return state
-            except Exception as e:
+            except (ApiError, TimeoutError, ServerError, RateLimitError, requests.exceptions.RequestException) as e:
                 if attempt < max_retries:
                     if self.debug:
                         logger.debug(
                             f"Retry {attempt}/{max_retries} for state lookup "
-                            f"employee_id={employee_id}: {e}"
+                            f"employee_id={employee_id}: {type(e).__name__}: {e}"
                         )
                     time.sleep(delay)
                     delay = min(delay * 2, 3.2)  # Exponential backoff
                 else:
                     logger.warning(
-                        f"Failed to fetch state for employee_id={employee_id}: {e}"
+                        f"Failed to fetch state for employee_id={employee_id} after {max_retries} attempts: {type(e).__name__}: {e}"
                     )
                     self._person_cache[employee_id] = ""
                     return ""
+            except Exception as e:
+                # Unexpected error - log as error and don't retry
+                logger.error(
+                    f"Unexpected error fetching state for employee_id={employee_id}: {type(e).__name__}: {e}"
+                )
+                self._person_cache[employee_id] = ""
+                return ""
 
         return ""
 
