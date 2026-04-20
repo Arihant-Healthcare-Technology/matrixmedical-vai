@@ -24,6 +24,7 @@ from src.domain.interfaces.repositories import EmployeeRepository, BillUserRepos
 from src.domain.models.employee import Employee, EmployeeStatus
 from src.domain.models.bill_user import BillUser, BillRole
 from src.infrastructure.adapters.bill.mappers import map_employee_to_bill_user
+from src.infrastructure.adapters.bill.department_client import DepartmentClient
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class SyncService(EmployeeSyncService):
         bill_user_repository: BillUserRepository,
         rate_limiter: Optional[Callable[[], None]] = None,
         person_cache: Optional[Dict[str, Dict[str, Any]]] = None,
+        department_client: Optional[DepartmentClient] = None,
     ):
         """
         Initialize sync service.
@@ -52,11 +54,13 @@ class SyncService(EmployeeSyncService):
             bill_user_repository: Repository for BILL user data.
             rate_limiter: Optional rate limiter callable.
             person_cache: Optional cache for person details.
+            department_client: Optional client for resolving budget from cost center.
         """
         self.employee_repo = employee_repository
         self.bill_user_repo = bill_user_repository
         self.rate_limiter = rate_limiter
         self.person_cache = person_cache or {}
+        self.department_client = department_client
 
     def sync_employee(
         self,
@@ -108,6 +112,17 @@ class SyncService(EmployeeSyncService):
                 role=default_role,
                 manager_email=supervisor_email,
             )
+
+            # Resolve budget from cost center using department client
+            if self.department_client and employee.cost_center:
+                budget = self.department_client.get_budget_from_cost_center(
+                    employee.cost_center
+                )
+                bill_user.budget = budget
+                logger.info(
+                    f"Budget resolved for {employee.email}: "
+                    f"cost_center={employee.cost_center} -> budget={budget or '(empty)'}"
+                )
 
             if existing_user:
                 # Update existing user
@@ -338,6 +353,12 @@ class SyncService(EmployeeSyncService):
         logger.info("Pre-populating BILL.com email cache (with rate limiting)...")
         self.bill_user_repo.build_email_cache()
         logger.info("Email cache populated.")
+
+        # Pre-fetch departments for budget resolution
+        if self.department_client:
+            logger.info("Pre-fetching BILL.com departments for budget resolution...")
+            departments = self.department_client.list_departments()
+            logger.info(f"Departments cache populated: {len(departments)} departments")
 
         # Process sequentially with single worker
         total_employees = len(employees)

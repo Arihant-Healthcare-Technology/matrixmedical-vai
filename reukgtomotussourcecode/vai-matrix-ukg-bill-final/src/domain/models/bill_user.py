@@ -92,6 +92,9 @@ class BillUser:
     employee_type_code: str = ""  # UKG employeeTypeCode (PRD, FTC, HRC)
     pay_frequency: str = ""  # UKG payFrequency (Hourly/Salaried)
 
+    # Budget/Department name (resolved from cost center via Bill.com departments API)
+    budget: str = ""
+
     # Additional data
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -211,7 +214,7 @@ class BillUser:
             "role": self.role.value.capitalize() if self.role != BillRole.NO_ACCESS else "No access",
             "manager": self.manager_email,
             "cost center": formatted_cost_center,
-            "budget count": "Direct" if self.direct_labor else "Indirect",
+            "budget count": self.budget,  # Department name from Bill.com departments API
             "company": self.company,  # CCHN
             "employee type": self.employee_type_code,  # PRD, FTC, HRC
             "sal": sal_value,  # Salaried or Hourly
@@ -237,6 +240,7 @@ class BillUser:
             "company": self.company,
             "employee_type_code": self.employee_type_code,
             "pay_frequency": self.pay_frequency,
+            "budget": self.budget,
         }
 
     def diff(self, other: "BillUser") -> Dict[str, tuple]:

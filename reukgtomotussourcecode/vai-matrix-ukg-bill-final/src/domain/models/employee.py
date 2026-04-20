@@ -215,10 +215,19 @@ class Employee:
         Check if employee should be synced to BILL.com.
 
         Criteria:
-        - employee_type_code must be 'PRD' (Production)
-        - Must be Full Time (not Part Time)
+        - Company must be CCHN (companyID = J9A6Y in UKG)
+        - PRD employees: must be Full Time (fullTimeOrPartTimeCode = "F")
+        - FTC and HRC employees: all (no full-time filter)
         """
-        return self.employee_type_code == "PRD" and self.is_full_time
+        # Must be from CCHN company (J9A6Y is the UKG companyID for CCHN)
+        if self.company_id != "J9A6Y":
+            return False
+
+        if self.employee_type_code == "PRD":
+            return self.is_full_time
+        elif self.employee_type_code in ("FTC", "HRC"):
+            return True
+        return False
 
     def validate(self) -> List[str]:
         """

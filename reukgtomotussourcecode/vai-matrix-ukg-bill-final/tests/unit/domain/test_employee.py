@@ -359,40 +359,85 @@ class TestEmployee:
         assert emp.is_full_time is True
 
     def test_should_sync_to_bill_prd_full_time(self):
-        """Test should_sync_to_bill returns True for PRD + Full Time."""
+        """Test should_sync_to_bill returns True for CCHN + PRD + Full Time."""
         emp = Employee(
             employee_id="EMP001",
             employee_number="12345",
             first_name="John",
             last_name="Doe",
             email="john@example.com",
+            company_id="J9A6Y",
             employee_type_code="PRD",
             full_or_part_time="Full Time",
         )
         assert emp.should_sync_to_bill is True
 
     def test_should_sync_to_bill_prd_part_time(self):
-        """Test should_sync_to_bill returns False for PRD + Part Time."""
+        """Test should_sync_to_bill returns False for CCHN + PRD + Part Time."""
         emp = Employee(
             employee_id="EMP001",
             employee_number="12345",
             first_name="John",
             last_name="Doe",
             email="john@example.com",
+            company_id="J9A6Y",
             employee_type_code="PRD",
             full_or_part_time="Part Time",
         )
         assert emp.should_sync_to_bill is False
 
-    def test_should_sync_to_bill_ftc_full_time(self):
-        """Test should_sync_to_bill returns False for FTC (non-PRD)."""
+    def test_should_sync_to_bill_ftc(self):
+        """Test should_sync_to_bill returns True for CCHN + FTC (all FTC employees sync)."""
         emp = Employee(
             employee_id="EMP001",
             employee_number="12345",
             first_name="John",
             last_name="Doe",
             email="john@example.com",
+            company_id="J9A6Y",
             employee_type_code="FTC",
+            full_or_part_time="Full Time",
+        )
+        assert emp.should_sync_to_bill is True
+
+    def test_should_sync_to_bill_hrc(self):
+        """Test should_sync_to_bill returns True for CCHN + HRC (all HRC employees sync)."""
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            company_id="J9A6Y",
+            employee_type_code="HRC",
+            full_or_part_time="Part Time",  # Part-time HRC should still sync
+        )
+        assert emp.should_sync_to_bill is True
+
+    def test_should_sync_to_bill_other_type(self):
+        """Test should_sync_to_bill returns False for non PRD/FTC/HRC types."""
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            company_id="J9A6Y",
+            employee_type_code="TMP",  # Temporary - should not sync
+            full_or_part_time="Full Time",
+        )
+        assert emp.should_sync_to_bill is False
+
+    def test_should_sync_to_bill_non_cchn_company(self):
+        """Test should_sync_to_bill returns False for non-CCHN company (J9A6Y)."""
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            company_id="OTHER",  # Non-CCHN company (J9A6Y is CCHN)
+            employee_type_code="PRD",
             full_or_part_time="Full Time",
         )
         assert emp.should_sync_to_bill is False

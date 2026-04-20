@@ -128,6 +128,11 @@ class BillSettings(BaseSettings):
         description="BILL Accounts Payable API base URL",
         alias="BILL_AP_API_BASE",
     )
+    v2_api_base: str = Field(
+        default="https://api-stage.bill.com/api/v2",
+        description="BILL v2 API base URL for department lookup",
+        alias="BILL_V2_API_BASE",
+    )
 
     # Defaults
     default_role: str = Field(default="MEMBER", description="Default role for new users")
@@ -318,6 +323,11 @@ class Settings(BaseSettings):
         """BILL org ID (backward compatible)."""
         import os
         return os.getenv("BILL_ORG_ID", "")
+
+    @property
+    def bill_v2_api_base(self) -> str:
+        """BILL v2 API base URL (backward compatible)."""
+        return self.bill.v2_api_base
 
     @property
     def bill_default_funding_account(self) -> Optional[str]:

@@ -383,6 +383,7 @@ class TestBuildBillUserCsvRow:
             cost_center="5230",
             cost_center_description="Engineering",
             direct_labor=True,
+            budget="Matrix Clinical / Direct",
         )
 
         row = build_bill_user_csv_row(user)
@@ -393,7 +394,7 @@ class TestBuildBillUserCsvRow:
         assert row["role"] == "Admin"  # Capitalized format
         assert row["manager"] == "manager@example.com"
         assert row["cost center"] == "5230 – Engineering"
-        assert row["budget count"] == "Direct"
+        assert row["budget count"] == "Matrix Clinical / Direct"
 
     def test_minimal_user(self):
         """Should handle minimal user."""
@@ -409,7 +410,7 @@ class TestBuildBillUserCsvRow:
         assert row["role"] == "Member"  # Default, capitalized
         assert row["manager"] == ""
         assert row["cost center"] == ""
-        assert row["budget count"] == "Indirect"
+        assert row["budget count"] == ""  # Budget resolved from department API
 
     def test_user_with_cost_center_only(self):
         """Should handle cost center without description."""
@@ -418,12 +419,13 @@ class TestBuildBillUserCsvRow:
             last_name="Wilson",
             email="bob@example.com",
             cost_center="4500",
+            budget="Matrix Corporate / Indirect",
         )
 
         row = build_bill_user_csv_row(user)
 
         assert row["cost center"] == "4500"
-        assert row["budget count"] == "Indirect"
+        assert row["budget count"] == "Matrix Corporate / Indirect"
 
 
 class TestBuildVendorCsvRow:

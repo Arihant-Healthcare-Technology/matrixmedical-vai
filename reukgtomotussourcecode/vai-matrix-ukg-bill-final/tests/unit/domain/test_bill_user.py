@@ -213,7 +213,7 @@ class TestBillUser:
             "role": "Member",
             "manager": "boss@example.com",
             "cost center": "",
-            "budget count": "Indirect",
+            "budget count": "",  # Budget is resolved from cost center via department API
             "company": "",
             "employee type": "",
             "sal": "Hourly",
@@ -436,10 +436,11 @@ class TestBillUser:
             cost_center="5230",
             cost_center_description="Engineering",
             direct_labor=True,
+            budget="Matrix Clinical / Direct",  # Budget resolved from department API
         )
         row = user.to_csv_row()
         assert row["cost center"] == "5230 – Engineering"
-        assert row["budget count"] == "Direct"
+        assert row["budget count"] == "Matrix Clinical / Direct"
 
     def test_to_csv_row_cost_center_code_only(self):
         """Test CSV row with cost center code only (no description)."""
@@ -452,16 +453,16 @@ class TestBillUser:
         row = user.to_csv_row()
         assert row["cost center"] == "5230"
 
-    def test_to_csv_row_indirect_labor(self):
-        """Test CSV row shows Indirect when direct_labor is False."""
+    def test_to_csv_row_with_budget(self):
+        """Test CSV row shows budget field value."""
         user = BillUser(
             email="john@example.com",
             first_name="John",
             last_name="Doe",
-            direct_labor=False,
+            budget="Matrix Corporate / Indirect",
         )
         row = user.to_csv_row()
-        assert row["budget count"] == "Indirect"
+        assert row["budget count"] == "Matrix Corporate / Indirect"
 
     def test_to_dict_includes_new_fields(self):
         """Test to_dict includes cost_center and direct_labor."""

@@ -73,7 +73,7 @@ def build_bill_user_csv_row(user: BillUser) -> Dict[str, str]:
         Dict suitable for csv.DictWriter with columns:
         - first name, last name, email address, role, manager
         - cost center (formatted as "CODE – Description")
-        - budget count ("Direct" or "Indirect")
+        - budget count (department name from Bill.com, resolved from cost center prefix)
         - company (CCHN from UKG companyID)
         - employee type (PRD, FTC, HRC from UKG employeeTypeCode)
         - sal ("Salaried" or "Hourly" from UKG payFrequency)
