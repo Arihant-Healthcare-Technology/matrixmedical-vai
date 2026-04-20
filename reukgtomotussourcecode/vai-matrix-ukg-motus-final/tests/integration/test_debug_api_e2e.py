@@ -121,11 +121,16 @@ def mock_ukg_responses():
             json=MOCK_UKG_SUPERVISOR,
             status=200,
         )
-        # Org levels
+        # Org levels - must include level field for proper caching
         rsps.add(
             responses.GET,
             re.compile(r".*/configuration/v1/org-levels.*"),
-            json=[{"code": "LOC001", "description": "Test Location"}],
+            json=[
+                {"level": 1, "code": "DIV1", "description": "Division 1", "longDescription": "Division One - Full Description"},
+                {"level": 2, "code": "DEPT1", "description": "Department 1", "longDescription": "Department One - Full Description"},
+                {"level": 3, "code": "TEAM1", "description": "Team 1", "longDescription": "Team One - Full Description"},
+                {"level": 4, "code": "GRP1", "description": "Group 1", "longDescription": "Group One - Full Description"},
+            ],
             status=200,
         )
         yield rsps

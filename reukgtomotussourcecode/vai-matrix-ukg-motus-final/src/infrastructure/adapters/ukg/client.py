@@ -307,6 +307,9 @@ class UKGClient:
 
         try:
             data = self._get("/configuration/v1/org-levels")
+            logger.debug(
+                f"[{correlation_id}] org-levels API returned {len(data) if isinstance(data, list) else 1} items"
+            )
         except UkgApiError as e:
             logger.warning(
                 f"[{correlation_id}] Failed to fetch org-levels: {e}. Using empty cache."
@@ -321,13 +324,28 @@ class UKGClient:
         for item in items:
             level = item.get("level")
             code = item.get("code")
-            description = item.get("description", "")
+            # Prefer longDescription (full description) over description (short)
+            long_desc = item.get("longDescription")
+            short_desc = item.get("description", "")
+            description = long_desc or short_desc
+
+            # Log first few items for debugging
+            if len(cache) < 5:
+                logger.debug(
+                    f"[{correlation_id}] org-level item: level={level}, code={code}, "
+                    f"longDescription={long_desc[:50] if long_desc else None}..., "
+                    f"description={short_desc[:50] if short_desc else None}..."
+                )
 
             if level is not None and code:
                 if level not in cache:
                     cache[level] = {}
                 cache[level][str(code)] = str(description)
 
+        logger.debug(
+            f"[{correlation_id}] org-levels cache built with {sum(len(v) for v in cache.values())} entries "
+            f"across {len(cache)} levels"
+        )
         self._org_levels_cache = cache
         return self._org_levels_cache
 

@@ -234,6 +234,7 @@ class UKGMockServer:
         self.mock_person_details(employee_id=employee_id)
         self.mock_supervisor_details(employee_id=employee_id)
         self.mock_location()
+        self.mock_org_levels()
 
     def mock_active_employee(
         self,
@@ -257,6 +258,7 @@ class UKGMockServer:
         self.mock_person_details(data=[employee_data["person"]])
         self.mock_supervisor_details(data=[employee_data["supervisor"]])
         self.mock_location(data=employee_data["location"])
+        self.mock_org_levels()
 
     def mock_terminated_employee(
         self,
@@ -283,6 +285,7 @@ class UKGMockServer:
         self.mock_person_details(data=[employee_data["person"]])
         self.mock_supervisor_details(data=[employee_data["supervisor"]])
         self.mock_location(data=employee_data["location"])
+        self.mock_org_levels()
 
     def mock_leave_employee(
         self,
@@ -312,6 +315,7 @@ class UKGMockServer:
         self.mock_person_details(data=[employee_data["person"]])
         self.mock_supervisor_details(data=[employee_data["supervisor"]])
         self.mock_location(data=employee_data["location"])
+        self.mock_org_levels()
 
     def mock_unauthorized(self) -> None:
         """Mock all endpoints returning 401 Unauthorized."""
@@ -350,3 +354,53 @@ class UKGMockServer:
                 json={"error": "Internal Server Error"},
                 status=500,
             )
+
+    def mock_org_levels(
+        self,
+        data: Optional[List[Dict[str, Any]]] = None,
+        status: int = 200,
+    ) -> None:
+        """
+        Mock org-levels endpoint.
+
+        Args:
+            data: Response data (defaults to sample org levels)
+            status: HTTP status code
+        """
+        if data is None:
+            # Default org levels with both short and long descriptions
+            data = [
+                {
+                    "level": 1,
+                    "code": "DIV1",
+                    "description": "Division 1",
+                    "longDescription": "Division One - Full Description",
+                },
+                {
+                    "level": 2,
+                    "code": "DEPT1",
+                    "description": "Department 1",
+                    "longDescription": "Department One - Full Description",
+                },
+                {
+                    "level": 3,
+                    "code": "TEAM1",
+                    "description": "Team 1",
+                    "longDescription": "Team One - Full Description",
+                },
+                {
+                    "level": 4,
+                    "code": "GRP1",
+                    "description": "Group 1",
+                    "longDescription": "Group One - Full Description",
+                },
+            ]
+
+        pattern = rf"{re.escape(self.base_url)}/configuration/v1/org-levels.*"
+
+        responses.add(
+            responses.GET,
+            re.compile(pattern),
+            json=data,
+            status=status,
+        )
