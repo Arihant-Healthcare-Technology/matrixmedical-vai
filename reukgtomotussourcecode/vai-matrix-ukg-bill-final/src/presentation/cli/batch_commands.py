@@ -101,15 +101,15 @@ def run_sync_all(
             # In dry run, just fetch and report what would happen
             employee_repo = container.employee_repository()
             all_employees = list(employee_repo.get_active_employees(company_id=company_id))
-            # Filter for PRD + Full Time only
+            # Filter for CCHN company + (PRD Full Time or FTC/HRC)
             employees = [emp for emp in all_employees if emp.should_sync_to_bill]
             excluded = len(all_employees) - len(employees)
             logger.info(f"  Fetched {len(all_employees)} employees total")
-            logger.info(f"  Filtered to {len(employees)} eligible (PRD + Full Time)")
+            logger.info(f"  Filtered to {len(employees)} eligible (CCHN + PRD Full Time / FTC / HRC)")
             if excluded > 0:
-                logger.info(f"  Excluded {excluded} employees (non-PRD or Part Time)")
+                logger.info(f"  Excluded {excluded} employees (non-CCHN or non-eligible type)")
             logger.info("DRY RUN MODE - No changes will be made")
-            print_preview(employees, "employees to sync to BILL.com (PRD + Full Time)", show_all=True)
+            print_preview(employees, "employees to sync to BILL.com", show_all=True)
             return 0
 
         # STEP 3: Sync employees to BILL.com S&E

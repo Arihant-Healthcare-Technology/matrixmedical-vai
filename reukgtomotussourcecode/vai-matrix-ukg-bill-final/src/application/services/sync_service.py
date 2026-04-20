@@ -464,7 +464,7 @@ class SyncService(EmployeeSyncService):
                 break
 
             # Filter for only active employees that should be synced to BILL
-            # Criteria: PRD employee type + Full Time only
+            # Criteria: CCHN company (J9A6Y) + (PRD Full Time or FTC/HRC)
             eligible_batch = [
                 emp for emp in batch
                 if emp.status == EmployeeStatus.ACTIVE and emp.should_sync_to_bill
@@ -483,7 +483,7 @@ class SyncService(EmployeeSyncService):
 
         logger.info(
             f"UKG fetch complete: {len(employees)} eligible employees found "
-            f"(PRD + Full Time only, from {page} page(s))"
+            f"(CCHN + PRD Full Time / FTC / HRC, from {page} page(s))"
         )
 
         return self.sync_batch(employees, default_role, workers)
