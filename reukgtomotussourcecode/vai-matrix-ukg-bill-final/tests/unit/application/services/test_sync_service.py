@@ -265,8 +265,9 @@ class TestSyncAll:
             first_name="Active",
             last_name="User",
             status=EmployeeStatus.ACTIVE,
+            company_id="J9A6Y",  # Required for BILL sync (CCHN company)
             employee_type_code="PRD",  # Required for BILL sync
-            full_or_part_time="Full Time",  # Required for BILL sync
+            full_or_part_time="Full Time",  # Required for PRD BILL sync
         )
         mock_employee_repo.get_active_employees.return_value = [active_employee]
         mock_bill_user_repo.get_by_email.return_value = None
