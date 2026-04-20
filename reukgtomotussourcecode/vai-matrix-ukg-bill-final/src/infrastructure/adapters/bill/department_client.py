@@ -5,10 +5,11 @@ This module provides the v2 API client for fetching departments.
 Used to map cost center prefixes to budget/department names.
 """
 
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
-import httpx
+import requests
 
 from src.infrastructure.config.constants import (
     DEFAULT_TIMEOUT,
@@ -66,7 +67,6 @@ class DepartmentClient:
         url = f"{self.api_base}{endpoint}"
 
         # v2 API uses form-urlencoded with JSON in 'data' field
-        import json
         form_data = {
             "devKey": self.api_token,
             "sessionId": self.api_token,  # Using API token as session
@@ -77,15 +77,15 @@ class DepartmentClient:
 
         for attempt in range(self.max_retries):
             try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    response = client.post(
-                        url,
-                        data=form_data,
-                        headers={
-                            "Content-Type": "application/x-www-form-urlencoded",
-                            "Accept": "application/json",
-                        },
-                    )
+                response = requests.post(
+                    url,
+                    data=form_data,
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "application/json",
+                    },
+                    timeout=self.timeout,
+                )
 
                 if response.status_code == 200:
                     result = response.json()
@@ -105,9 +105,15 @@ class DepartmentClient:
                         f"attempt={attempt + 1}/{self.max_retries}"
                     )
 
-            except httpx.TimeoutException:
+            except requests.exceptions.Timeout:
                 logger.warning(
                     f"BILL v2 API timeout, attempt={attempt + 1}/{self.max_retries}"
+                )
+            except requests.exceptions.RequestException as e:
+                if attempt == self.max_retries - 1:
+                    raise
+                logger.warning(
+                    f"BILL v2 API error: {e}, attempt={attempt + 1}/{self.max_retries}"
                 )
             except Exception as e:
                 if attempt == self.max_retries - 1:
