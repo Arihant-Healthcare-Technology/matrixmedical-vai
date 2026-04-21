@@ -74,7 +74,7 @@ def build_bill_user_csv_row(user: BillUser) -> Dict[str, str]:
         - first name, last name, email address, role, manager
         - cost center (formatted as "CODE – Description")
         - budget count (department name from Bill.com, resolved from cost center prefix)
-        - company (CCHN from UKG companyID)
+        - company (UKG companyID: J9A6Y = companyCode: CCHN)
         - employee type (PRD, FTC, HRC from UKG employeeTypeCode)
         - sal ("Salaried" or "Hourly" from UKG payFrequency)
     """

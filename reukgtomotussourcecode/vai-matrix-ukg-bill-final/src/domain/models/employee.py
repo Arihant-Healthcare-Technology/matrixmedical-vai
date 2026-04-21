@@ -215,14 +215,11 @@ class Employee:
         Check if employee should be synced to BILL.com.
 
         Criteria:
-        - Company must be CCHN (companyID = J9A6Y in UKG)
         - PRD employees: must be Full Time (fullTimeOrPartTimeCode = "F")
         - FTC and HRC employees: all (no full-time filter)
-        """
-        # Must be from CCHN company (J9A6Y is the UKG companyID for CCHN)
-        if self.company_id != "J9A6Y":
-            return False
 
+        Note: Company filtering is done at the UKG API level via --company-id parameter.
+        """
         if self.employee_type_code == "PRD":
             return self.is_full_time
         elif self.employee_type_code in ("FTC", "HRC"):

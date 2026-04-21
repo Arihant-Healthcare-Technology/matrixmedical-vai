@@ -88,7 +88,7 @@ class BillUser:
     direct_labor: bool = False
 
     # Additional UKG fields for CSV export
-    company: str = ""  # UKG companyID (CCHN)
+    company: str = ""  # UKG companyID (J9A6Y = CCHN)
     employee_type_code: str = ""  # UKG employeeTypeCode (PRD, FTC, HRC)
     pay_frequency: str = ""  # UKG payFrequency (Hourly/Salaried)
 
@@ -215,7 +215,7 @@ class BillUser:
             "manager": self.manager_email,
             "cost center": formatted_cost_center,
             "budget count": self.budget,  # Department name from Bill.com departments API
-            "company": self.company,  # CCHN
+            "company": self.company,  # companyID (J9A6Y = CCHN)
             "employee type": self.employee_type_code,  # PRD, FTC, HRC
             "sal": sal_value,  # Salaried or Hourly
         }

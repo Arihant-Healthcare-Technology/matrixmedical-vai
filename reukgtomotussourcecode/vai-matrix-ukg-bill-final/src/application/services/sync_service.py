@@ -449,6 +449,11 @@ class SyncService(EmployeeSyncService):
         page = 1
         page_size = 200
 
+        # Counters for filter breakdown logging
+        total_from_ukg = 0
+        total_active = 0
+        total_eligible = 0
+
         logger.info(
             f"Fetching active employees from UKG "
             f"(company_id={company_id}, page_size={page_size})"
@@ -463,12 +468,18 @@ class SyncService(EmployeeSyncService):
             if not batch:
                 break
 
-            # Filter for only active employees that should be synced to BILL
-            # Criteria: CCHN company (J9A6Y) + (PRD Full Time or FTC/HRC)
-            eligible_batch = [
-                emp for emp in batch
-                if emp.status == EmployeeStatus.ACTIVE and emp.should_sync_to_bill
-            ]
+            # Track total from UKG (before any filtering)
+            total_from_ukg += len(batch)
+
+            # Apply filters incrementally and track counts
+            # Filter 1: Active status
+            active_batch = [emp for emp in batch if emp.status == EmployeeStatus.ACTIVE]
+            total_active += len(active_batch)
+
+            # Filter 2: Employee type (PRD Full Time or FTC/HRC)
+            eligible_batch = [emp for emp in active_batch if emp.should_sync_to_bill]
+            total_eligible += len(eligible_batch)
+
             employees.extend(eligible_batch)
 
             logger.info(
@@ -481,9 +492,18 @@ class SyncService(EmployeeSyncService):
 
             page += 1
 
+        # Log filter breakdown
+        logger.info("=" * 60)
+        logger.info("FILTER BREAKDOWN")
+        logger.info("=" * 60)
+        logger.info(f"  Total from UKG: {total_from_ukg}")
+        logger.info(f"  After ACTIVE status filter: {total_active}")
+        logger.info(f"  After employee type filter (PRD Full Time / FTC / HRC): {total_eligible}")
+        logger.info("=" * 60)
+
         logger.info(
             f"UKG fetch complete: {len(employees)} eligible employees found "
-            f"(CCHN + PRD Full Time / FTC / HRC, from {page} page(s))"
+            f"(from {page} page(s))"
         )
 
         return self.sync_batch(employees, default_role, workers)

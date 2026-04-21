@@ -13,8 +13,8 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from src.domain.models.employee import Employee
-from src.domain.models.bill_user import BillRole
+from src.domain.models.employee import Employee, EmployeeStatus
+from src.domain.models.bill_user import BillRole, BillUser
 from src.presentation.cli.container import Container
 from src.presentation.cli.utils import (
     load_json_file,
@@ -98,18 +98,70 @@ def run_sync_all(
             logger.info(f"  Company ID: {company_id}")
 
         if dry_run:
-            # In dry run, just fetch and report what would happen
+            # In dry run, fetch employees and classify them
             employee_repo = container.employee_repository()
             all_employees = list(employee_repo.get_active_employees(company_id=company_id))
-            # Filter for CCHN company + (PRD Full Time or FTC/HRC)
-            employees = [emp for emp in all_employees if emp.should_sync_to_bill]
-            excluded = len(all_employees) - len(employees)
-            logger.info(f"  Fetched {len(all_employees)} employees total")
-            logger.info(f"  Filtered to {len(employees)} eligible (CCHN + PRD Full Time / FTC / HRC)")
-            if excluded > 0:
-                logger.info(f"  Excluded {excluded} employees (non-CCHN or non-eligible type)")
-            logger.info("DRY RUN MODE - No changes will be made")
-            print_preview(employees, "employees to sync to BILL.com", show_all=True)
+
+            # Apply filters incrementally and track counts for breakdown
+            total_from_ukg = len(all_employees)
+            active_employees = [emp for emp in all_employees if emp.status == EmployeeStatus.ACTIVE]
+            eligible_employees = [emp for emp in active_employees if emp.should_sync_to_bill]
+
+            # Log filter breakdown
+            logger.info("=" * 60)
+            logger.info("FILTER BREAKDOWN")
+            logger.info("=" * 60)
+            logger.info(f"  Total from UKG: {total_from_ukg}")
+            logger.info(f"  After ACTIVE status filter: {len(active_employees)}")
+            logger.info(f"  After employee type filter (PRD Full Time / FTC / HRC): {len(eligible_employees)}")
+            logger.info("=" * 60)
+
+            # Check each employee against BILL.com to classify action
+            logger.info("\nChecking employees against BILL.com...")
+            bill_user_repo = container.bill_user_repository()
+
+            create_list = []
+            update_list = []
+            no_change_list = []
+
+            for emp in eligible_employees:
+                existing = bill_user_repo.get_by_email(emp.email)
+                if existing:
+                    # Map employee to BillUser for comparison
+                    bill_user = BillUser.from_employee(emp, role=role)
+                    if bill_user.needs_update(existing):
+                        update_list.append(emp)
+                    else:
+                        no_change_list.append(emp)
+                else:
+                    create_list.append(emp)
+
+            # Print summary
+            logger.info("=" * 60)
+            logger.info("DRY RUN SUMMARY")
+            logger.info("=" * 60)
+            logger.info(f"  Need creation: {len(create_list)}")
+            logger.info(f"  Need update: {len(update_list)}")
+            logger.info(f"  No changes needed: {len(no_change_list)}")
+            logger.info("=" * 60)
+
+            # Print detailed lists
+            if create_list:
+                logger.info("\nEmployees needing CREATION:")
+                for emp in create_list:
+                    logger.info(f"  - {emp.first_name} {emp.last_name} | {emp.email} | #{emp.employee_number}")
+
+            if update_list:
+                logger.info("\nEmployees needing UPDATE:")
+                for emp in update_list:
+                    logger.info(f"  - {emp.first_name} {emp.last_name} | {emp.email} | #{emp.employee_number}")
+
+            if no_change_list:
+                logger.info("\nEmployees with NO CHANGES needed:")
+                for emp in no_change_list:
+                    logger.info(f"  - {emp.first_name} {emp.last_name} | {emp.email} | #{emp.employee_number}")
+
+            logger.info("\nDRY RUN MODE - No changes were made to BILL.com")
             return 0
 
         # STEP 3: Sync employees to BILL.com S&E

@@ -329,14 +329,17 @@ class UKGClient:
         """
         all_employees = self.list_employees(company_id, page, page_size)
 
-        # Filter to active employees
-        active = []
-        for emp in all_employees:
-            status_code = str(emp.get("employeeStatusCode", "")).strip().upper()
-            if status_code == "A":
-                active.append(emp)
+        # Filter to active employees - DISABLED for debugging
+        # TODO: Re-enable this filter after debugging
+        # active = []
+        # for emp in all_employees:
+        #     status_code = str(emp.get("employeeStatusCode", "")).strip().upper()
+        #     if status_code == "A":
+        #         active.append(emp)
+        # return active
 
-        return active
+        # Return all employees (no status filter)
+        return all_employees
 
     # =========================================================================
     # Supervisor Resolution
