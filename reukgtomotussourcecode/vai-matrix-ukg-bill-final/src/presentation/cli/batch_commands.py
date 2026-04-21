@@ -98,9 +98,25 @@ def run_sync_all(
             logger.info(f"  Company ID: {company_id}")
 
         if dry_run:
-            # In dry run, fetch employees and classify them
+            # In dry run, fetch ALL employees with pagination
             employee_repo = container.employee_repository()
-            all_employees = list(employee_repo.get_active_employees(company_id=company_id))
+            all_employees = []
+            page = 1
+            page_size = 200
+
+            while True:
+                batch = employee_repo.get_active_employees(
+                    company_id=company_id,
+                    page=page,
+                    page_size=page_size,
+                )
+                if not batch:
+                    break
+                all_employees.extend(batch)
+                logger.info(f"Fetched page {page}: {len(batch)} employees (total so far: {len(all_employees)})")
+                if len(batch) < page_size:
+                    break
+                page += 1
 
             # Apply filters incrementally and track counts for breakdown
             total_from_ukg = len(all_employees)
