@@ -444,53 +444,29 @@ class SyncService(EmployeeSyncService):
         Returns:
             BatchSyncResult with aggregate statistics.
         """
-        # Fetch all active employees
-        employees = []
-        page = 1
-        page_size = 200
-
-        # Counters for filter breakdown logging
-        total_from_ukg = 0
-        total_active = 0
-        total_eligible = 0
-
+        # Fetch all active employees in a single call with max page size
         logger.info(
-            f"Fetching active employees from UKG "
-            f"(company_id={company_id}, page_size={page_size})"
+            f"Fetching all employees from UKG "
+            f"(company_id={company_id})"
         )
 
-        while True:
-            batch = self.employee_repo.get_active_employees(
-                company_id=company_id,
-                page=page,
-                page_size=page_size,
-            )
-            if not batch:
-                break
+        all_employees = self.employee_repo.get_active_employees(
+            company_id=company_id,
+            page=1,
+            page_size=2147483647,  # Max int to fetch all in one call
+        )
 
-            # Track total from UKG (before any filtering)
-            total_from_ukg += len(batch)
+        total_from_ukg = len(all_employees)
+        logger.info(f"Fetched {total_from_ukg} employees from UKG")
 
-            # Apply filters incrementally and track counts
-            # Filter 1: Active status
-            active_batch = [emp for emp in batch if emp.status == EmployeeStatus.ACTIVE]
-            total_active += len(active_batch)
+        # Apply filters incrementally and track counts
+        # Filter 1: Active status
+        active_employees = [emp for emp in all_employees if emp.status == EmployeeStatus.ACTIVE]
+        total_active = len(active_employees)
 
-            # Filter 2: Employee type (PRD Full Time or FTC/HRC)
-            eligible_batch = [emp for emp in active_batch if emp.should_sync_to_bill]
-            total_eligible += len(eligible_batch)
-
-            employees.extend(eligible_batch)
-
-            logger.info(
-                f"Fetched page {page}: {len(batch)} employees "
-                f"({len(eligible_batch)} eligible for BILL sync, total so far: {len(employees)})"
-            )
-
-            if len(batch) < page_size:
-                break
-
-            page += 1
+        # Filter 2: Employee type (PRD Full Time or FTC/HRC)
+        employees = [emp for emp in active_employees if emp.should_sync_to_bill]
+        total_eligible = len(employees)
 
         # Log filter breakdown
         logger.info("=" * 60)
@@ -500,11 +476,6 @@ class SyncService(EmployeeSyncService):
         logger.info(f"  After ACTIVE status filter: {total_active}")
         logger.info(f"  After employee type filter (PRD Full Time / FTC / HRC): {total_eligible}")
         logger.info("=" * 60)
-
-        logger.info(
-            f"UKG fetch complete: {len(employees)} eligible employees found "
-            f"(from {page} page(s))"
-        )
 
         return self.sync_batch(employees, default_role, workers)
 

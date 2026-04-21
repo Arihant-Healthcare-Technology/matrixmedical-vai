@@ -124,7 +124,7 @@ class HttpClient:
         payload_info = ""
         if "json" in kwargs and kwargs["json"]:
             payload_info = f" payload_keys={list(kwargs['json'].keys())}"
-        logger.info(f"HTTP request: {method} {log_path}{payload_info}")
+        logger.debug(f"HTTP request: {method} {log_path}{payload_info}")
 
         try:
             response = self.session.request(
@@ -138,7 +138,7 @@ class HttpClient:
             # Log response
             elapsed_ms = (time.time() - start_time) * 1000
             if response.status_code < 400:
-                logger.info(f"HTTP response: {method} {log_path} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
+                logger.debug(f"HTTP response: {method} {log_path} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
             else:
                 logger.warning(f"HTTP response: {method} {log_path} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
 
