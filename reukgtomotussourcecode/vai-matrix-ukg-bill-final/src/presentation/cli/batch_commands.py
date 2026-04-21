@@ -15,6 +15,7 @@ from typing import List, Optional
 
 from src.domain.models.employee import Employee, EmployeeStatus
 from src.domain.models.bill_user import BillRole, BillUser
+from src.infrastructure.adapters.ukg.mappers import map_employee_from_ukg
 from src.presentation.cli.container import Container
 from src.presentation.cli.utils import (
     load_json_file,
@@ -98,42 +99,67 @@ def run_sync_all(
             logger.info(f"  Company ID: {company_id}")
 
         if dry_run:
-            # In dry run, fetch ALL employees in a single call with max page size
+            # In dry run, process employees one by one
             employee_repo = container.employee_repository()
-            logger.info("Fetching all employees from UKG...")
-            all_employees = list(employee_repo.get_active_employees(
+            bill_user_repo = container.bill_user_repository()
+
+            # Get raw employee data from UKG
+            logger.info("Fetching employees from UKG...")
+            raw_employees = employee_repo._client.list_employees(
                 company_id=company_id,
                 page=1,
                 page_size=2147483647,  # Max int to fetch all in one call
-            ))
-            logger.info(f"Fetched {len(all_employees)} employees from UKG")
+            )
 
-            # Apply filters incrementally and track counts for breakdown
-            total_from_ukg = len(all_employees)
-            active_employees = [emp for emp in all_employees if emp.status == EmployeeStatus.ACTIVE]
-            eligible_employees = [emp for emp in active_employees if emp.should_sync_to_bill]
+            total_from_ukg = len(raw_employees)
+            logger.info(f"Fetched {total_from_ukg} employees from UKG")
 
-            # Log filter breakdown
-            logger.info("=" * 60)
-            logger.info("FILTER BREAKDOWN")
-            logger.info("=" * 60)
-            logger.info(f"  Total from UKG: {total_from_ukg}")
-            logger.info(f"  After ACTIVE status filter: {len(active_employees)}")
-            logger.info(f"  After employee type filter (PRD Full Time / FTC / HRC): {len(eligible_employees)}")
-            logger.info("=" * 60)
+            # Counters for filter breakdown
+            total_active = 0
+            total_eligible = 0
 
-            # Check each employee against BILL.com to classify action
-            logger.info("\nChecking employees against BILL.com...")
-            bill_user_repo = container.bill_user_repository()
-
+            # Classification lists
             create_list = []
             update_list = []
             no_change_list = []
 
-            for emp in eligible_employees:
+            logger.info("=" * 60)
+            logger.info("PROCESSING EMPLOYEES ONE BY ONE")
+            logger.info("=" * 60)
+
+            for idx, emp_data in enumerate(raw_employees, 1):
+                emp_id = emp_data.get("employeeId") or emp_data.get("employeeID")
+                emp_number = emp_data.get("employeeNumber", "unknown")
+                emp_company_id = emp_data.get("companyID") or emp_data.get("companyId") or company_id
+
+                # Fetch person details for this employee
+                person = employee_repo._get_cached_person(emp_id) if emp_id else None
+
+                # Fetch employee-employment details (has cost center / primaryProjectCode)
+                emp_emp_details = None
+                if emp_number and emp_company_id:
+                    emp_emp_details = employee_repo._client.get_employee_employment_details(
+                        employee_number=emp_number,
+                        company_id=emp_company_id,
+                    )
+
+                # Create Employee object using comprehensive mapper
+                emp = map_employee_from_ukg(emp_data, person, emp_emp_details)
+
+                # Filter 1: Active status
+                if emp.status != EmployeeStatus.ACTIVE:
+                    continue
+                total_active += 1
+
+                # Filter 2: Employee type (PRD Full Time or FTC/HRC)
+                if not emp.should_sync_to_bill:
+                    continue
+                total_eligible += 1
+
+                # Check against BILL.com
+                logger.info(f"[{idx}/{total_from_ukg}] Checking {emp.first_name} {emp.last_name} ({emp.email})")
                 existing = bill_user_repo.get_by_email(emp.email)
                 if existing:
-                    # Map employee to BillUser for comparison
                     bill_user = BillUser.from_employee(emp, role=role)
                     if bill_user.needs_update(existing):
                         update_list.append(emp)
@@ -141,6 +167,15 @@ def run_sync_all(
                         no_change_list.append(emp)
                 else:
                     create_list.append(emp)
+
+            # Log filter breakdown
+            logger.info("=" * 60)
+            logger.info("FILTER BREAKDOWN")
+            logger.info("=" * 60)
+            logger.info(f"  Total from UKG: {total_from_ukg}")
+            logger.info(f"  After ACTIVE status filter: {total_active}")
+            logger.info(f"  After employee type filter (PRD Full Time / FTC / HRC): {total_eligible}")
+            logger.info("=" * 60)
 
             # Print summary
             logger.info("=" * 60)

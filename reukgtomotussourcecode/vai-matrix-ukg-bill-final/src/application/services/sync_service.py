@@ -25,6 +25,7 @@ from src.domain.models.employee import Employee, EmployeeStatus
 from src.domain.models.bill_user import BillUser, BillRole
 from src.infrastructure.adapters.bill.mappers import map_employee_to_bill_user
 from src.infrastructure.adapters.bill.department_client import DepartmentClient
+from src.infrastructure.adapters.ukg.mappers import map_employee_from_ukg
 
 
 logger = logging.getLogger(__name__)
@@ -427,6 +428,53 @@ class SyncService(EmployeeSyncService):
 
         return result
 
+    def _process_single_employee(
+        self,
+        emp_data: Dict[str, Any],
+        company_id: Optional[str],
+        default_role: BillRole,
+        idx: int,
+        total: int,
+    ) -> tuple:
+        """
+        Process a single employee: fetch details, filter, sync to BILL.com.
+
+        Returns:
+            Tuple of (is_active, is_eligible, sync_result or None)
+        """
+        emp_id = emp_data.get("employeeId") or emp_data.get("employeeID")
+        emp_number = emp_data.get("employeeNumber", "unknown")
+        emp_company_id = emp_data.get("companyID") or emp_data.get("companyId") or company_id
+
+        # Fetch person details for this employee
+        person = self.employee_repo._get_cached_person(emp_id) if emp_id else None
+
+        # Fetch employee-employment details (has cost center / primaryProjectCode)
+        emp_emp_details = None
+        if emp_number and emp_company_id:
+            emp_emp_details = self.employee_repo._client.get_employee_employment_details(
+                employee_number=emp_number,
+                company_id=emp_company_id,
+            )
+
+        # Create Employee object using comprehensive mapper
+        employee = map_employee_from_ukg(emp_data, person, emp_emp_details)
+
+        # Filter 1: Active status
+        if employee.status != EmployeeStatus.ACTIVE:
+            logger.debug(f"[{idx}/{total}] Skipping {emp_number}: not active")
+            return (False, False, None)
+
+        # Filter 2: Employee type (PRD Full Time or FTC/HRC)
+        if not employee.should_sync_to_bill:
+            logger.debug(f"[{idx}/{total}] Skipping {emp_number}: not eligible type")
+            return (True, False, None)
+
+        # Sync this employee to BILL.com
+        logger.info(f"[{idx}/{total}] Processing {employee.first_name} {employee.last_name} ({employee.email})")
+        result = self.sync_employee(employee, default_role)
+        return (True, True, result)
+
     def sync_all(
         self,
         company_id: Optional[str] = None,
@@ -436,6 +484,8 @@ class SyncService(EmployeeSyncService):
         """
         Sync all active employees from UKG to BILL.com.
 
+        Processes employees with parallel workers: fetch details -> filter -> sync to BILL.com.
+
         Args:
             company_id: Optional company filter.
             default_role: Default role for new users.
@@ -444,29 +494,76 @@ class SyncService(EmployeeSyncService):
         Returns:
             BatchSyncResult with aggregate statistics.
         """
-        # Fetch all active employees in a single call with max page size
         logger.info(
-            f"Fetching all employees from UKG "
+            f"Fetching employees from UKG and processing with {workers} worker(s) "
             f"(company_id={company_id})"
         )
 
-        all_employees = self.employee_repo.get_active_employees(
+        # Get raw employee data from UKG (without person details)
+        raw_employees = self.employee_repo._client.list_employees(
             company_id=company_id,
             page=1,
             page_size=2147483647,  # Max int to fetch all in one call
         )
 
-        total_from_ukg = len(all_employees)
+        total_from_ukg = len(raw_employees)
         logger.info(f"Fetched {total_from_ukg} employees from UKG")
 
-        # Apply filters incrementally and track counts
-        # Filter 1: Active status
-        active_employees = [emp for emp in all_employees if emp.status == EmployeeStatus.ACTIVE]
-        total_active = len(active_employees)
+        # Log processing header
+        logger.info("=" * 60)
+        logger.info(f"PROCESSING EMPLOYEES WITH {workers} WORKER(S)")
+        logger.info("=" * 60)
 
-        # Filter 2: Employee type (PRD Full Time or FTC/HRC)
-        employees = [emp for emp in active_employees if emp.should_sync_to_bill]
-        total_eligible = len(employees)
+        # Counters for filter breakdown
+        total_active = 0
+        total_eligible = 0
+
+        # Results tracking
+        results: List[SyncResult] = []
+        created = 0
+        updated = 0
+        skipped = 0
+        errors = 0
+
+        # Process employees with workers
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    self._process_single_employee,
+                    emp_data,
+                    company_id,
+                    default_role,
+                    idx,
+                    total_from_ukg,
+                ): idx
+                for idx, emp_data in enumerate(raw_employees, 1)
+            }
+
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    is_active, is_eligible, result = future.result()
+
+                    if is_active:
+                        total_active += 1
+                    if is_eligible:
+                        total_eligible += 1
+
+                    if result:
+                        results.append(result)
+                        if result.success:
+                            if result.action == "created":
+                                created += 1
+                            elif result.action == "updated":
+                                updated += 1
+                            else:
+                                skipped += 1
+                        else:
+                            errors += 1
+
+                except Exception as e:
+                    logger.error(f"Error processing employee index {idx}: {e}", exc_info=True)
+                    errors += 1
 
         # Log filter breakdown
         logger.info("=" * 60)
@@ -477,7 +574,14 @@ class SyncService(EmployeeSyncService):
         logger.info(f"  After employee type filter (PRD Full Time / FTC / HRC): {total_eligible}")
         logger.info("=" * 60)
 
-        return self.sync_batch(employees, default_role, workers)
+        return BatchSyncResult(
+            total=total_eligible,
+            created=created,
+            updated=updated,
+            skipped=skipped,
+            errors=errors,
+            results=results,
+        )
 
     def resolve_supervisor_email(self, employee: Employee) -> Optional[str]:
         """

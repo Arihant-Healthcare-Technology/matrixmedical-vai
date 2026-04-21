@@ -183,6 +183,9 @@ class BillUser:
         if self.external_id:
             payload["externalId"] = self.external_id
 
+        if self.cost_center:
+            payload["costCenter"] = self.cost_center
+
         return payload
 
     def to_csv_row(self) -> Dict[str, str]:
