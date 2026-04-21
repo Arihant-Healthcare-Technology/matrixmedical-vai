@@ -32,12 +32,24 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file before any other imports
 # This ensures all settings modules can access the env vars
-_env_file = os.getenv("ENV_FILE", ".env")
-_env_path = Path(_env_file)
-if _env_path.exists():
-    load_dotenv(_env_path)
-elif Path(".env").exists():
-    load_dotenv(Path(".env"))
+_script_dir = Path(__file__).parent.resolve()
+_env_file = os.getenv("ENV_FILE")
+
+if _env_file:
+    # Use explicitly provided ENV_FILE
+    _env_path = Path(_env_file)
+    if _env_path.exists():
+        load_dotenv(_env_path)
+        print(f"[DEBUG] Loaded env from: {_env_path}")
+else:
+    # Look for .env relative to script location
+    _env_path = _script_dir / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path)
+        print(f"[DEBUG] Loaded env from: {_env_path}")
+    elif Path(".env").exists():
+        load_dotenv(Path(".env"))
+        print(f"[DEBUG] Loaded env from: .env (current directory)")
 
 from src.presentation.cli.batch_runner import main
 

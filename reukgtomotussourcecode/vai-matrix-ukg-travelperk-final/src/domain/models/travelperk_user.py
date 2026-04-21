@@ -58,11 +58,19 @@ class TravelPerkUser:
     # Status
     active: bool = True
 
+    # Core SCIM fields
+    title: Optional[str] = None  # jobTitle from UKG
+    phone_number: Optional[str] = None  # phoneNumber with country code
+    preferred_language: Optional[str] = None  # languageCode from UKG
+    locale: Optional[str] = None  # languageCode from UKG
+
     # Enterprise extension
     cost_center: Optional[str] = None  # primaryProjectCode from UKG
     manager_id: Optional[str] = None  # TravelPerk ID of supervisor
 
     # TravelPerk extension
+    gender: Optional[str] = None  # "M" or "F"
+    date_of_birth: Optional[str] = None  # YYYY-MM-DD format
     line_manager_email: Optional[str] = None
 
     # Internal tracking
@@ -115,6 +123,19 @@ class TravelPerkUser:
             SCIM_TRAVELPERK_SCHEMA: {},
         }
 
+        # Add core SCIM fields
+        if self.title:
+            payload["title"] = self.title
+
+        if self.phone_number:
+            payload["phoneNumbers"] = [{"value": self.phone_number, "type": "work"}]
+
+        if self.preferred_language:
+            payload["preferredLanguage"] = self.preferred_language
+
+        if self.locale:
+            payload["locale"] = self.locale
+
         # Add enterprise extension fields
         if self.cost_center:
             payload[SCIM_ENTERPRISE_SCHEMA]["costCenter"] = self.cost_center
@@ -123,8 +144,20 @@ class TravelPerkUser:
             payload[SCIM_ENTERPRISE_SCHEMA]["manager"] = {"value": self.manager_id}
 
         # Add TravelPerk extension fields
+        if self.gender:
+            payload[SCIM_TRAVELPERK_SCHEMA]["gender"] = self.gender
+
+        if self.date_of_birth:
+            payload[SCIM_TRAVELPERK_SCHEMA]["dateOfBirth"] = self.date_of_birth
+
         if self.line_manager_email:
             payload[SCIM_TRAVELPERK_SCHEMA]["lineManagerEmail"] = self.line_manager_email
+
+        # Remove empty extension objects
+        if not payload[SCIM_ENTERPRISE_SCHEMA]:
+            del payload[SCIM_ENTERPRISE_SCHEMA]
+        if not payload[SCIM_TRAVELPERK_SCHEMA]:
+            del payload[SCIM_TRAVELPERK_SCHEMA]
 
         return payload
 
@@ -174,6 +207,57 @@ class TravelPerkUser:
                 "value": {"value": self.manager_id}
             })
 
+        # Update core SCIM fields
+        if self.title:
+            operations.append({
+                "op": "replace",
+                "path": "title",
+                "value": self.title
+            })
+
+        if self.phone_number:
+            operations.append({
+                "op": "replace",
+                "path": "phoneNumbers",
+                "value": [{"value": self.phone_number, "type": "work"}]
+            })
+
+        if self.preferred_language:
+            operations.append({
+                "op": "replace",
+                "path": "preferredLanguage",
+                "value": self.preferred_language
+            })
+
+        if self.locale:
+            operations.append({
+                "op": "replace",
+                "path": "locale",
+                "value": self.locale
+            })
+
+        # Update TravelPerk extension fields
+        if self.gender:
+            operations.append({
+                "op": "replace",
+                "path": f"{SCIM_TRAVELPERK_SCHEMA}:gender",
+                "value": self.gender
+            })
+
+        if self.date_of_birth:
+            operations.append({
+                "op": "replace",
+                "path": f"{SCIM_TRAVELPERK_SCHEMA}:dateOfBirth",
+                "value": self.date_of_birth
+            })
+
+        if self.line_manager_email:
+            operations.append({
+                "op": "replace",
+                "path": f"{SCIM_TRAVELPERK_SCHEMA}:lineManagerEmail",
+                "value": self.line_manager_email
+            })
+
         return operations
 
     def to_patch_payload(self, include_manager: bool = True) -> Dict[str, Any]:
@@ -216,8 +300,18 @@ class TravelPerkUser:
         last_name = person.get("lastName", "")
         name = UserName(given_name=first_name, family_name=last_name)
 
-        # Extract cost center (project code)
-        cost_center = employment.get("primaryProjectCode", "")
+        # Extract cost center (project code + org level 4)
+        primary_project = employment.get("primaryProjectCode", "").strip()
+        org_level4 = employment.get("orgLevel4Code", "").strip()
+
+        if primary_project and org_level4:
+            cost_center = f"{primary_project} {org_level4}"
+        elif primary_project:
+            cost_center = primary_project
+        elif org_level4:
+            cost_center = org_level4
+        else:
+            cost_center = ""
 
         # Determine active status
         termination_date = employment.get("terminationDate")
@@ -229,10 +323,43 @@ class TravelPerkUser:
         else:
             is_active = not bool(termination_date)
 
+        # Extract job title
+        title = employment.get("jobTitle", "").strip() or None
+
+        # Extract phone number with country code
+        phone_raw = person.get("phoneNumber", "").strip()
+        country_code = person.get("countryCode", "").strip() or "1"  # Default to US
+        if phone_raw:
+            # Format: +{countryCode}{phoneNumber} (no space)
+            phone_number = f"+{country_code}{phone_raw}"
+        else:
+            phone_number = None
+
+        # Extract language (for preferredLanguage and locale)
+        language_code = person.get("languageCode", "").strip() or None
+
+        # Extract gender (if available)
+        gender_raw = person.get("gender", "").strip().upper()
+        if gender_raw in ["M", "MALE"]:
+            gender = "M"
+        elif gender_raw in ["F", "FEMALE"]:
+            gender = "F"
+        else:
+            gender = None
+
+        # Extract date of birth (if available)
+        date_of_birth = person.get("birthDate", "").strip() or None
+
         return cls(
             external_id=external_id,
             user_name=email,
             name=name,
             active=is_active,
+            title=title,
+            phone_number=phone_number,
+            preferred_language=language_code,
+            locale=language_code,
             cost_center=cost_center if cost_center else None,
+            gender=gender,
+            date_of_birth=date_of_birth,
         )

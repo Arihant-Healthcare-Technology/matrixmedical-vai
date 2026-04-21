@@ -4,6 +4,7 @@ TravelPerk SCIM API client.
 This client provides methods for managing users via TravelPerk's SCIM 2.0 API.
 """
 
+import json
 import logging
 import time
 from typing import Any, Dict, Optional
@@ -255,6 +256,10 @@ class TravelPerkClient:
             TravelPerkApiError: If creation fails
         """
         payload = user.to_api_payload()
+        logger.info(
+            f"TravelPerk CREATE payload for externalId={user.external_id}:\n"
+            f"{json.dumps(payload, indent=2)}"
+        )
         response = self._request_with_retry(
             "POST", TravelPerkEndpoints.SCIM_USERS, json_data=payload
         )
@@ -297,10 +302,10 @@ class TravelPerkClient:
         patch_payload = user.to_patch_payload(include_manager=include_manager)
         path = TravelPerkEndpoints.user_by_id(user_id)
 
-        if self.debug:
-            logger.debug(
-                f"TravelPerk PATCH payload: {sanitize_for_logging(patch_payload)}"
-            )
+        logger.info(
+            f"TravelPerk UPDATE payload for id={user_id}, externalId={user.external_id}:\n"
+            f"{json.dumps(patch_payload, indent=2)}"
+        )
 
         response = self._request_with_retry("PATCH", path, json_data=patch_payload)
 

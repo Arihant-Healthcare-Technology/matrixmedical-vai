@@ -80,6 +80,11 @@ def parse_args() -> argparse.Namespace:
         dest="employee_type_codes",
         help="Filter by employeeTypeCode(s) (comma-separated, e.g., FTC,HRC,TMC)",
     )
+    parser.add_argument(
+        "--employee-id",
+        dest="employee_id",
+        help="Process only a specific employee by employeeNumber (e.g., 123456)",
+    )
     return parser.parse_args()
 
 
@@ -159,6 +164,7 @@ def main() -> None:
             logger.info(f"  Company ID: {batch_settings.company_id}")
             logger.info(f"  States Filter: {batch_settings.states_filter or 'ALL'}")
             logger.info(f"  Employee Type Codes: {type_codes_str}")
+            logger.info(f"  Employee ID: {args.employee_id or 'ALL'}")
             logger.info(f"  Workers: {batch_settings.workers}")
             logger.info(f"  Dry Run: {batch_settings.dry_run}")
             logger.info(f"  Save Local: {batch_settings.save_local}")
@@ -201,6 +207,18 @@ def main() -> None:
             fetch_elapsed = time.time() - fetch_start
             logger.info(f"UKG fetch completed: {len(employees)} employees in {fetch_elapsed:.2f}s")
 
+            # Filter by specific employee ID if provided
+            if args.employee_id:
+                original_count = len(employees)
+                employees = [
+                    emp for emp in employees
+                    if emp.get("employeeNumber") == args.employee_id
+                ]
+                if not employees:
+                    logger.error(f"Employee with ID '{args.employee_id}' not found in {original_count} employees")
+                    raise SystemExit(f"Error: Employee '{args.employee_id}' not found")
+                logger.info(f"Filtered to single employee: {args.employee_id}")
+
             # Sync
             logger.info("-" * 80)
             logger.info("STARTING TWO-PHASE SYNCHRONIZATION...")
@@ -221,6 +239,9 @@ def main() -> None:
                 with mapping_file.open("w", encoding="utf-8") as f:
                     json.dump(mapping, f, indent=2)
                 logger.info(f"Saved mapping to {mapping_file}")
+
+            # Print UKG API call summary
+            ukg_client.print_summary()
 
             # Job completion summary
             job_end_time = time.time()

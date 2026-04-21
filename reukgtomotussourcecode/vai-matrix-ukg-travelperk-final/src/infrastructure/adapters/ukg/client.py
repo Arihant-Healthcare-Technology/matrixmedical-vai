@@ -56,6 +56,10 @@ class UKGClient:
             customer_api_key=self.settings.customer_api_key,
         )
 
+        # Counters for tracking API calls
+        self._person_details_count = 0
+        self._employment_details_count = 0
+
     def _get(
         self,
         path: str,
@@ -167,6 +171,11 @@ class UKGClient:
         Returns:
             Employment details dictionary
         """
+        self._employment_details_count += 1
+        logger.info(
+            f"Fetching employment details: employeeNumber={employee_number}, "
+            f"companyId={company_id}"
+        )
         params = UKGEndpoints.employment_details_params(
             employee_number=employee_number,
             company_id=company_id,
@@ -236,15 +245,26 @@ class UKGClient:
         if not employee_id:
             raise ValueError("employee_id is required")
 
+        self._person_details_count += 1
+        logger.info(f"Fetching person details: employeeId={employee_id}")
+
         params = UKGEndpoints.person_details_params(employee_id)
         data = self._get(UKGEndpoints.PERSON_DETAILS, params)
         items = self._normalize_list(data)
 
         for item in items:
             if str(item.get("employeeId")) == str(employee_id):
+                email = item.get("emailAddress", "N/A")
+                logger.info(f"Person details found: employeeId={employee_id}, email={email}")
                 return item
 
-        return items[0] if items else {}
+        if items:
+            email = items[0].get("emailAddress", "N/A")
+            logger.info(f"Person details found: employeeId={employee_id}, email={email}")
+            return items[0]
+
+        logger.info(f"Person details not found: employeeId={employee_id}")
+        return {}
 
     def get_all_supervisor_details(self) -> List[Dict[str, Any]]:
         """
@@ -258,3 +278,12 @@ class UKGClient:
         )
         data = self._get(UKGEndpoints.SUPERVISOR_DETAILS, params)
         return self._normalize_list(data)
+
+    def print_summary(self) -> None:
+        """Print summary of API call counts."""
+        logger.info(
+            f"UKG API Call Summary: "
+            f"person_details_calls={self._person_details_count}, "
+            f"employment_details_calls={self._employment_details_count}, "
+            f"total_calls={self._person_details_count + self._employment_details_count}"
+        )
