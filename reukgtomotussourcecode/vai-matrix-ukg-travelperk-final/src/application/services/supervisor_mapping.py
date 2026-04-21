@@ -6,6 +6,7 @@ and TravelPerk IDs for the two-phase sync process.
 """
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from ...infrastructure.adapters.ukg import UKGClient
@@ -13,6 +14,23 @@ from ...infrastructure.adapters.travelperk import TravelPerkClient
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SupervisorInfo:
+    """Supervisor information from UKG."""
+
+    employee_number: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+
+    @property
+    def full_name(self) -> Optional[str]:
+        """Get full name if available."""
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        return self.first_name or self.last_name or None
 
 
 class SupervisorMappingService:
@@ -39,17 +57,17 @@ class SupervisorMappingService:
     def build_supervisor_mapping(
         self,
         supervisor_details: List[Dict[str, Any]],
-    ) -> Dict[str, Optional[str]]:
+    ) -> Dict[str, Optional[SupervisorInfo]]:
         """
-        Build employeeNumber -> supervisorEmployeeNumber mapping.
+        Build employeeNumber -> SupervisorInfo mapping.
 
         Args:
             supervisor_details: List of supervisor detail records from UKG
 
         Returns:
-            Mapping of employee number to supervisor employee number (None if no supervisor)
+            Mapping of employee number to SupervisorInfo (None if no supervisor)
         """
-        mapping: Dict[str, Optional[str]] = {}
+        mapping: Dict[str, Optional[SupervisorInfo]] = {}
 
         for detail in supervisor_details:
             emp_number = str(detail.get("employeeNumber", "")).strip()
@@ -58,7 +76,18 @@ class SupervisorMappingService:
 
             supervisor_emp_number = detail.get("supervisorEmployeeNumber")
             if supervisor_emp_number:
-                mapping[emp_number] = str(supervisor_emp_number).strip()
+                supervisor_info = SupervisorInfo(
+                    employee_number=str(supervisor_emp_number).strip(),
+                    first_name=detail.get("supervisorFirstName", "").strip() or None,
+                    last_name=detail.get("supervisorLastName", "").strip() or None,
+                    email=detail.get("supervisorEmail", "").strip() or None,
+                )
+                mapping[emp_number] = supervisor_info
+
+                logger.info(
+                    f"Supervisor for {emp_number}: {supervisor_info.full_name or 'N/A'} "
+                    f"(email: {supervisor_info.email or 'N/A'})"
+                )
             else:
                 mapping[emp_number] = None
 
@@ -68,12 +97,12 @@ class SupervisorMappingService:
         )
         return mapping
 
-    def fetch_supervisor_mapping(self) -> Dict[str, Optional[str]]:
+    def fetch_supervisor_mapping(self) -> Dict[str, Optional[SupervisorInfo]]:
         """
         Fetch and build supervisor mapping from UKG.
 
         Returns:
-            Mapping of employee number to supervisor employee number
+            Mapping of employee number to SupervisorInfo (None if no supervisor)
         """
         logger.info("Fetching supervisor details from UKG...")
         supervisor_details = self.ukg_client.get_all_supervisor_details()
@@ -81,13 +110,13 @@ class SupervisorMappingService:
 
     def split_by_supervisor_status(
         self,
-        supervisor_mapping: Dict[str, Optional[str]],
+        supervisor_mapping: Dict[str, Optional[SupervisorInfo]],
     ) -> tuple:
         """
         Split employees into those with and without supervisors.
 
         Args:
-            supervisor_mapping: Employee to supervisor mapping
+            supervisor_mapping: Employee to SupervisorInfo mapping
 
         Returns:
             Tuple of (employees_without_supervisor, employees_with_supervisor)
@@ -137,8 +166,13 @@ class SupervisorMappingService:
                 # Update local mapping
                 employee_to_travelperk_id[supervisor_emp_number] = supervisor_id
                 logger.info(
-                    f"Found supervisor {supervisor_emp_number}: id={supervisor_id}"
+                    f"Supervisor resolved: employeeNumber={supervisor_emp_number} -> TravelPerk id={supervisor_id}"
                 )
                 return supervisor_id
 
+        # Supervisor not found - log warning
+        logger.warning(
+            f"Supervisor NOT FOUND: employeeNumber={supervisor_emp_number} - "
+            f"not in local mapping and not found in TravelPerk"
+        )
         return None

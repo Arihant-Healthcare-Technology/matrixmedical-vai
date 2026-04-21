@@ -67,6 +67,7 @@ class TravelPerkUser:
     # Enterprise extension
     cost_center: Optional[str] = None  # primaryProjectCode from UKG
     manager_id: Optional[str] = None  # TravelPerk ID of supervisor
+    manager_display_name: Optional[str] = None  # Supervisor's full name from UKG
 
     # TravelPerk extension
     gender: Optional[str] = None  # "M" or "F"
@@ -141,7 +142,10 @@ class TravelPerkUser:
             payload[SCIM_ENTERPRISE_SCHEMA]["costCenter"] = self.cost_center
 
         if self.manager_id:
-            payload[SCIM_ENTERPRISE_SCHEMA]["manager"] = {"value": self.manager_id}
+            manager_obj = {"value": self.manager_id}
+            if self.manager_display_name:
+                manager_obj["displayName"] = self.manager_display_name
+            payload[SCIM_ENTERPRISE_SCHEMA]["manager"] = manager_obj
 
         # Add TravelPerk extension fields
         if self.gender:
@@ -201,10 +205,13 @@ class TravelPerkUser:
 
         # Update manager
         if include_manager and self.manager_id:
+            manager_obj = {"value": self.manager_id}
+            if self.manager_display_name:
+                manager_obj["displayName"] = self.manager_display_name
             operations.append({
                 "op": "replace",
                 "path": f"{SCIM_ENTERPRISE_SCHEMA}:manager",
-                "value": {"value": self.manager_id}
+                "value": manager_obj
             })
 
         # Update core SCIM fields

@@ -16,7 +16,7 @@ from ...infrastructure.adapters.ukg import UKGClient
 from ...infrastructure.adapters.travelperk import TravelPerkClient
 from ...infrastructure.config.settings import BatchSettings
 from .user_builder import UserBuilderService
-from .supervisor_mapping import SupervisorMappingService
+from .supervisor_mapping import SupervisorMappingService, SupervisorInfo
 from .state_filter import StateFilterService
 from .batch_processor import BatchProcessor, BatchResult
 
@@ -58,6 +58,8 @@ class UserSyncService:
         states_filter: Optional[Set[str]],
         out_path: Path,
         supervisor_id: Optional[str],
+        supervisor_name: Optional[str],
+        supervisor_email: Optional[str],
         settings: BatchSettings,
     ) -> Tuple[str, str, str, Optional[str]]:
         """
@@ -90,8 +92,15 @@ class UserSyncService:
             # Set manager if provided
             if supervisor_id:
                 user.manager_id = supervisor_id
+                if supervisor_name:
+                    user.manager_display_name = supervisor_name
+                if supervisor_email:
+                    user.line_manager_email = supervisor_email
                 if self.debug:
-                    logger.debug(f"Employee {emp_number}: assigned manager ID {supervisor_id}")
+                    logger.debug(
+                        f"Employee {emp_number}: assigned manager ID {supervisor_id}, "
+                        f"displayName={supervisor_name}, lineManagerEmail={supervisor_email}"
+                    )
 
             # Save locally if requested
             if settings.save_local:
@@ -284,7 +293,7 @@ class UserSyncService:
         states_filter: Optional[Set[str]],
         out_path: Path,
         settings: BatchSettings,
-        supervisor_mapping: Optional[Dict[str, Optional[str]]],
+        supervisor_mapping: Optional[Dict[str, Optional[SupervisorInfo]]],
         employee_to_travelperk_id: Dict[str, str],
     ) -> Dict[str, str]:
         """Process a single phase of employees."""
@@ -299,19 +308,39 @@ class UserSyncService:
         def process_single(emp: Dict[str, Any]) -> Tuple[str, str, str, Optional[str]]:
             emp_number = str(emp.get("employeeNumber", "")).strip()
             supervisor_id = None
+            supervisor_name = None
+            supervisor_email = None
 
             if supervisor_mapping:
-                supervisor_emp_number = supervisor_mapping.get(emp_number)
-                if supervisor_emp_number:
+                supervisor_info = supervisor_mapping.get(emp_number)
+                if supervisor_info:
+                    # Extract supervisor details from SupervisorInfo
+                    supervisor_name = supervisor_info.full_name
+                    supervisor_email = supervisor_info.email
+
+                    # Resolve supervisor's TravelPerk ID
                     supervisor_id = self.supervisor_service.resolve_supervisor_id(
-                        supervisor_emp_number, employee_to_travelperk_id
+                        supervisor_info.employee_number, employee_to_travelperk_id
                     )
+                    if supervisor_id:
+                        logger.info(
+                            f"Employee {emp_number}: supervisor {supervisor_info.employee_number} "
+                            f"({supervisor_name or 'N/A'}, {supervisor_email or 'N/A'}) "
+                            f"resolved to TravelPerk ID {supervisor_id}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Employee {emp_number}: supervisor {supervisor_info.employee_number} "
+                            f"({supervisor_name or 'N/A'}) could NOT be resolved - manager will not be set"
+                        )
 
             return self._process_employee(
                 emp,
                 states_filter,
                 out_path,
                 supervisor_id,
+                supervisor_name,
+                supervisor_email,
                 settings,
             )
 
