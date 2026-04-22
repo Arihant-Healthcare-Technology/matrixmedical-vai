@@ -139,7 +139,7 @@ class TestTravelPerkUser:
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
-            "primaryProjectCode": "PROJ001",
+            "orgLevel4Code": "730",
             "employeeStatusCode": "A",
             "terminationDate": None,
         }
@@ -150,21 +150,25 @@ class TestTravelPerkUser:
             "emailAddress": "john.doe@example.com",
         }
 
-        user = TravelPerkUser.from_ukg_data(employment, person)
+        user = TravelPerkUser.from_ukg_data(
+            employment,
+            person,
+            org_level4_description="730 - Test Department",
+        )
 
         assert user.external_id == "12345"
         assert user.user_name == "john.doe@example.com"
         assert user.name.given_name == "John"
         assert user.name.family_name == "Doe"
         assert user.active is True
-        assert user.cost_center == "PROJ001"
+        assert user.cost_center == "730 - Test Department"
 
     def test_from_ukg_data_terminated(self):
         """Test terminated employee is marked inactive."""
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
-            "primaryProjectCode": "PROJ001",
+            "orgLevel4Code": "730",
             "employeeStatusCode": "T",
             "terminationDate": "2023-12-31",
         }
@@ -178,6 +182,127 @@ class TestTravelPerkUser:
         user = TravelPerkUser.from_ukg_data(employment, person)
 
         assert user.active is False
+
+    def test_from_ukg_data_with_org_level_description(self):
+        """Test creating user with org_level4_description parameter."""
+        employment = {
+            "employeeNumber": "12345",
+            "employeeID": "EMP001",
+            "orgLevel4Code": "730",
+            "employeeStatusCode": "A",
+        }
+        person = {
+            "employeeId": "EMP001",
+            "firstName": "John",
+            "lastName": "Doe",
+            "emailAddress": "john.doe@example.com",
+        }
+
+        user = TravelPerkUser.from_ukg_data(
+            employment,
+            person,
+            org_level4_description="730 - Southeast Clinical Part-time",
+        )
+
+        assert user.cost_center == "730 - Southeast Clinical Part-time"
+
+    def test_from_ukg_data_fallback_to_org_level4_code(self):
+        """Test fallback to orgLevel4Code when no description provided."""
+        employment = {
+            "employeeNumber": "12345",
+            "employeeID": "EMP001",
+            "orgLevel4Code": "730",
+            "employeeStatusCode": "A",
+        }
+        person = {
+            "employeeId": "EMP001",
+            "firstName": "John",
+            "lastName": "Doe",
+            "emailAddress": "john.doe@example.com",
+        }
+
+        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+
+        assert user.cost_center == "730"
+
+    def test_from_ukg_data_no_cost_center(self):
+        """Test no cost_center when both orgLevel4Code and description are empty."""
+        employment = {
+            "employeeNumber": "12345",
+            "employeeID": "EMP001",
+            "orgLevel4Code": "",
+            "employeeStatusCode": "A",
+        }
+        person = {
+            "employeeId": "EMP001",
+            "firstName": "John",
+            "lastName": "Doe",
+            "emailAddress": "john.doe@example.com",
+        }
+
+        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+
+        assert user.cost_center is None
+
+    # --- Additional Negative Scenario Tests ---
+
+    def test_from_ukg_data_org_level4_code_is_none(self):
+        """Test handling when orgLevel4Code is None."""
+        employment = {
+            "employeeNumber": "12345",
+            "employeeID": "EMP001",
+            "orgLevel4Code": None,
+            "employeeStatusCode": "A",
+        }
+        person = {
+            "employeeId": "EMP001",
+            "firstName": "John",
+            "lastName": "Doe",
+            "emailAddress": "john.doe@example.com",
+        }
+
+        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+
+        assert user.cost_center is None
+
+    def test_from_ukg_data_org_level4_code_missing(self):
+        """Test handling when orgLevel4Code key doesn't exist."""
+        employment = {
+            "employeeNumber": "12345",
+            "employeeID": "EMP001",
+            "employeeStatusCode": "A",
+            # No orgLevel4Code key
+        }
+        person = {
+            "employeeId": "EMP001",
+            "firstName": "John",
+            "lastName": "Doe",
+            "emailAddress": "john.doe@example.com",
+        }
+
+        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+
+        assert user.cost_center is None
+
+    def test_from_ukg_data_org_level4_code_whitespace(self):
+        """Test handling when orgLevel4Code is whitespace only."""
+        employment = {
+            "employeeNumber": "12345",
+            "employeeID": "EMP001",
+            "orgLevel4Code": "   ",
+            "employeeStatusCode": "A",
+        }
+        person = {
+            "employeeId": "EMP001",
+            "firstName": "John",
+            "lastName": "Doe",
+            "emailAddress": "john.doe@example.com",
+        }
+
+        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+
+        # Whitespace is stripped, resulting in empty string -> None
+        assert user.cost_center is None
 
 
 class TestUserName:

@@ -15,6 +15,8 @@ class TestUserBuilderService:
     def mock_ukg_client(self):
         """Create a mock UKG client."""
         client = MagicMock()
+        # Default to empty string for org level description
+        client.get_org_level_description.return_value = ""
         return client
 
     @pytest.fixture
@@ -118,13 +120,15 @@ class TestUserBuilderService:
         sample_employment,
         sample_person,
     ):
-        """Test cost center is included in user."""
+        """Test cost center is included in user from org level description."""
+        sample_employment["orgLevel4Code"] = "730"
         mock_ukg_client.get_employment_details.return_value = sample_employment
         mock_ukg_client.get_person_details.return_value = sample_person
+        mock_ukg_client.get_org_level_description.return_value = "730 - Test Department"
 
         user = builder_service.build_user("12345", "J9A6Y")
 
-        assert user.cost_center == "PROJ001"
+        assert user.cost_center == "730 - Test Department"
 
     def test_build_user_terminated_employee(
         self,
@@ -138,7 +142,62 @@ class TestUserBuilderService:
         sample_employment["terminationDate"] = "2023-12-31"
         mock_ukg_client.get_employment_details.return_value = sample_employment
         mock_ukg_client.get_person_details.return_value = sample_person
+        mock_ukg_client.get_org_level_description.return_value = ""
 
         user = builder_service.build_user("12345", "J9A6Y")
 
         assert user.active is False
+
+    def test_build_user_with_org_level_description(
+        self,
+        builder_service,
+        mock_ukg_client,
+        sample_employment,
+        sample_person,
+    ):
+        """Test user is built with org level description as cost center."""
+        sample_employment["orgLevel4Code"] = "730"
+        mock_ukg_client.get_employment_details.return_value = sample_employment
+        mock_ukg_client.get_person_details.return_value = sample_person
+        mock_ukg_client.get_org_level_description.return_value = "730 - Southeast Clinical"
+
+        user = builder_service.build_user("12345", "J9A6Y")
+
+        assert user.cost_center == "730 - Southeast Clinical"
+        mock_ukg_client.get_org_level_description.assert_called_once_with(4, "730")
+
+    def test_build_user_fallback_when_no_description(
+        self,
+        builder_service,
+        mock_ukg_client,
+        sample_employment,
+        sample_person,
+    ):
+        """Test fallback to orgLevel4Code when no description found."""
+        sample_employment["orgLevel4Code"] = "730"
+        mock_ukg_client.get_employment_details.return_value = sample_employment
+        mock_ukg_client.get_person_details.return_value = sample_person
+        mock_ukg_client.get_org_level_description.return_value = ""
+
+        user = builder_service.build_user("12345", "J9A6Y")
+
+        assert user.cost_center == "730"
+
+    def test_build_user_no_org_level4_code(
+        self,
+        builder_service,
+        mock_ukg_client,
+        sample_employment,
+        sample_person,
+    ):
+        """Test handling when orgLevel4Code is empty."""
+        sample_employment["orgLevel4Code"] = ""
+        sample_employment.pop("primaryProjectCode", None)
+        mock_ukg_client.get_employment_details.return_value = sample_employment
+        mock_ukg_client.get_person_details.return_value = sample_person
+        mock_ukg_client.get_org_level_description.return_value = ""
+
+        user = builder_service.build_user("12345", "J9A6Y")
+
+        assert user.cost_center is None
+        mock_ukg_client.get_org_level_description.assert_called_once_with(4, "")

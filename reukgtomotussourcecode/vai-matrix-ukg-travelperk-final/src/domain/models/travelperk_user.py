@@ -286,6 +286,7 @@ class TravelPerkUser:
         cls,
         employment: Dict[str, Any],
         person: Dict[str, Any],
+        org_level4_description: str = "",
     ) -> "TravelPerkUser":
         """Create TravelPerkUser from UKG API data.
 
@@ -307,14 +308,13 @@ class TravelPerkUser:
         last_name = person.get("lastName", "")
         name = UserName(given_name=first_name, family_name=last_name)
 
-        # Extract cost center (project code + org level 4)
-        primary_project = employment.get("primaryProjectCode", "").strip()
+        # Extract cost center - use org level 4 description from org-levels API
         org_level4 = employment.get("orgLevel4Code", "").strip()
 
-        if primary_project and org_level4:
-            cost_center = f"{primary_project} {org_level4}"
-        elif primary_project:
-            cost_center = primary_project
+        # Use the description from org-levels API (already formatted like "730 - Description")
+        # Fall back to just the code if no description available
+        if org_level4_description:
+            cost_center = org_level4_description
         elif org_level4:
             cost_center = org_level4
         else:

@@ -16,6 +16,9 @@ class UKGEndpoints:
     PERSON_DETAILS = "/personnel/v1/person-details"
     SUPERVISOR_DETAILS = "/personnel/v1/employee-supervisor-details"
 
+    # Configuration API endpoints
+    ORG_LEVELS = "/configuration/v1/org-levels"
+
     # Pagination constants
     MAX_PAGE_SIZE = 2147483647  # Used to fetch all records
 

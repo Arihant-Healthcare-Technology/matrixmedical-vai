@@ -353,3 +353,240 @@ class TestUKGClient:
 
         assert len(result) == 2
         assert result[0]["employeeId"] == "EMP001"
+
+    # --- Tests for get_org_levels() ---
+
+    @responses.activate
+    def test_get_org_levels_success(self, ukg_client):
+        """Test fetching org-levels successfully."""
+        org_levels_data = [
+            {"level": 1, "code": "DIV1", "description": "Div 1", "longDescription": "Division One"},
+            {"level": 4, "code": "730", "description": "Dept", "longDescription": "730 - Southeast Clinical"},
+        ]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_levels()
+
+        assert 1 in result
+        assert 4 in result
+        assert result[1]["DIV1"] == "Division One"
+        assert result[4]["730"] == "730 - Southeast Clinical"
+
+    @responses.activate
+    def test_get_org_levels_caches_result(self, ukg_client):
+        """Test org-levels are cached after first call."""
+        org_levels_data = [{"level": 4, "code": "730", "longDescription": "730 - Cached"}]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result1 = ukg_client.get_org_levels()
+        result2 = ukg_client.get_org_levels()
+
+        assert result1 is result2
+        assert len(responses.calls) == 1  # Only one API call
+
+    @responses.activate
+    def test_get_org_levels_prefers_long_description(self, ukg_client):
+        """Test longDescription is preferred over description."""
+        org_levels_data = [
+            {"level": 4, "code": "730", "description": "Short", "longDescription": "Long Description"}
+        ]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_levels()
+
+        assert result[4]["730"] == "Long Description"
+
+    @responses.activate
+    def test_get_org_levels_falls_back_to_description(self, ukg_client):
+        """Test fallback to description when longDescription is missing."""
+        org_levels_data = [{"level": 4, "code": "730", "description": "Fallback Desc"}]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_levels()
+
+        assert result[4]["730"] == "Fallback Desc"
+
+    @responses.activate
+    def test_get_org_levels_empty_response(self, ukg_client):
+        """Test handling of empty org-levels response."""
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=[],
+            status=200,
+        )
+
+        result = ukg_client.get_org_levels()
+
+        assert result == {}
+
+    @responses.activate
+    def test_get_org_levels_skips_invalid_items(self, ukg_client):
+        """Test items without level or code are skipped."""
+        org_levels_data = [
+            {"level": None, "code": "730", "longDescription": "Invalid"},
+            {"level": 4, "code": "", "longDescription": "Empty Code"},
+            {"level": 4, "code": "730", "longDescription": "Valid"},
+        ]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_levels()
+
+        assert len(result) == 1
+        assert result[4]["730"] == "Valid"
+
+    # --- Tests for get_org_level_description() ---
+
+    @responses.activate
+    def test_get_org_level_description_found(self, ukg_client):
+        """Test getting description for existing level/code."""
+        org_levels_data = [{"level": 4, "code": "730", "longDescription": "730 - Southeast"}]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_level_description(4, "730")
+
+        assert result == "730 - Southeast"
+
+    @responses.activate
+    def test_get_org_level_description_not_found(self, ukg_client):
+        """Test empty string returned for non-existent level/code."""
+        org_levels_data = [{"level": 4, "code": "730", "longDescription": "730 - Southeast"}]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_level_description(4, "999")
+
+        assert result == ""
+
+    def test_get_org_level_description_empty_code(self, ukg_client):
+        """Test empty string returned for empty code."""
+        result = ukg_client.get_org_level_description(4, "")
+        assert result == ""
+
+        result = ukg_client.get_org_level_description(4, None)
+        assert result == ""
+
+    # --- Additional Negative Scenario Tests ---
+
+    @responses.activate
+    def test_get_org_levels_null_long_description(self, ukg_client):
+        """Test handling when longDescription is explicitly null."""
+        org_levels_data = [
+            {"level": 4, "code": "730", "description": "Fallback", "longDescription": None}
+        ]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_levels()
+
+        assert result[4]["730"] == "Fallback"
+
+    @responses.activate
+    def test_get_org_levels_both_descriptions_empty(self, ukg_client):
+        """Test handling when both longDescription and description are empty."""
+        org_levels_data = [
+            {"level": 4, "code": "730", "description": "", "longDescription": ""},
+        ]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_levels()
+
+        assert result[4]["730"] == ""
+
+    @responses.activate
+    def test_get_org_levels_code_is_none(self, ukg_client):
+        """Test that items with None code are skipped."""
+        org_levels_data = [
+            {"level": 4, "code": None, "longDescription": "Invalid"},
+            {"level": 4, "code": "730", "longDescription": "Valid"},
+        ]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_levels()
+
+        assert len(result[4]) == 1
+        assert "730" in result[4]
+
+    @responses.activate
+    def test_get_org_level_description_level_not_found(self, ukg_client):
+        """Test empty string returned when level doesn't exist in cache."""
+        org_levels_data = [{"level": 4, "code": "730", "longDescription": "730 - Southeast"}]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        # Level 5 doesn't exist
+        result = ukg_client.get_org_level_description(5, "730")
+
+        assert result == ""
+
+    @responses.activate
+    def test_get_org_levels_whitespace_code(self, ukg_client):
+        """Test handling of whitespace-only code."""
+        org_levels_data = [
+            {"level": 4, "code": "   ", "longDescription": "Whitespace Code"},
+            {"level": 4, "code": "730", "longDescription": "Valid"},
+        ]
+        responses.add(
+            responses.GET,
+            re.compile(r".*/configuration/v1/org-levels.*"),
+            json=org_levels_data,
+            status=200,
+        )
+
+        result = ukg_client.get_org_levels()
+
+        # Whitespace code is truthy, so it gets stored with key "   "
+        assert "730" in result[4]
+        assert "   " in result[4]

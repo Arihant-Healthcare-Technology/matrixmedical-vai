@@ -60,6 +60,9 @@ class UKGClient:
         self._person_details_count = 0
         self._employment_details_count = 0
 
+        # Cache for org-levels data
+        self._org_levels_cache: Optional[Dict[int, Dict[str, str]]] = None
+
     def _get(
         self,
         path: str,
@@ -287,3 +290,50 @@ class UKGClient:
             f"employment_details_calls={self._employment_details_count}, "
             f"total_calls={self._person_details_count + self._employment_details_count}"
         )
+
+    def get_org_levels(self) -> Dict[int, Dict[str, str]]:
+        """Fetch and cache org-levels from UKG Configuration API.
+
+        Returns:
+            Dict mapping level -> {code: description}
+            Example: {4: {"730": "730 - Southeast Clinical Part-time"}}
+        """
+        if self._org_levels_cache is not None:
+            return self._org_levels_cache
+
+        logger.info("Fetching org-levels from UKG Configuration API")
+        data = self._get(UKGEndpoints.ORG_LEVELS)
+        items = self._normalize_list(data)
+
+        cache: Dict[int, Dict[str, str]] = {}
+        for item in items:
+            level = item.get("level")
+            code = item.get("code")
+            long_desc = item.get("longDescription")
+            short_desc = item.get("description", "")
+            description = long_desc or short_desc
+
+            if level is not None and code:
+                if level not in cache:
+                    cache[level] = {}
+                cache[level][str(code)] = str(description)
+
+        logger.info(f"Cached org-levels for {len(cache)} levels")
+        self._org_levels_cache = cache
+        return self._org_levels_cache
+
+    def get_org_level_description(self, level: int, code: Optional[str]) -> str:
+        """Get description for an org level code.
+
+        Args:
+            level: Org level number (1, 2, 3, or 4)
+            code: Org level code (e.g., "730")
+
+        Returns:
+            Description string or empty string if not found
+        """
+        if not code:
+            return ""
+        org_levels = self.get_org_levels()
+        level_codes = org_levels.get(level, {})
+        return level_codes.get(str(code), "")

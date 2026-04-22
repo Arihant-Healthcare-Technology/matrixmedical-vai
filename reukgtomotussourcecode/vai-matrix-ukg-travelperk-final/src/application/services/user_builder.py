@@ -70,8 +70,16 @@ class UserBuilderService:
                 external_id=employee_number,
             )
 
+        # Get org level 4 description from org-levels API
+        org_level4_code = employment.get("orgLevel4Code", "").strip()
+        org_level4_description = self.ukg_client.get_org_level_description(4, org_level4_code)
+
         # Build user from UKG data
-        user = TravelPerkUser.from_ukg_data(employment, person)
+        user = TravelPerkUser.from_ukg_data(
+            employment,
+            person,
+            org_level4_description=org_level4_description,
+        )
 
         # Validate
         errors = user.validate()
