@@ -201,3 +201,62 @@ class TestUserBuilderService:
 
         assert user.cost_center is None
         mock_ukg_client.get_org_level_description.assert_called_once_with(4, "")
+
+    # --- Additional Negative Scenario Tests ---
+
+    def test_build_user_org_level4_code_is_none(
+        self,
+        builder_service,
+        mock_ukg_client,
+        sample_employment,
+        sample_person,
+    ):
+        """Test handling when orgLevel4Code is None."""
+        sample_employment["orgLevel4Code"] = None
+        sample_employment.pop("primaryProjectCode", None)
+        mock_ukg_client.get_employment_details.return_value = sample_employment
+        mock_ukg_client.get_person_details.return_value = sample_person
+        mock_ukg_client.get_org_level_description.return_value = ""
+
+        user = builder_service.build_user("12345", "J9A6Y")
+
+        assert user.cost_center is None
+
+    def test_build_user_org_level4_code_missing(
+        self,
+        builder_service,
+        mock_ukg_client,
+        sample_employment,
+        sample_person,
+    ):
+        """Test handling when orgLevel4Code key doesn't exist."""
+        sample_employment.pop("orgLevel4Code", None)
+        sample_employment.pop("primaryProjectCode", None)
+        mock_ukg_client.get_employment_details.return_value = sample_employment
+        mock_ukg_client.get_person_details.return_value = sample_person
+        mock_ukg_client.get_org_level_description.return_value = ""
+
+        user = builder_service.build_user("12345", "J9A6Y")
+
+        assert user.cost_center is None
+        mock_ukg_client.get_org_level_description.assert_called_once_with(4, "")
+
+    def test_build_user_org_level4_code_whitespace(
+        self,
+        builder_service,
+        mock_ukg_client,
+        sample_employment,
+        sample_person,
+    ):
+        """Test handling when orgLevel4Code is whitespace only."""
+        sample_employment["orgLevel4Code"] = "   "
+        sample_employment.pop("primaryProjectCode", None)
+        mock_ukg_client.get_employment_details.return_value = sample_employment
+        mock_ukg_client.get_person_details.return_value = sample_person
+        mock_ukg_client.get_org_level_description.return_value = ""
+
+        user = builder_service.build_user("12345", "J9A6Y")
+
+        assert user.cost_center is None
+        # Whitespace should be stripped before calling
+        mock_ukg_client.get_org_level_description.assert_called_once_with(4, "")

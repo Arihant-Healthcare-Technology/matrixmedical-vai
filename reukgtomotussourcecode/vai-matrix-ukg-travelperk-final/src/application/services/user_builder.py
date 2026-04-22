@@ -71,7 +71,7 @@ class UserBuilderService:
             )
 
         # Get org level 4 description from org-levels API
-        org_level4_code = employment.get("orgLevel4Code", "").strip()
+        org_level4_code = (employment.get("orgLevel4Code") or "").strip()
         org_level4_description = self.ukg_client.get_org_level_description(4, org_level4_code)
 
         # Build user from UKG data

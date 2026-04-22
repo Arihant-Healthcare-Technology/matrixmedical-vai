@@ -10,11 +10,11 @@ from typing import List, Pattern, Tuple
 
 # PII patterns with their replacements
 PII_PATTERNS: List[Tuple[Pattern, str]] = [
-    # Email addresses
-    (
-        re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
-        "[EMAIL]",
-    ),
+    # Email addresses - disabled to show actual emails in logs
+    # (
+    #     re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+    #     "[EMAIL]",
+    # ),
     # Phone numbers (various formats)
     (re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"), "[PHONE]"),
     (re.compile(r"\b\(\d{3}\)\s*\d{3}[-.\s]?\d{4}\b"), "[PHONE]"),

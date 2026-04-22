@@ -309,7 +309,7 @@ class TravelPerkUser:
         name = UserName(given_name=first_name, family_name=last_name)
 
         # Extract cost center - use org level 4 description from org-levels API
-        org_level4 = employment.get("orgLevel4Code", "").strip()
+        org_level4 = (employment.get("orgLevel4Code") or "").strip()
 
         # Use the description from org-levels API (already formatted like "730 - Description")
         # Fall back to just the code if no description available
