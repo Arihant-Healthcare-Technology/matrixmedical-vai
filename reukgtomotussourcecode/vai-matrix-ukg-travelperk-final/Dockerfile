@@ -48,9 +48,11 @@ COPY --from=builder /deps /usr/local/lib/python3.11/site-packages/
 COPY src/ /app/src/
 COPY common/ /app/common/
 COPY run-travelperk-batch.py build-travelperk-user.py upsert-travelperk-user.py /app/
+COPY docker-entrypoint.sh /app/
 
 # Create data directory and non-root user (SOW requirement 9.5)
 RUN mkdir -p /app/data && \
+    chmod +x /app/docker-entrypoint.sh && \
     useradd -m -u 1000 -s /bin/bash appuser && \
     chown -R appuser:appuser /app
 
@@ -63,9 +65,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Switch to non-root user
 USER appuser
 
-# Default entrypoint
-ENTRYPOINT ["python3", "run-travelperk-batch.py"]
-CMD ["--help"]
+# Default entrypoint - uses docker-entrypoint.sh for startup logging and env validation
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD []
 
 # -----------------------------------------------------------------------------
 # Stage 3: Development - Includes dev tools
