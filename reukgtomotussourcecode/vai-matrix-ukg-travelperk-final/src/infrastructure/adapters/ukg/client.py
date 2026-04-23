@@ -316,7 +316,9 @@ class UKGClient:
             if level is not None and code:
                 if level not in cache:
                     cache[level] = {}
-                cache[level][str(code)] = str(description)
+                # Format as "code - description" (e.g., "730 - Field Ops & Production")
+                formatted = f"{code} - {description}" if description else str(code)
+                cache[level][str(code)] = formatted
 
         logger.info(f"Cached org-levels for {len(cache)} levels")
         self._org_levels_cache = cache

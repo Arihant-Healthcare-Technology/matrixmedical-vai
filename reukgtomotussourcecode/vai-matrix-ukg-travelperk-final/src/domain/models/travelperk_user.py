@@ -298,14 +298,14 @@ class TravelPerkUser:
             TravelPerkUser instance
         """
         # Extract employee number
-        external_id = str(employment.get("employeeNumber", "")).strip()
+        external_id = str(employment.get("employeeNumber") or "").strip()
 
         # Extract email
-        email = person.get("emailAddress", "").strip()
+        email = (person.get("emailAddress") or "").strip()
 
         # Extract name
-        first_name = person.get("firstName", "")
-        last_name = person.get("lastName", "")
+        first_name = (person.get("firstName") or "").strip()
+        last_name = (person.get("lastName") or "").strip()
         name = UserName(given_name=first_name, family_name=last_name)
 
         # Extract cost center - use org level 4 description from org-levels API
@@ -322,7 +322,7 @@ class TravelPerkUser:
 
         # Determine active status
         termination_date = employment.get("terminationDate")
-        status_code = str(employment.get("employeeStatusCode", "")).strip().upper()
+        status_code = str(employment.get("employeeStatusCode") or "").strip().upper()
 
         if status_code:
             status = EmploymentStatus.from_code(status_code)
@@ -331,11 +331,11 @@ class TravelPerkUser:
             is_active = not bool(termination_date)
 
         # Extract job title
-        title = employment.get("jobTitle", "").strip() or None
+        title = (employment.get("jobTitle") or "").strip() or None
 
         # Extract phone number with country code
-        phone_raw = person.get("phoneNumber", "").strip()
-        country_code = person.get("countryCode", "").strip() or "1"  # Default to US
+        phone_raw = (person.get("phoneNumber") or "").strip()
+        country_code = (person.get("countryCode") or "").strip() or "1"  # Default to US
         if phone_raw:
             # Format: +{countryCode}{phoneNumber} (no space)
             phone_number = f"+{country_code}{phone_raw}"
@@ -343,10 +343,10 @@ class TravelPerkUser:
             phone_number = None
 
         # Extract language (for preferredLanguage and locale)
-        language_code = person.get("languageCode", "").strip() or None
+        language_code = (person.get("languageCode") or "").strip() or None
 
         # Extract gender (if available)
-        gender_raw = person.get("gender", "").strip().upper()
+        gender_raw = (person.get("gender") or "").strip().upper()
         if gender_raw in ["M", "MALE"]:
             gender = "M"
         elif gender_raw in ["F", "FEMALE"]:
@@ -355,7 +355,7 @@ class TravelPerkUser:
             gender = None
 
         # Extract date of birth (if available)
-        date_of_birth = person.get("birthDate", "").strip() or None
+        date_of_birth = (person.get("birthDate") or "").strip() or None
 
         return cls(
             external_id=external_id,

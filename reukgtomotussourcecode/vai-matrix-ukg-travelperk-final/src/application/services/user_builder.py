@@ -63,7 +63,7 @@ class UserBuilderService:
             print(json.dumps(person, indent=2))
 
         # Validate email exists
-        email = person.get("emailAddress", "").strip()
+        email = (person.get("emailAddress") or "").strip()
         if not email:
             raise UserValidationError(
                 ["No email address found"],
