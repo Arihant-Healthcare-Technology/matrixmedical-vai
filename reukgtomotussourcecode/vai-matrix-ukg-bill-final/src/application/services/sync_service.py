@@ -21,6 +21,7 @@ from src.domain.interfaces.services import (
     BatchSyncResult,
 )
 from src.domain.interfaces.repositories import EmployeeRepository, BillUserRepository
+from src.domain.exceptions.api_exceptions import ApiError
 from src.domain.models.employee import Employee, EmployeeStatus
 from src.domain.models.bill_user import BillUser, BillRole
 from src.infrastructure.adapters.bill.mappers import map_employee_to_bill_user
@@ -133,10 +134,16 @@ class SyncService(EmployeeSyncService):
                 return self._create_user(bill_user, employee)
 
         except Exception as e:
-            logger.error(
-                f"Employee sync failed: {employee.employee_number} ({employee.email}): {e}",
-                exc_info=True,
-            )
+            # Log Bill API 400 errors as warning (e.g., "Invalid last name") to avoid batch exit confusion
+            if isinstance(e, ApiError) and e.status_code == 400:
+                logger.warning(
+                    f"Bill API validation error for employee {employee.employee_number} ({employee.email}): {e}"
+                )
+            else:
+                logger.error(
+                    f"Employee sync failed: {employee.employee_number} ({employee.email}): {e}",
+                    exc_info=True,
+                )
             return SyncResult(
                 success=False,
                 action="error",
@@ -204,10 +211,16 @@ class SyncService(EmployeeSyncService):
                         details={"email": bill_user.email},
                     )
 
-            logger.error(
-                f"Failed to create user {bill_user.email}: {e}",
-                exc_info=True,
-            )
+            # Log Bill API 400 errors as warning (e.g., "Invalid last name") to avoid batch exit confusion
+            if isinstance(e, ApiError) and e.status_code == 400:
+                logger.warning(
+                    f"Bill API validation error for user {bill_user.email}: {e}"
+                )
+            else:
+                logger.error(
+                    f"Failed to create user {bill_user.email}: {e}",
+                    exc_info=True,
+                )
             return SyncResult(
                 success=False,
                 action="error",
@@ -252,10 +265,16 @@ class SyncService(EmployeeSyncService):
                 },
             )
         except Exception as e:
-            logger.error(
-                f"Failed to update user {existing.email}: {e}",
-                exc_info=True,
-            )
+            # Log Bill API 400 errors as warning (e.g., "Invalid last name") to avoid batch exit confusion
+            if isinstance(e, ApiError) and e.status_code == 400:
+                logger.warning(
+                    f"Bill API validation error for user {existing.email}: {e}"
+                )
+            else:
+                logger.error(
+                    f"Failed to update user {existing.email}: {e}",
+                    exc_info=True,
+                )
             return SyncResult(
                 success=False,
                 action="error",
