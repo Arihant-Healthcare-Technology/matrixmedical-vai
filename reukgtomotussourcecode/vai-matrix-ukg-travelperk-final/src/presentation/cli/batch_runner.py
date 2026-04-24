@@ -24,13 +24,57 @@ from ...infrastructure.adapters.travelperk import TravelPerkClient
 from ...infrastructure.config.settings import BatchSettings
 
 
+# =============================================================================
+# Logging Configuration
+# =============================================================================
 # Configure logging with correlation support and PII redaction
-configure_logging(include_module=True)
-logger = get_logger(__name__)
+# This reads LOG_LEVEL env var, or falls back to DEBUG if DEBUG=1, else INFO
 
-# Add PII redaction filter to all handlers
-for handler in logging.root.handlers:
-    handler.addFilter(RedactingFilter())
+def _setup_logging():
+    """Set up logging with fallback if configure_logging fails."""
+    try:
+        configure_logging(include_module=True)
+        _logger = get_logger(__name__)
+
+        # Add PII redaction filter to all handlers
+        for handler in logging.root.handlers:
+            handler.addFilter(RedactingFilter())
+
+        return _logger
+    except Exception as e:
+        # Fallback to basic logging if configure_logging fails
+        print(f"WARNING: Failed to configure advanced logging: {e}", flush=True)
+
+        # Determine log level from environment
+        log_level_name = os.getenv("LOG_LEVEL", "").upper()
+        if not log_level_name:
+            if os.getenv("DEBUG", "0") == "1":
+                log_level_name = "DEBUG"
+            else:
+                log_level_name = "INFO"
+
+        log_level = getattr(logging, log_level_name, logging.INFO)
+
+        # Configure basic logging to stdout
+        logging.basicConfig(
+            level=log_level,
+            format="[%(levelname)s] [%(asctime)s] [%(name)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            stream=sys.stdout,
+            force=True  # Override any existing configuration
+        )
+
+        _logger = logging.getLogger(__name__)
+        _logger.warning(f"Using fallback logging configuration: level={log_level_name}")
+        return _logger
+
+logger = _setup_logging()
+
+# Log the effective logging level for verification
+_effective_level = logging.getLevelName(logging.root.level)
+logger.info(f"Logger initialized: effective level={_effective_level}")
+if _effective_level == "DEBUG":
+    logger.debug("DEBUG level logging is active - verbose output enabled")
 
 
 def parse_args() -> argparse.Namespace:
@@ -170,8 +214,10 @@ def main() -> None:
             logger.info(f"  Save Local: {batch_settings.save_local}")
             logger.info(f"  Limit: {batch_settings.limit or 'None'}")
             logger.info(f"  Output Directory: {batch_settings.out_dir}")
+            logger.info(f"  DEBUG Mode: {debug}")
             logger.info(f"  UKG_CUSTOMER_API_KEY: {'SET' if has_ukg_key else 'MISSING'}")
             logger.info(f"  TRAVELPERK_API_KEY: {'SET' if has_api_key else 'MISSING'}")
+            logger.debug("DEBUG logging is enabled - verbose output will be shown")
             logger.info("-" * 80)
 
             # Initialize clients

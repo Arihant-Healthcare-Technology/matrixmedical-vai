@@ -22,7 +22,8 @@ Environment (.env):
     DRY_RUN=1
     SAVE_LOCAL=1
     TRAVELPERK_API_KEY=your-api-key
-    DEBUG=1
+    DEBUG=1                  # Enables DEBUG log level (same as LOG_LEVEL=DEBUG)
+    LOG_LEVEL=DEBUG          # Explicit log level (DEBUG, INFO, WARNING, ERROR)
 """
 
 import os
@@ -79,8 +80,18 @@ def print_env_config():
 
     # Logging Settings
     print("  [Logging]", flush=True)
-    print(f"    LOG_LEVEL: {os.getenv('LOG_LEVEL', 'INFO (default)')}", flush=True)
-    print(f"    DEBUG: {os.getenv('DEBUG', '0 (default)')}", flush=True)
+    log_level_env = os.getenv('LOG_LEVEL', '')
+    debug_env = os.getenv('DEBUG', '0')
+    # Calculate effective log level (same logic as configure_logging)
+    if log_level_env:
+        effective_level = log_level_env.upper()
+    elif debug_env == '1':
+        effective_level = 'DEBUG (via DEBUG=1)'
+    else:
+        effective_level = 'INFO (default)'
+    print(f"    LOG_LEVEL: {os.getenv('LOG_LEVEL', 'not set')}", flush=True)
+    print(f"    DEBUG: {debug_env}", flush=True)
+    print(f"    EFFECTIVE LOG LEVEL: {effective_level}", flush=True)
     print(f"    REDACT_PII: {os.getenv('REDACT_PII', '1 (default)')}", flush=True)
 
     # Runtime Settings

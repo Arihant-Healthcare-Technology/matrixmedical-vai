@@ -7,24 +7,30 @@
 set -e
 
 # -----------------------------------------------------------------------------
+# Force unbuffered output for Azure Container Instances
+# This ensures logs appear immediately in Azure Log Analytics
+# -----------------------------------------------------------------------------
+exec > >(cat) 2>&1
+
+# -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
 SCRIPT_NAME="docker-entrypoint.sh"
 LOG_PREFIX="[ENTRYPOINT]"
 
 # -----------------------------------------------------------------------------
-# Logging Functions
+# Logging Functions (all output to stdout for Azure ACI compatibility)
 # -----------------------------------------------------------------------------
 log_info() {
-    echo "${LOG_PREFIX} [INFO] $(date '+%Y-%m-%d %H:%M:%S') $1"
+    printf '%s\n' "${LOG_PREFIX} [INFO] $(date '+%Y-%m-%d %H:%M:%S') $1"
 }
 
 log_error() {
-    echo "${LOG_PREFIX} [ERROR] $(date '+%Y-%m-%d %H:%M:%S') $1" >&2
+    printf '%s\n' "${LOG_PREFIX} [ERROR] $(date '+%Y-%m-%d %H:%M:%S') $1"
 }
 
 log_warn() {
-    echo "${LOG_PREFIX} [WARN] $(date '+%Y-%m-%d %H:%M:%S') $1"
+    printf '%s\n' "${LOG_PREFIX} [WARN] $(date '+%Y-%m-%d %H:%M:%S') $1"
 }
 
 # -----------------------------------------------------------------------------
@@ -78,7 +84,9 @@ display_config() {
     log_info "  EMPLOYEE_TYPE_CODES: ${EMPLOYEE_TYPE_CODES:-ALL}"
     log_info "  WORKERS: ${WORKERS:-12}"
     log_info "  DRY_RUN: ${DRY_RUN:-0}"
-    log_info "  LOG_LEVEL: ${LOG_LEVEL:-INFO}"
+    log_info "  DEBUG: ${DEBUG:-0}"
+    log_info "  LOG_LEVEL: ${LOG_LEVEL:-INFO (or DEBUG if DEBUG=1)}"
+    log_info "  PYTHONUNBUFFERED: ${PYTHONUNBUFFERED:-not set}"
     log_info "====================="
 }
 

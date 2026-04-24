@@ -5,15 +5,23 @@ version: "3.8"
 # =============================================================================
 #
 # Usage:
-#   Production:   docker-compose up -d travelperk-sync
-#   Development:  docker-compose --profile dev up travelperk-dev
-#   One-off run:  docker-compose run --rm travelperk-sync --company-id J9A6Y
+#   Local Production:  docker-compose up -d travelperk-sync
+#   Development:       docker-compose --profile dev up travelperk-dev
+#   Testing:           docker-compose --profile test up travelperk-test
+#   Azure Deploy:      docker-compose --profile azure up travelperk-azure
+#   One-off run:       docker-compose run --rm travelperk-sync --company-id J9A6Y
+#
+# Environment Variables:
+#   LOG_LEVEL    - Set to DEBUG, INFO, WARNING, ERROR (default: INFO)
+#   DEBUG        - Set to 1 for debug logging (alternative to LOG_LEVEL=DEBUG)
+#   IMAGE_TAG    - Docker image tag (default: latest)
+#   ACR_REGISTRY - Azure Container Registry name (for azure profile)
 #
 # =============================================================================
 
 services:
   # ---------------------------------------------------------------------------
-  # Production Service - UKG to TravelPerk Sync
+  # Production Service - UKG to TravelPerk Sync (Local)
   # ---------------------------------------------------------------------------
   travelperk-sync:
     build:
@@ -26,7 +34,10 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # LOG_LEVEL: Set explicitly or use DEBUG=1 for debug logging
+      # If neither is set, defaults to INFO
+      - LOG_LEVEL=${LOG_LEVEL:-}
+      - DEBUG=${DEBUG:-0}
       - DATA_DIR=/app/data
     volumes:
       - travelperk-data:/app/data:rw
@@ -54,6 +65,57 @@ services:
         max-file: "3"
 
   # ---------------------------------------------------------------------------
+  # Azure Container Instance Service
+  # ---------------------------------------------------------------------------
+  # Use this profile for Azure deployments:
+  #   docker-compose --profile azure up travelperk-azure
+  #
+  # Or deploy directly to Azure:
+  #   az container create --resource-group <rg> --file docker-compose.yml
+  # ---------------------------------------------------------------------------
+  travelperk-azure:
+    image: ${ACR_REGISTRY:-vaiacr}.azurecr.io/vai-matrix-ukg-travelperk:${IMAGE_TAG:-latest}
+    container_name: ukg-travelperk-azure
+    profiles:
+      - azure
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Logging: Set LOG_LEVEL or DEBUG=1 for debug output
+      - LOG_LEVEL=${LOG_LEVEL:-}
+      - DEBUG=${DEBUG:-0}
+      - DATA_DIR=/app/data
+      # UKG Configuration
+      - UKG_BASE_URL=${UKG_BASE_URL}
+      - UKG_CUSTOMER_API_KEY=${UKG_CUSTOMER_API_KEY}
+      - UKG_USERNAME=${UKG_USERNAME:-}
+      - UKG_PASSWORD=${UKG_PASSWORD:-}
+      - UKG_BASIC_B64=${UKG_BASIC_B64:-}
+      - UKG_TIMEOUT=${UKG_TIMEOUT:-45}
+      # TravelPerk Configuration
+      - TRAVELPERK_API_BASE=${TRAVELPERK_API_BASE}
+      - TRAVELPERK_API_KEY=${TRAVELPERK_API_KEY}
+      - TRAVELPERK_TIMEOUT=${TRAVELPERK_TIMEOUT:-60}
+      # Batch Configuration
+      - COMPANY_ID=${COMPANY_ID:-}
+      - STATES=${STATES:-}
+      - EMPLOYEE_TYPE_CODES=${EMPLOYEE_TYPE_CODES:-}
+      - WORKERS=${WORKERS:-12}
+      - DRY_RUN=${DRY_RUN:-0}
+      - SAVE_LOCAL=${SAVE_LOCAL:-0}
+      - MAX_RETRIES=${MAX_RETRIES:-2}
+    volumes:
+      - travelperk-azure-data:/app/data:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
   # Development Service - Hot reload with source mounts
   # ---------------------------------------------------------------------------
   travelperk-dev:
@@ -64,10 +126,11 @@ services:
     image: vai-matrix-ukg-travelperk:dev
     container_name: ukg-travelperk-dev
     env_file:
-      - .env.dev
+      - .env
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=DEBUG
+      - DEBUG=1
       - DATA_DIR=/app/data
     volumes:
       # Mount source for hot-reload
@@ -99,6 +162,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=DEBUG
+      - DEBUG=1
       - UKG_BASE_URL=https://test.ultipro.com
       - UKG_USERNAME=test_user
       - UKG_PASSWORD=test_pass
@@ -132,5 +196,16 @@ networks:
 # Volumes
 # =============================================================================
 volumes:
+  # Local development/production volume
   travelperk-data:
     name: vai-travelperk-data
+
+  # Azure File Share volume (used with azure profile)
+  # Configure with: AZURE_STORAGE_ACCOUNT environment variable
+  travelperk-azure-data:
+    name: vai-travelperk-azure-data
+    # For Azure File Share, uncomment below:
+    # driver: azure_file
+    # driver_opts:
+    #   share_name: vai-travelperk-data
+    #   storage_account_name: ${AZURE_STORAGE_ACCOUNT}

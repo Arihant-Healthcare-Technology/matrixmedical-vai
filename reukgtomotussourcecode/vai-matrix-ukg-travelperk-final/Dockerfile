@@ -33,11 +33,13 @@ LABEL org.opencontainers.image.source="https://github.com/vai-consulting/vai-mat
 LABEL org.opencontainers.image.licenses="Proprietary"
 
 # Environment configuration
+# PYTHONUNBUFFERED=1 ensures immediate output flushing for Azure Container logs
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
 ENV DATA_DIR=/app/data
-ENV LOG_LEVEL=INFO
+# LOG_LEVEL is intentionally NOT set here to allow runtime override
+# Use DEBUG=1 or LOG_LEVEL=DEBUG at runtime for debug logging
 
 WORKDIR /app
 

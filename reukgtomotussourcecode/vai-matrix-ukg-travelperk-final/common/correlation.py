@@ -200,13 +200,23 @@ def configure_logging(
     Configure logging with correlation ID support.
 
     Args:
-        level: Logging level (defaults to LOG_LEVEL env var or INFO)
+        level: Logging level (defaults to LOG_LEVEL env var, DEBUG env var, or INFO)
         include_module: Include module name in log format
         log_file: Optional file path for file logging
+
+    Environment Variables:
+        LOG_LEVEL: Explicit log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        DEBUG: If "1" and LOG_LEVEL not set, uses DEBUG level
     """
     # Determine log level from environment or parameter
     if level is None:
-        level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+        level_name = os.getenv("LOG_LEVEL", "").upper()
+        if not level_name:
+            # Fall back to DEBUG env var for backward compatibility
+            if os.getenv("DEBUG", "0") == "1":
+                level_name = "DEBUG"
+            else:
+                level_name = "INFO"
         level = getattr(logging, level_name, logging.INFO)
 
     # Create formatter
@@ -220,15 +230,16 @@ def configure_logging(
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
-    # Console handler - use stderr for container compatibility
-    console_handler = logging.StreamHandler(sys.stderr)
+    # Console handler - use stdout for Azure Container Instances compatibility
+    # Azure ACI captures stdout more reliably than stderr for container logs
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_handler.setFormatter(formatter)
     console_handler.addFilter(CorrelationLogFilter())
     root_logger.addHandler(console_handler)
 
     # Log initial configuration for debugging
-    root_logger.info(f"Logging configured: level={logging.getLevelName(level)}")
+    root_logger.info(f"Logging configured: level={logging.getLevelName(level)}, DEBUG={os.getenv('DEBUG', '0')}")
 
     # File handler (optional)
     if log_file:
