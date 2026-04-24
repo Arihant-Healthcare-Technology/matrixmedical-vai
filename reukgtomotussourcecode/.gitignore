@@ -73,6 +73,7 @@ service-account*.json
 !**/secrets_manager.py
 *token*
 !**/token_service.py
+!**/token_bucket.py
 !**/test_token_service.py
 !**/test_token_flow.py
 !**/test_motus_get_token.py
