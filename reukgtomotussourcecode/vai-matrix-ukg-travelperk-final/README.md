@@ -10,17 +10,18 @@ Enterprise integration pipeline for provisioning and synchronizing employee data
 2. [Architecture](#2-architecture)
 3. [Business Logic](#3-business-logic)
 4. [Prerequisites](#4-prerequisites)
-5. [Configuration](#5-configuration)
-6. [Usage](#6-usage)
-7. [API Reference](#7-api-reference)
-8. [SOW Compliance](#8-sow-compliance)
-9. [Testing](#9-testing)
-10. [Deployment](#10-deployment)
-11. [Monitoring & Logging](#11-monitoring--logging)
-12. [Troubleshooting](#12-troubleshooting)
-13. [Security](#13-security)
-14. [Change Log](#14-change-log)
-15. [Support](#15-support)
+5. [Quick Start - Local Development](#5-quick-start---local-development)
+6. [Configuration](#6-configuration)
+7. [Usage](#7-usage)
+8. [API Reference](#8-api-reference)
+9. [SOW Compliance](#9-sow-compliance)
+10. [Testing](#10-testing)
+11. [Deployment](#11-deployment)
+12. [Monitoring & Logging](#12-monitoring--logging)
+13. [Troubleshooting](#13-troubleshooting)
+14. [Security](#14-security)
+15. [Change Log](#15-change-log)
+16. [Support](#16-support)
 
 ---
 
@@ -199,19 +200,7 @@ When an employee is terminated in UKG:
 
 - Python 3.11 or higher
 - pip (Python package manager)
-- Docker (for containerized deployment)
-
-### Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-**requirements.txt:**
-```
-requests>=2.31.0
-python-dotenv>=1.0.0
-```
+- Docker (for containerized deployment, optional)
 
 ### Access Requirements
 
@@ -221,7 +210,105 @@ python-dotenv>=1.0.0
 
 ---
 
-## 5. Configuration
+## 5. Quick Start - Local Development
+
+Follow these steps to run the batch from your local machine:
+
+### Step 1: Clone the Repository
+
+```bash
+git clone <repository-url>
+cd vai-matrix-ukg-travelperk-final
+```
+
+### Step 2: Create and Activate Virtual Environment
+
+**macOS/Linux:**
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+**Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+### Step 3: Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Step 4: Configure Environment Variables
+
+```bash
+# Copy example env file
+cp .env.example .env
+
+# Edit .env with your credentials
+```
+
+**Required variables in `.env`:**
+```bash
+# UKG Configuration
+UKG_BASE_URL=https://service4.ultipro.com
+UKG_USERNAME=your-username
+UKG_PASSWORD=your-password
+UKG_CUSTOMER_API_KEY=your-customer-api-key
+
+# TravelPerk Configuration
+TRAVELPERK_API_BASE=https://app.sandbox-travelperk.com
+TRAVELPERK_API_KEY=your-api-key
+
+# Batch Settings
+COMPANY_ID=J9A6Y
+WORKERS=12
+```
+
+### Step 5: Run the Batch
+
+```bash
+# Test with dry-run first (validates without making API calls)
+python run-travelperk-batch.py --company-id J9A6Y --limit 5 --dry-run
+
+# Run with a small batch
+python run-travelperk-batch.py --company-id J9A6Y --limit 10
+
+# Run full batch
+python run-travelperk-batch.py --company-id J9A6Y
+```
+
+### Quick Reference - CLI Options
+
+| Option | Example | Description |
+|--------|---------|-------------|
+| `--company-id` | `J9A6Y` | **Required** - UKG Company ID |
+| `--dry-run` | - | Validate payloads without API calls |
+| `--limit` | `10` | Process only N records (for testing) |
+| `--states` | `FL,MS,NJ` | Filter by US state codes |
+| `--employee-type-codes` | `FTC,HRC` | Filter by employee types |
+| `--workers` | `12` | Thread pool size (default: 12) |
+| `--save-local` | - | Save JSON payloads to `data/batch/` |
+| `--insert-supervisor` | `004295` | Pre-insert supervisor(s) |
+
+### Verify Installation
+
+```bash
+# Check Python version
+python --version  # Should be 3.11+
+
+# Verify dependencies
+pip list | grep -E "requests|python-dotenv"
+
+# Test import
+python -c "from src.presentation.cli.batch_runner import main; print('Import OK')"
+```
+
+---
+
+## 6. Configuration
 
 ### Environment Variables
 
@@ -277,7 +364,7 @@ DEBUG=0
 
 ---
 
-## 6. Usage
+## 7. Usage
 
 ### Single Employee Processing
 
@@ -348,7 +435,7 @@ python run-travelperk-batch.py --company-id J9A6Y --states FL,MS --limit 50 --dr
 
 ---
 
-## 7. API Reference
+## 8. API Reference
 
 ### UKG Pro Endpoints
 
@@ -405,7 +492,7 @@ GET /api/v2/scim/Users?filter=userName eq "john.doe@example.com"
 
 ---
 
-## 8. SOW Compliance
+## 9. SOW Compliance
 
 ### Implemented Features
 
@@ -492,7 +579,7 @@ def redact_email(email: str) -> str:
 
 ---
 
-## 9. Testing
+## 10. Testing
 
 ### Test Structure
 
@@ -542,7 +629,7 @@ pytest tests/unit/test_rate_limiter.py -v
 
 ---
 
-## 10. Deployment
+## 11. Deployment
 
 ### Docker Deployment
 
@@ -626,7 +713,7 @@ az container create \
 
 ---
 
-## 11. Monitoring & Logging
+## 12. Monitoring & Logging
 
 ### Log Levels
 
@@ -672,7 +759,7 @@ Each operation outputs JSON result:
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### Common Errors
 
@@ -714,7 +801,7 @@ A: The manager field will be empty. Insert supervisors first using `--insert-sup
 
 ---
 
-## 13. Security
+## 14. Security
 
 ### Data Classification
 
@@ -754,7 +841,7 @@ Authorization: ApiKey your-api-key-here
 
 ---
 
-## 14. Change Log
+## 15. Change Log
 
 | Version | Date | Changes |
 |---------|------|---------|
@@ -765,7 +852,7 @@ Authorization: ApiKey your-api-key-here
 
 ---
 
-## 15. Support
+## 16. Support
 
 ### Contact
 
