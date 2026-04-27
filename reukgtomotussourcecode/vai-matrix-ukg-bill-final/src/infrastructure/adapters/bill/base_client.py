@@ -72,6 +72,7 @@ class BillClient:
         self,
         response: Any,
         expected_status: Optional[List[int]] = None,
+        request_payload: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Handle API response and convert to dict.
@@ -79,6 +80,7 @@ class BillClient:
         Args:
             response: HTTP response object
             expected_status: List of expected status codes
+            request_payload: Optional request payload for error logging
 
         Returns:
             Response data as dict
@@ -99,6 +101,15 @@ class BillClient:
         # Handle error responses
         error_data = safe_json(response)
         error_message = self._extract_error_message(error_data)
+
+        # Log detailed request/response for 400 Bad Request errors
+        if response.status_code == 400:
+            logger.error(
+                f"BILL API 400 Bad Request Error:\n"
+                f"  URL: {response.url}\n"
+                f"  Request Payload: {request_payload}\n"
+                f"  Response Body: {error_data}"
+            )
 
         if response.status_code == 401:
             raise AuthenticationError(

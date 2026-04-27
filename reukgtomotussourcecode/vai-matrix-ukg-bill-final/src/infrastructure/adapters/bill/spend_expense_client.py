@@ -120,7 +120,7 @@ class SpendExpenseClient(BillClient):
             f"cost_center={cost_center}"
         )
         response = self._http.post("/users", json=payload, timeout=BATCH_TIMEOUT)
-        result = self._handle_response(response, [200, 201])
+        result = self._handle_response(response, [200, 201], request_payload=payload)
         user_id = result.get("uuid") or result.get("id")
         logger.info(
             f"API response: status={response.status_code}, "
@@ -144,7 +144,7 @@ class SpendExpenseClient(BillClient):
             f"API request: PATCH /users/{user_id}, fields={fields}"
         )
         response = self._http.patch(f"/users/{user_id}", json=payload)
-        result = self._handle_response(response, [200, 204])
+        result = self._handle_response(response, [200, 204], request_payload=payload)
         response_id = result.get("uuid") or result.get("id") if result else user_id
         logger.info(
             f"API response: status={response.status_code}, "
