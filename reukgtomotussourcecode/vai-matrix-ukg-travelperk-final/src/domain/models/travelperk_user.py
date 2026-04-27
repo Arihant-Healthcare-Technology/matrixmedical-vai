@@ -222,31 +222,28 @@ class TravelPerkUser:
             "value": self.name.family_name
         })
 
-        # Update emails
-        operations.append({
-            "op": "replace",
-            "path": "emails",
-            "value": [UserEmail(value=self.user_name).to_dict()]
-        })
+        # Note: 'emails' is NOT supported in TravelPerk SCIM PATCH operations
+        # The email is updated via userName instead
 
-        # Update enterprise extension (costCenter and manager) as nested object
-        enterprise_ext: Dict[str, Any] = {}
+        # Update enterprise extension fields using individual paths with colons
+        # TravelPerk requires: urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:costCenter
         if self.cost_center:
-            enterprise_ext["costCenter"] = self.cost_center
+            operations.append({
+                "op": "replace",
+                "path": f"{SCIM_ENTERPRISE_SCHEMA}:costCenter",
+                "value": self.cost_center
+            })
+
         if include_manager and self.manager_id:
+            # Note: displayName is read-only in TravelPerk SCIM PATCH - don't include it
             manager_obj: Dict[str, Any] = {
                 "value": self.manager_id,
                 "$ref": f"{get_travelperk_scim_base()}/{self.manager_id}",
             }
-            if self.manager_display_name:
-                manager_obj["displayName"] = self.manager_display_name
-            enterprise_ext["manager"] = manager_obj
-
-        if enterprise_ext:
             operations.append({
                 "op": "replace",
-                "path": SCIM_ENTERPRISE_SCHEMA,
-                "value": enterprise_ext
+                "path": f"{SCIM_ENTERPRISE_SCHEMA}:manager",
+                "value": manager_obj
             })
 
         # Update core SCIM fields
@@ -278,22 +275,34 @@ class TravelPerkUser:
                 "value": self.locale
             })
 
-        # Update TravelPerk extension fields as nested object
-        travelperk_ext: Dict[str, Any] = {}
+        # Update TravelPerk extension fields using individual paths with colons
         # uniqueId - employee identifier/number (always include)
-        travelperk_ext["uniqueId"] = self.external_id
-        if self.gender:
-            travelperk_ext["gender"] = self.gender
-        if self.date_of_birth:
-            travelperk_ext["dateOfBirth"] = self.date_of_birth
-        if self.line_manager_email:
-            travelperk_ext["lineManagerEmail"] = self.line_manager_email
-
         operations.append({
             "op": "replace",
-            "path": SCIM_TRAVELPERK_SCHEMA,
-            "value": travelperk_ext
+            "path": f"{SCIM_TRAVELPERK_SCHEMA}:uniqueId",
+            "value": self.external_id
         })
+
+        if self.gender:
+            operations.append({
+                "op": "replace",
+                "path": f"{SCIM_TRAVELPERK_SCHEMA}:gender",
+                "value": self.gender
+            })
+
+        if self.date_of_birth:
+            operations.append({
+                "op": "replace",
+                "path": f"{SCIM_TRAVELPERK_SCHEMA}:dateOfBirth",
+                "value": self.date_of_birth
+            })
+
+        if self.line_manager_email:
+            operations.append({
+                "op": "replace",
+                "path": f"{SCIM_TRAVELPERK_SCHEMA}:lineManagerEmail",
+                "value": self.line_manager_email
+            })
 
         return operations
 

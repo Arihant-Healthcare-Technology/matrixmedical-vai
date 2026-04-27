@@ -21,8 +21,8 @@ PII_PATTERNS: List[Tuple[Pattern, str]] = [
     (re.compile(r"\b\+1[-.\s]?\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"), "[PHONE]"),
     # SSN
     (re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"), "[SSN]"),
-    # ZIP codes (5 or 9 digit)
-    (re.compile(r"\b\d{5}(-\d{4})?\b"), "[ZIP]"),
+    # ZIP codes - DISABLED: was incorrectly matching org-level codes like 53203
+    # (re.compile(r"\b\d{5}(-\d{4})?\b"), "[ZIP]"),
     # Credit card numbers (basic patterns)
     (re.compile(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b"), "[CARD]"),
     # Date of birth patterns
