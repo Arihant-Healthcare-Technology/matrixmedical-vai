@@ -13,6 +13,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 from .constants import (
+    DEFAULT_BATCH_RUN_DAYS,
     DEFAULT_MAX_RETRIES,
     DEFAULT_MOTUS_TIMEOUT,
     DEFAULT_UKG_TIMEOUT,
@@ -142,6 +143,7 @@ class BatchSettings:
     probe: bool = False
     out_dir: str = "data/batch"
     use_sequential: bool = True  # If True (default), process employees sequentially instead of threaded
+    batch_run_days: int = DEFAULT_BATCH_RUN_DAYS  # Days to look back for employee changes
 
     @classmethod
     def from_env(cls) -> "BatchSettings":
@@ -156,6 +158,7 @@ class BatchSettings:
             probe=os.getenv("PROBE", "0") == "1",
             out_dir=os.getenv("OUT_DIR", cls.out_dir),
             use_sequential=os.getenv("USE_SEQUENTIAL", "1").lower() not in ("0", "false", "no"),
+            batch_run_days=int(os.getenv("BATCH_RUN_DAYS", str(DEFAULT_BATCH_RUN_DAYS))),
         )
 
     def validate(self) -> None:

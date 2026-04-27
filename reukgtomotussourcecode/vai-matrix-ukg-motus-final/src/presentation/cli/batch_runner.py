@@ -7,6 +7,7 @@ Entry point for running Motus batch synchronization.
 import argparse
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Set
 
 from common.correlation import configure_logging
@@ -51,6 +52,12 @@ def parse_args() -> argparse.Namespace:
         dest="probe",
         action="store_true",
         help="On dry-run, GET Motus to report would_insert/update",
+    )
+    parser.add_argument(
+        "--batch-run-days",
+        dest="batch_run_days",
+        type=int,
+        help="Filter employees changed within N days (e.g., 1, 2, or 7)",
     )
     return parser.parse_args()
 
@@ -106,6 +113,45 @@ def filter_by_employee_numbers(
     ]
 
 
+def filter_by_date_changed(
+    items: list,
+    batch_run_days: int,
+) -> list:
+    """Filter employees by dateTimeChanged within the specified days.
+
+    Employees without a dateTimeChanged field are included (treated as recently changed).
+    """
+    if batch_run_days <= 0:
+        return items  # No date filter if days is 0 or negative
+
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=batch_run_days)
+    eligible = []
+
+    for item in items:
+        date_changed_str = item.get("dateTimeChanged", "")
+
+        # Include employees without dateTimeChanged (treat as recently changed)
+        if not date_changed_str:
+            eligible.append(item)
+            continue
+
+        try:
+            # Parse ISO 8601 format: "2026-04-20T13:35:31.44"
+            date_changed = datetime.fromisoformat(date_changed_str.replace("Z", "+00:00"))
+
+            # Make timezone-aware if naive
+            if date_changed.tzinfo is None:
+                date_changed = date_changed.replace(tzinfo=timezone.utc)
+
+            if date_changed >= cutoff_date:
+                eligible.append(item)
+        except ValueError:
+            logger.warning(f"Invalid dateTimeChanged format: {date_changed_str}, including employee")
+            eligible.append(item)  # Include on parse error to be safe
+
+    return eligible
+
+
 def main() -> None:
     """Main entry point for batch runner."""
     args = parse_args()
@@ -119,6 +165,8 @@ def main() -> None:
         os.environ["SAVE_LOCAL"] = "1"
     if args.probe:
         os.environ["PROBE"] = "1"
+    if args.batch_run_days is not None:
+        os.environ["BATCH_RUN_DAYS"] = str(args.batch_run_days)
 
     # Load settings
     batch_settings = BatchSettings.from_env()
@@ -155,6 +203,7 @@ def main() -> None:
     has_jwt = True  # Already validated above
     logger.info(
         f"Config: companyID={batch_settings.company_id} | "
+        f"batch_run_days={batch_settings.batch_run_days} | "
         f"workers={batch_settings.workers} | "
         f"dry_run={batch_settings.dry_run} | "
         f"probe={batch_settings.probe} | "
@@ -173,6 +222,13 @@ def main() -> None:
     # Fetch employees from UKG
     employees = ukg_client.get_all_employment_details_by_company(
         batch_settings.company_id
+    )
+    logger.info(f"Total employees fetched from UKG: {len(employees)}")
+
+    # Filter by dateTimeChanged (employees with recent changes)
+    employees = filter_by_date_changed(employees, batch_settings.batch_run_days)
+    logger.info(
+        f"Employees with changes in last {batch_settings.batch_run_days} day(s): {len(employees)}"
     )
 
     # Filter by job codes

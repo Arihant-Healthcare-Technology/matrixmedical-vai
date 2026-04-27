@@ -237,6 +237,7 @@ class TestBatchSettings:
         assert settings.save_local is False
         assert settings.probe is False
         assert settings.out_dir == "data/batch"
+        assert settings.batch_run_days == 1  # Default is 1 day
 
     def test_custom_values(self):
         """Test custom values are set."""
@@ -249,6 +250,7 @@ class TestBatchSettings:
             save_local=True,
             probe=True,
             out_dir="/custom/dir",
+            batch_run_days=7,
         )
 
         assert settings.workers == 8
@@ -259,6 +261,7 @@ class TestBatchSettings:
         assert settings.save_local is True
         assert settings.probe is True
         assert settings.out_dir == "/custom/dir"
+        assert settings.batch_run_days == 7
 
     def test_from_env(self, monkeypatch):
         """Test creating settings from environment variables."""
@@ -270,6 +273,7 @@ class TestBatchSettings:
         monkeypatch.setenv("SAVE_LOCAL", "1")
         monkeypatch.setenv("PROBE", "1")
         monkeypatch.setenv("OUT_DIR", "/env/dir")
+        monkeypatch.setenv("BATCH_RUN_DAYS", "7")
 
         settings = BatchSettings.from_env()
 
@@ -281,17 +285,19 @@ class TestBatchSettings:
         assert settings.save_local is True
         assert settings.probe is True
         assert settings.out_dir == "/env/dir"
+        assert settings.batch_run_days == 7
 
     def test_from_env_defaults(self, monkeypatch):
         """Test from_env uses defaults when vars not set."""
         for var in ["WORKERS", "COMPANY_ID", "STATES", "JOB_IDS",
-                    "DRY_RUN", "SAVE_LOCAL", "PROBE", "OUT_DIR"]:
+                    "DRY_RUN", "SAVE_LOCAL", "PROBE", "OUT_DIR", "BATCH_RUN_DAYS"]:
             monkeypatch.delenv(var, raising=False)
 
         settings = BatchSettings.from_env()
 
         assert settings.workers == 12
         assert settings.dry_run is False
+        assert settings.batch_run_days == 1  # Default is 1 day
 
     def test_from_env_dry_run_zero(self, monkeypatch):
         """Test DRY_RUN=0 is False."""
@@ -306,6 +312,27 @@ class TestBatchSettings:
 
         settings = BatchSettings.from_env()
         assert settings.dry_run is False
+
+    def test_from_env_batch_run_days_1(self, monkeypatch):
+        """Test BATCH_RUN_DAYS=1."""
+        monkeypatch.setenv("BATCH_RUN_DAYS", "1")
+
+        settings = BatchSettings.from_env()
+        assert settings.batch_run_days == 1
+
+    def test_from_env_batch_run_days_2(self, monkeypatch):
+        """Test BATCH_RUN_DAYS=2."""
+        monkeypatch.setenv("BATCH_RUN_DAYS", "2")
+
+        settings = BatchSettings.from_env()
+        assert settings.batch_run_days == 2
+
+    def test_from_env_batch_run_days_7(self, monkeypatch):
+        """Test BATCH_RUN_DAYS=7."""
+        monkeypatch.setenv("BATCH_RUN_DAYS", "7")
+
+        settings = BatchSettings.from_env()
+        assert settings.batch_run_days == 7
 
     def test_validate_success(self):
         """Test validate passes with valid settings."""

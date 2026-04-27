@@ -3,13 +3,14 @@
 import os
 import pytest
 import sys
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from src.presentation.cli.batch_runner import (
     parse_args,
-    parse_states,
     get_eligible_job_codes,
     filter_by_eligible_job_codes,
+    filter_by_date_changed,
     main,
 )
 
@@ -28,6 +29,7 @@ class TestParseArgs:
         assert args.dry_run is False
         assert args.save_local is False
         assert args.probe is False
+        assert args.batch_run_days is None
 
     def test_company_id(self):
         """Test parsing company-id argument."""
@@ -71,6 +73,13 @@ class TestParseArgs:
 
         assert args.probe is True
 
+    def test_batch_run_days(self):
+        """Test parsing batch-run-days argument."""
+        with patch.object(sys, "argv", ["batch_runner.py", "--batch-run-days", "7"]):
+            args = parse_args()
+
+        assert args.batch_run_days == 7
+
     def test_all_args(self):
         """Test parsing all arguments."""
         with patch.object(
@@ -84,6 +93,7 @@ class TestParseArgs:
                 "--dry-run",
                 "--save-local",
                 "--probe",
+                "--batch-run-days", "7",
             ],
         ):
             args = parse_args()
@@ -94,50 +104,7 @@ class TestParseArgs:
         assert args.dry_run is True
         assert args.save_local is True
         assert args.probe is True
-
-
-class TestParseStates:
-    """Test cases for parse_states function."""
-
-    def test_parse_single_state(self):
-        """Test parsing single state."""
-        result = parse_states("FL")
-        assert result == {"FL"}
-
-    def test_parse_multiple_states(self):
-        """Test parsing multiple states."""
-        result = parse_states("FL,TX,CA")
-        assert result == {"FL", "TX", "CA"}
-
-    def test_parse_states_with_spaces(self):
-        """Test parsing states with whitespace."""
-        result = parse_states(" FL , TX , CA ")
-        assert result == {"FL", "TX", "CA"}
-
-    def test_parse_states_uppercase(self):
-        """Test states are uppercased."""
-        result = parse_states("fl,tx,ca")
-        assert result == {"FL", "TX", "CA"}
-
-    def test_parse_none_returns_none(self):
-        """Test None input returns None."""
-        result = parse_states(None)
-        assert result is None
-
-    def test_parse_empty_string_returns_none(self):
-        """Test empty string returns None."""
-        result = parse_states("")
-        assert result is None
-
-    def test_parse_whitespace_only_returns_empty(self):
-        """Test whitespace only returns empty set."""
-        result = parse_states("   ")
-        assert result == set()
-
-    def test_parse_with_empty_entries(self):
-        """Test parsing with empty entries between commas."""
-        result = parse_states("FL,,TX,")
-        assert result == {"FL", "TX"}
+        assert args.batch_run_days == 7
 
 
 class TestGetEligibleJobCodes:
@@ -274,6 +241,149 @@ class TestFilterByEligibleJobCodes:
         assert captured.out == ""
 
 
+class TestFilterByDateChanged:
+    """Test cases for filter_by_date_changed function."""
+
+    def test_filter_recent_changes(self):
+        """Test filtering employees with recent changes."""
+        now = datetime.now(timezone.utc)
+        recent_date = (now - timedelta(hours=12)).isoformat()
+        old_date = (now - timedelta(days=5)).isoformat()
+
+        items = [
+            {"employeeNumber": "12345", "dateTimeChanged": recent_date},
+            {"employeeNumber": "12346", "dateTimeChanged": old_date},
+        ]
+
+        result = filter_by_date_changed(items, batch_run_days=1)
+
+        assert len(result) == 1
+        assert result[0]["employeeNumber"] == "12345"
+
+    def test_filter_with_7_days(self):
+        """Test filtering with 7 days lookback."""
+        now = datetime.now(timezone.utc)
+        within_7_days = (now - timedelta(days=5)).isoformat()
+        outside_7_days = (now - timedelta(days=10)).isoformat()
+
+        items = [
+            {"employeeNumber": "12345", "dateTimeChanged": within_7_days},
+            {"employeeNumber": "12346", "dateTimeChanged": outside_7_days},
+        ]
+
+        result = filter_by_date_changed(items, batch_run_days=7)
+
+        assert len(result) == 1
+        assert result[0]["employeeNumber"] == "12345"
+
+    def test_filter_includes_employees_without_date(self):
+        """Test employees without dateTimeChanged are included."""
+        now = datetime.now(timezone.utc)
+        recent_date = (now - timedelta(hours=12)).isoformat()
+
+        items = [
+            {"employeeNumber": "12345", "dateTimeChanged": recent_date},
+            {"employeeNumber": "12346"},  # No dateTimeChanged
+            {"employeeNumber": "12347", "dateTimeChanged": ""},  # Empty string
+        ]
+
+        result = filter_by_date_changed(items, batch_run_days=1)
+
+        assert len(result) == 3
+        employee_numbers = {item["employeeNumber"] for item in result}
+        assert "12345" in employee_numbers
+        assert "12346" in employee_numbers
+        assert "12347" in employee_numbers
+
+    def test_filter_includes_invalid_date_format(self):
+        """Test employees with invalid dateTimeChanged format are included."""
+        items = [
+            {"employeeNumber": "12345", "dateTimeChanged": "invalid-date"},
+            {"employeeNumber": "12346", "dateTimeChanged": "not-a-date"},
+        ]
+
+        result = filter_by_date_changed(items, batch_run_days=1)
+
+        assert len(result) == 2
+
+    def test_filter_zero_days_returns_all(self):
+        """Test batch_run_days=0 returns all employees (no filter)."""
+        now = datetime.now(timezone.utc)
+        old_date = (now - timedelta(days=100)).isoformat()
+
+        items = [
+            {"employeeNumber": "12345", "dateTimeChanged": old_date},
+            {"employeeNumber": "12346", "dateTimeChanged": old_date},
+        ]
+
+        result = filter_by_date_changed(items, batch_run_days=0)
+
+        assert len(result) == 2
+
+    def test_filter_negative_days_returns_all(self):
+        """Test negative batch_run_days returns all employees (no filter)."""
+        now = datetime.now(timezone.utc)
+        old_date = (now - timedelta(days=100)).isoformat()
+
+        items = [
+            {"employeeNumber": "12345", "dateTimeChanged": old_date},
+        ]
+
+        result = filter_by_date_changed(items, batch_run_days=-1)
+
+        assert len(result) == 1
+
+    def test_filter_empty_list(self):
+        """Test filtering empty list."""
+        result = filter_by_date_changed([], batch_run_days=1)
+        assert result == []
+
+    def test_filter_handles_z_suffix(self):
+        """Test filtering handles Z suffix for UTC."""
+        now = datetime.now(timezone.utc)
+        recent_date = (now - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%S.00Z")
+
+        items = [
+            {"employeeNumber": "12345", "dateTimeChanged": recent_date},
+        ]
+
+        result = filter_by_date_changed(items, batch_run_days=1)
+
+        assert len(result) == 1
+
+    def test_filter_handles_fractional_seconds(self):
+        """Test filtering handles various fractional second formats."""
+        now = datetime.now(timezone.utc)
+        # Format like "2026-04-20T13:35:31.44" from UKG API
+        recent_date = (now - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%S.44")
+
+        items = [
+            {"employeeNumber": "12345", "dateTimeChanged": recent_date},
+        ]
+
+        result = filter_by_date_changed(items, batch_run_days=1)
+
+        assert len(result) == 1
+
+    def test_filter_exact_boundary(self):
+        """Test filtering at exact day boundary."""
+        now = datetime.now(timezone.utc)
+        # 12 hours ago should definitely be included
+        within_1_day = (now - timedelta(hours=12)).isoformat()
+        # 2 days ago should be excluded
+        over_1_day = (now - timedelta(days=2)).isoformat()
+
+        items = [
+            {"employeeNumber": "12345", "dateTimeChanged": within_1_day},
+            {"employeeNumber": "12346", "dateTimeChanged": over_1_day},
+        ]
+
+        result = filter_by_date_changed(items, batch_run_days=1)
+
+        assert len(result) == 1
+        assert result[0]["employeeNumber"] == "12345"
+
+
 class TestMain:
     """Test cases for main function."""
 
@@ -400,6 +510,50 @@ class TestMain:
             main()
 
         assert os.environ.get("PROBE") == "1"
+
+    def test_main_sets_batch_run_days_env(self, mock_clients, monkeypatch):
+        """Test main sets BATCH_RUN_DAYS environment variable."""
+        monkeypatch.setenv("COMPANY_ID", "J9A6Y")
+        monkeypatch.setenv("JOB_IDS", "1103")
+        # Required for API validation
+        monkeypatch.setenv("UKG_CUSTOMER_API_KEY", "test-api-key")
+        monkeypatch.setenv("UKG_BASIC_B64", "dGVzdDp0ZXN0")
+        monkeypatch.setenv("MOTUS_JWT", "header.payload.signature")
+
+        with patch.object(sys, "argv", ["batch_runner.py", "--batch-run-days", "7"]):
+            main()
+
+        assert os.environ.get("BATCH_RUN_DAYS") == "7"
+
+    def test_main_filters_by_date_changed(self, mock_clients, monkeypatch):
+        """Test main filters employees by dateTimeChanged."""
+        from datetime import datetime, timedelta, timezone
+
+        monkeypatch.setenv("COMPANY_ID", "J9A6Y")
+        monkeypatch.setenv("JOB_IDS", "1103")
+        monkeypatch.setenv("BATCH_RUN_DAYS", "1")
+        # Required for API validation
+        monkeypatch.setenv("UKG_CUSTOMER_API_KEY", "test-api-key")
+        monkeypatch.setenv("UKG_BASIC_B64", "dGVzdDp0ZXN0")
+        monkeypatch.setenv("MOTUS_JWT", "header.payload.signature")
+
+        now = datetime.now(timezone.utc)
+        recent_date = (now - timedelta(hours=6)).isoformat()
+        old_date = (now - timedelta(days=5)).isoformat()
+
+        mock_clients["ukg_instance"].get_all_employment_details_by_company.return_value = [
+            {"employeeNumber": "12345", "primaryJobCode": "1103", "dateTimeChanged": recent_date},
+            {"employeeNumber": "12346", "primaryJobCode": "1103", "dateTimeChanged": old_date},
+        ]
+
+        with patch.object(sys, "argv", ["batch_runner.py"]):
+            main()
+
+        # Check only recent employee is passed to sync_batch
+        call_args = mock_clients["sync_instance"].sync_batch.call_args
+        employees = call_args[0][0]
+        assert len(employees) == 1
+        assert employees[0]["employeeNumber"] == "12345"
 
     def test_main_with_states_filter(self, mock_clients, monkeypatch):
         """Test main with states filter."""
