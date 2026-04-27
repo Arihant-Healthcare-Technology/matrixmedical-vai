@@ -316,13 +316,14 @@ class TravelPerkUser:
         cls,
         employment: Dict[str, Any],
         person: Dict[str, Any],
-        org_level4_description: str = "",
+        cost_center_info: Optional[Dict[str, str]] = None,
     ) -> "TravelPerkUser":
         """Create TravelPerkUser from UKG API data.
 
         Args:
             employment: employee-employment-details response
             person: person-details response
+            cost_center_info: Dict with glSegment, code, description from org-levels API
 
         Returns:
             TravelPerkUser instance
@@ -338,15 +339,15 @@ class TravelPerkUser:
         last_name = (person.get("lastName") or "").strip()
         name = UserName(given_name=first_name, family_name=last_name)
 
-        # Extract cost center - use org level 4 description from org-levels API
-        org_level4 = (employment.get("orgLevel4Code") or "").strip()
+        # Extract cost center - match primaryProjectCode with glSegment from org-levels
+        primary_project_code = (employment.get("primaryProjectCode") or "").strip()
 
-        # Use the description from org-levels API (already formatted like "730 - Description")
-        # Fall back to just the code if no description available
-        if org_level4_description:
-            cost_center = org_level4_description
-        elif org_level4:
-            cost_center = org_level4
+        # Format: "glSegment - code - description" (e.g., "27 - 53203 - Account Management")
+        # Fall back to just primaryProjectCode if no match found
+        if cost_center_info:
+            cost_center = f"{cost_center_info['glSegment']} - {cost_center_info['code']} - {cost_center_info['description']}"
+        elif primary_project_code:
+            cost_center = primary_project_code
         else:
             cost_center = ""
 

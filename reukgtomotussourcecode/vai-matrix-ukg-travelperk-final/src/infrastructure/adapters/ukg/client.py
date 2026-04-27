@@ -62,6 +62,8 @@ class UKGClient:
 
         # Cache for org-levels data
         self._org_levels_cache: Optional[Dict[int, Dict[str, str]]] = None
+        # Cache for glSegment lookup: {glSegment: {glSegment, code, description}}
+        self._gl_segment_cache: Optional[Dict[str, Dict[str, str]]] = None
 
     def _get(
         self,
@@ -306,12 +308,15 @@ class UKGClient:
         items = self._normalize_list(data)
 
         cache: Dict[int, Dict[str, str]] = {}
+        gl_segment_cache: Dict[str, Dict[str, str]] = {}
+
         for item in items:
             level = item.get("level")
             code = item.get("code")
             long_desc = item.get("longDescription")
             short_desc = item.get("description", "")
             description = long_desc or short_desc
+            gl_segment = item.get("glSegment")
 
             if level is not None and code:
                 if level not in cache:
@@ -320,8 +325,18 @@ class UKGClient:
                 formatted = f"{code} - {description}" if description else str(code)
                 cache[level][str(code)] = formatted
 
-        logger.info(f"Cached org-levels for {len(cache)} levels")
+            # Build glSegment cache for cost center lookup (only level 1 / Unit)
+            if gl_segment and code and level == 1:
+                gl_segment_str = str(gl_segment)
+                gl_segment_cache[gl_segment_str] = {
+                    "glSegment": gl_segment_str,
+                    "code": str(code),
+                    "description": description or "",
+                }
+
+        logger.info(f"Cached org-levels for {len(cache)} levels, {len(gl_segment_cache)} glSegments")
         self._org_levels_cache = cache
+        self._gl_segment_cache = gl_segment_cache
         return self._org_levels_cache
 
     def get_org_level_description(self, level: int, code: Optional[str]) -> str:
@@ -339,3 +354,24 @@ class UKGClient:
         org_levels = self.get_org_levels()
         level_codes = org_levels.get(level, {})
         return level_codes.get(str(code), "")
+
+    def get_org_level_by_gl_segment(self, gl_segment: Optional[str]) -> Optional[Dict[str, str]]:
+        """Get org level info by glSegment.
+
+        Matches primaryProjectCode from employment details with glSegment
+        from org-levels API.
+
+        Args:
+            gl_segment: The glSegment value to match (e.g., "27")
+
+        Returns:
+            Dict with keys: glSegment, code, description
+            Or None if not found
+        """
+        if not gl_segment:
+            return None
+        # Ensure org-levels cache is populated
+        self.get_org_levels()
+        if self._gl_segment_cache is None:
+            return None
+        return self._gl_segment_cache.get(str(gl_segment))

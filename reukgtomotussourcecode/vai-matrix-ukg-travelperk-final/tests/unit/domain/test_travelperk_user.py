@@ -139,7 +139,7 @@ class TestTravelPerkUser:
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
-            "orgLevel4Code": "730",
+            "primaryProjectCode": "27",
             "employeeStatusCode": "A",
             "terminationDate": None,
         }
@@ -153,7 +153,11 @@ class TestTravelPerkUser:
         user = TravelPerkUser.from_ukg_data(
             employment,
             person,
-            org_level4_description="730 - Test Department",
+            cost_center_info={
+                "glSegment": "27",
+                "code": "53203",
+                "description": "Account Management",
+            },
         )
 
         assert user.external_id == "12345"
@@ -161,14 +165,14 @@ class TestTravelPerkUser:
         assert user.name.given_name == "John"
         assert user.name.family_name == "Doe"
         assert user.active is True
-        assert user.cost_center == "730 - Test Department"
+        assert user.cost_center == "27 - 53203 - Account Management"
 
     def test_from_ukg_data_terminated(self):
         """Test terminated employee is marked inactive."""
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
-            "orgLevel4Code": "730",
+            "primaryProjectCode": "27",
             "employeeStatusCode": "T",
             "terminationDate": "2023-12-31",
         }
@@ -183,12 +187,12 @@ class TestTravelPerkUser:
 
         assert user.active is False
 
-    def test_from_ukg_data_with_org_level_description(self):
-        """Test creating user with org_level4_description parameter."""
+    def test_from_ukg_data_with_cost_center_info(self):
+        """Test creating user with cost_center_info parameter."""
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
-            "orgLevel4Code": "730",
+            "primaryProjectCode": "27",
             "employeeStatusCode": "A",
         }
         person = {
@@ -201,17 +205,21 @@ class TestTravelPerkUser:
         user = TravelPerkUser.from_ukg_data(
             employment,
             person,
-            org_level4_description="730 - Southeast Clinical Part-time",
+            cost_center_info={
+                "glSegment": "27",
+                "code": "53203",
+                "description": "Account Management",
+            },
         )
 
-        assert user.cost_center == "730 - Southeast Clinical Part-time"
+        assert user.cost_center == "27 - 53203 - Account Management"
 
-    def test_from_ukg_data_fallback_to_org_level4_code(self):
-        """Test fallback to orgLevel4Code when no description provided."""
+    def test_from_ukg_data_fallback_to_primary_project_code(self):
+        """Test fallback to primaryProjectCode when no glSegment match."""
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
-            "orgLevel4Code": "730",
+            "primaryProjectCode": "99",
             "employeeStatusCode": "A",
         }
         person = {
@@ -221,16 +229,16 @@ class TestTravelPerkUser:
             "emailAddress": "john.doe@example.com",
         }
 
-        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+        user = TravelPerkUser.from_ukg_data(employment, person, cost_center_info=None)
 
-        assert user.cost_center == "730"
+        assert user.cost_center == "99"
 
     def test_from_ukg_data_no_cost_center(self):
-        """Test no cost_center when both orgLevel4Code and description are empty."""
+        """Test no cost_center when primaryProjectCode is empty and no match."""
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
-            "orgLevel4Code": "",
+            "primaryProjectCode": "",
             "employeeStatusCode": "A",
         }
         person = {
@@ -240,18 +248,18 @@ class TestTravelPerkUser:
             "emailAddress": "john.doe@example.com",
         }
 
-        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+        user = TravelPerkUser.from_ukg_data(employment, person, cost_center_info=None)
 
         assert user.cost_center is None
 
     # --- Additional Negative Scenario Tests ---
 
-    def test_from_ukg_data_org_level4_code_is_none(self):
-        """Test handling when orgLevel4Code is None."""
+    def test_from_ukg_data_primary_project_code_is_none(self):
+        """Test handling when primaryProjectCode is None."""
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
-            "orgLevel4Code": None,
+            "primaryProjectCode": None,
             "employeeStatusCode": "A",
         }
         person = {
@@ -261,17 +269,17 @@ class TestTravelPerkUser:
             "emailAddress": "john.doe@example.com",
         }
 
-        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+        user = TravelPerkUser.from_ukg_data(employment, person, cost_center_info=None)
 
         assert user.cost_center is None
 
-    def test_from_ukg_data_org_level4_code_missing(self):
-        """Test handling when orgLevel4Code key doesn't exist."""
+    def test_from_ukg_data_primary_project_code_missing(self):
+        """Test handling when primaryProjectCode key doesn't exist."""
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
             "employeeStatusCode": "A",
-            # No orgLevel4Code key
+            # No primaryProjectCode key
         }
         person = {
             "employeeId": "EMP001",
@@ -280,16 +288,16 @@ class TestTravelPerkUser:
             "emailAddress": "john.doe@example.com",
         }
 
-        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+        user = TravelPerkUser.from_ukg_data(employment, person, cost_center_info=None)
 
         assert user.cost_center is None
 
-    def test_from_ukg_data_org_level4_code_whitespace(self):
-        """Test handling when orgLevel4Code is whitespace only."""
+    def test_from_ukg_data_primary_project_code_whitespace(self):
+        """Test handling when primaryProjectCode is whitespace only."""
         employment = {
             "employeeNumber": "12345",
             "employeeID": "EMP001",
-            "orgLevel4Code": "   ",
+            "primaryProjectCode": "   ",
             "employeeStatusCode": "A",
         }
         person = {
@@ -299,7 +307,7 @@ class TestTravelPerkUser:
             "emailAddress": "john.doe@example.com",
         }
 
-        user = TravelPerkUser.from_ukg_data(employment, person, org_level4_description="")
+        user = TravelPerkUser.from_ukg_data(employment, person, cost_center_info=None)
 
         # Whitespace is stripped, resulting in empty string -> None
         assert user.cost_center is None

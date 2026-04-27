@@ -70,15 +70,15 @@ class UserBuilderService:
                 external_id=employee_number,
             )
 
-        # Get org level 4 description from org-levels API
-        org_level4_code = (employment.get("orgLevel4Code") or "").strip()
-        org_level4_description = self.ukg_client.get_org_level_description(4, org_level4_code)
+        # Get cost center info by matching primaryProjectCode with glSegment from org-levels
+        primary_project_code = (employment.get("primaryProjectCode") or "").strip()
+        cost_center_info = self.ukg_client.get_org_level_by_gl_segment(primary_project_code)
 
         # Build user from UKG data
         user = TravelPerkUser.from_ukg_data(
             employment,
             person,
-            org_level4_description=org_level4_description,
+            cost_center_info=cost_center_info,
         )
 
         # Validate
