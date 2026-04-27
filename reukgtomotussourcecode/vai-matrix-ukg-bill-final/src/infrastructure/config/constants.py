@@ -24,8 +24,8 @@ LOGIN_TIMEOUT: float = 30000  # Login page timeout in milliseconds
 # ============================================================================
 # Pagination
 # ============================================================================
-DEFAULT_PAGE_SIZE: int = 200  # Default page size for list operations
-MAX_PAGE_SIZE: int = 500  # Maximum allowed page size
+DEFAULT_PAGE_SIZE: int = 10000  # Default page size for list operations
+MAX_PAGE_SIZE: int = 10000  # Maximum allowed page size
 
 # ============================================================================
 # Retry Configuration

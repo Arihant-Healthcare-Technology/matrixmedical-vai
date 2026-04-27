@@ -87,6 +87,10 @@ class SpendExpenseClient(BillClient):
         """
         Find S&E user by email.
 
+        Tries multiple strategies:
+        1. Direct email filter query (if API supports it)
+        2. Paginate through all users as fallback
+
         Args:
             email: User email
 
@@ -95,9 +99,60 @@ class SpendExpenseClient(BillClient):
         """
         email_lower = email.lower().strip()
 
-        # Paginate through all users
+        # Strategy 1: Try direct email filter (some BILL APIs support this)
+        try:
+            params = {"email": email_lower}
+            response = self._http.get("/users", params=params)
+            if response.status_code == 200:
+                data = self._handle_response(response)
+                items = self._extract_items(data, ["users", "items", "data"])
+                if items:
+                    # Return first matching user
+                    for user in items:
+                        if user.get("email", "").lower().strip() == email_lower:
+                            logger.info(f"Found user by email filter: {email}")
+                            return user
+        except Exception as e:
+            logger.debug(f"Email filter search failed: {e}")
+
+        # Strategy 2: Paginate through all users
+        logger.debug(f"Searching for {email} via pagination...")
         for user in self._paginate("/users", item_keys=["users"]):
             if user.get("email", "").lower().strip() == email_lower:
+                logger.info(f"Found user via pagination: {email}")
+                return user
+
+        logger.warning(f"User not found in BILL: {email}")
+        return None
+
+    def search_user_by_external_id(self, external_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Find S&E user by external ID (employee number).
+
+        Args:
+            external_id: External ID (employee number)
+
+        Returns:
+            User dict or None if not found
+        """
+        # Try direct externalId filter
+        try:
+            params = {"externalId": external_id}
+            response = self._http.get("/users", params=params)
+            if response.status_code == 200:
+                data = self._handle_response(response)
+                items = self._extract_items(data, ["users", "items", "data"])
+                if items:
+                    for user in items:
+                        if user.get("externalId") == external_id:
+                            logger.debug(f"Found user by externalId: {external_id}")
+                            return user
+        except Exception as e:
+            logger.debug(f"ExternalId search failed: {e}")
+
+        # Fallback: paginate through all users
+        for user in self._paginate("/users", item_keys=["users"]):
+            if user.get("externalId") == external_id:
                 return user
 
         return None

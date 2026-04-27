@@ -244,6 +244,15 @@ class BillUserRepositoryImpl(BillUserRepository):
                 self.clear_cache()
                 existing = self.get_by_email(user.email)
 
+                # Fallback: try to find by external ID if email lookup fails
+                if not existing and user.external_id:
+                    logger.info(
+                        f"Email lookup failed, trying external ID: {user.external_id}"
+                    )
+                    data = self._client.search_user_by_external_id(user.external_id)
+                    if data:
+                        existing = BillUser.from_bill_api(data)
+
                 if existing:
                     logger.info(f"Found user {user.email} on retry, updating...")
                     user.id = existing.id
