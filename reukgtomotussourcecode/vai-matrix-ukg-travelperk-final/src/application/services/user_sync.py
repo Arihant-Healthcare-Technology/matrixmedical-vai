@@ -75,7 +75,13 @@ class UserSyncService:
             logger.debug(f"Skipping employee with missing number or ID")
             return ("", "", "skipped", None)
 
-        state = self.state_filter.fetch_person_state(emp_id)
+        try:
+            state = self.state_filter.fetch_person_state(emp_id)
+        except Exception as error:
+            logger.error(
+                f"Employee {emp_number} failed fetching state: {type(error).__name__}: {error}"
+            )
+            return (emp_number, "", "error", None)
 
         # Filter by state
         if states_filter and state not in states_filter:
@@ -318,17 +324,28 @@ class UserSyncService:
                     supervisor_name = supervisor_info.full_name
                     supervisor_email = supervisor_info.email
 
-                    # Resolve supervisor's TravelPerk ID
-                    supervisor_id = self.supervisor_service.resolve_supervisor_id(
-                        supervisor_info.employee_number, employee_to_travelperk_id
-                    )
+                    # Resolve supervisor's TravelPerk ID (may call TravelPerk API)
+                    resolution_error = False
+                    try:
+                        supervisor_id = self.supervisor_service.resolve_supervisor_id(
+                            supervisor_info.employee_number, employee_to_travelperk_id
+                        )
+                    except Exception as error:
+                        logger.warning(
+                            f"Employee {emp_number}: failed to resolve supervisor {supervisor_info.employee_number}: "
+                            f"{type(error).__name__}: {error} - continuing without manager"
+                        )
+                        supervisor_id = None
+                        resolution_error = True
+
                     if supervisor_id:
                         logger.info(
                             f"Employee {emp_number}: supervisor {supervisor_info.employee_number} "
                             f"({supervisor_name or 'N/A'}, {supervisor_email or 'N/A'}) "
                             f"resolved to TravelPerk ID {supervisor_id}"
                         )
-                    else:
+                    elif not resolution_error:
+                        # Only log if we didn't already log an error above
                         logger.warning(
                             f"Employee {emp_number}: supervisor {supervisor_info.employee_number} "
                             f"({supervisor_name or 'N/A'}) could NOT be resolved - manager will not be set"

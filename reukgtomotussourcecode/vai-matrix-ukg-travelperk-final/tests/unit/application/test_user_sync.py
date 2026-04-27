@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 from src.application.services.user_sync import UserSyncService
+from src.application.services.supervisor_mapping import SupervisorInfo
 from src.domain.models import TravelPerkUser, UserName
 from src.domain.exceptions import EmployeeNotFoundError, UserValidationError
 from src.infrastructure.config.settings import BatchSettings
@@ -152,8 +153,9 @@ class TestUserSyncService:
 
         mapping = sync_service.supervisor_service.build_supervisor_mapping(supervisor_details)
 
-        assert mapping["12345"] == "99999"
-        assert mapping["12346"] == "99998"
+        # SupervisorInfo object is returned for employees with supervisors
+        assert mapping["12345"].employee_number == "99999"
+        assert mapping["12346"].employee_number == "99998"
         assert mapping["12347"] is None
 
     def test_build_supervisor_mapping_empty_employee_number(self, sync_service):
@@ -190,6 +192,8 @@ class TestUserSyncService:
                 states_filter=None,
                 out_path=tmp_path,
                 supervisor_id=None,
+                supervisor_name=None,
+                supervisor_email=None,
                 settings=batch_settings,
             )
 
@@ -211,6 +215,8 @@ class TestUserSyncService:
             states_filter=None,
             out_path=tmp_path,
             supervisor_id=None,
+            supervisor_name=None,
+            supervisor_email=None,
             settings=batch_settings,
         )
 
@@ -231,6 +237,8 @@ class TestUserSyncService:
             states_filter=None,
             out_path=tmp_path,
             supervisor_id=None,
+            supervisor_name=None,
+            supervisor_email=None,
             settings=batch_settings,
         )
 
@@ -253,6 +261,8 @@ class TestUserSyncService:
             states_filter={"TX", "CA"},  # FL not in filter
             out_path=tmp_path,
             supervisor_id=None,
+            supervisor_name=None,
+            supervisor_email=None,
             settings=batch_settings,
         )
 
@@ -283,6 +293,8 @@ class TestUserSyncService:
                 states_filter={"TX", "CA"},
                 out_path=tmp_path,
                 supervisor_id=None,
+                supervisor_name=None,
+                supervisor_email=None,
                 settings=batch_settings,
             )
 
@@ -316,6 +328,8 @@ class TestUserSyncService:
                 states_filter=None,
                 out_path=tmp_path,
                 supervisor_id=None,
+                supervisor_name=None,
+                supervisor_email=None,
                 settings=settings,
             )
 
@@ -352,6 +366,8 @@ class TestUserSyncService:
                 states_filter=None,
                 out_path=tmp_path,
                 supervisor_id=None,
+                supervisor_name=None,
+                supervisor_email=None,
                 settings=settings,
             )
 
@@ -381,6 +397,8 @@ class TestUserSyncService:
                 states_filter=None,
                 out_path=tmp_path,
                 supervisor_id="supervisor-tp-id",
+                supervisor_name="Jane Supervisor",
+                supervisor_email="jane.supervisor@example.com",
                 settings=batch_settings,
             )
 
@@ -413,6 +431,8 @@ class TestUserSyncService:
                     states_filter=None,
                     out_path=tmp_path,
                     supervisor_id=None,
+                    supervisor_name=None,
+                    supervisor_email=None,
                     settings=batch_settings,
                 )
 
@@ -441,6 +461,8 @@ class TestUserSyncService:
                 states_filter=None,
                 out_path=tmp_path,
                 supervisor_id=None,
+                supervisor_name=None,
+                supervisor_email=None,
                 settings=batch_settings,
             )
 
@@ -468,6 +490,8 @@ class TestUserSyncService:
                     states_filter=None,
                     out_path=tmp_path,
                     supervisor_id=None,
+                    supervisor_name=None,
+                    supervisor_email=None,
                     settings=batch_settings,
                 )
 
@@ -686,7 +710,14 @@ class TestUserSyncService:
     ):
         """Test _process_phase finds supervisor in TravelPerk."""
         employees = [{"employeeNumber": "12345", "employeeID": "EMP001"}]
-        supervisor_mapping = {"12345": "99999"}
+        supervisor_mapping = {
+            "12345": SupervisorInfo(
+                employee_number="99999",
+                first_name="Jane",
+                last_name="Supervisor",
+                email="jane.supervisor@example.com",
+            )
+        }
         employee_to_travelperk_id: dict = {}
 
         # Supervisor not in local mapping, found in TravelPerk
@@ -734,6 +765,8 @@ class TestUserSyncService:
                 states_filter={"TX"},  # FL not in filter, will be skipped with debug log
                 out_path=tmp_path,
                 supervisor_id=None,
+                supervisor_name=None,
+                supervisor_email=None,
                 settings=batch_settings,
             )
 
