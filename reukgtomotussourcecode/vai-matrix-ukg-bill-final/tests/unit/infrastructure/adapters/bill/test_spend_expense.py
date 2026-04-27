@@ -302,13 +302,14 @@ class TestUpsert:
 
         repo = BillUserRepositoryImpl(mock_client)
         user = BillUser(email="new@example.com", first_name="New", last_name="User")
-        result = repo.upsert(user)
+        result_user, action = repo.upsert(user)
 
-        assert result.id == "new-uuid"
+        assert result_user.id == "new-uuid"
+        assert action == "created"
         mock_client.create_user.assert_called_once()
 
     def test_updates_existing_user(self):
-        """Test updates user when found and needs update."""
+        """Test updates user when found - always PATCHes."""
         mock_client = MagicMock()
         mock_client.get_user_by_email.return_value = {
             "id": "uuid-123",
@@ -325,14 +326,22 @@ class TestUpsert:
 
         repo = BillUserRepositoryImpl(mock_client)
         user = BillUser(email="user@example.com", first_name="New", last_name="Name")
-        result = repo.upsert(user)
+        result_user, action = repo.upsert(user)
 
+        assert action == "updated"
         mock_client.update_user.assert_called_once()
 
-    def test_skips_update_when_no_changes(self):
-        """Test skips update when no changes needed."""
+    def test_always_patches_existing_user(self):
+        """Test always PATCHes when user exists (even with same data)."""
         mock_client = MagicMock()
         mock_client.get_user_by_email.return_value = {
+            "id": "uuid-123",
+            "email": "user@example.com",
+            "firstName": "Same",
+            "lastName": "User",
+            "role": "MEMBER",
+        }
+        mock_client.update_user.return_value = {
             "id": "uuid-123",
             "email": "user@example.com",
             "firstName": "Same",
@@ -347,10 +356,12 @@ class TestUpsert:
             last_name="User",
             role=BillRole.MEMBER,
         )
-        result = repo.upsert(user)
+        result_user, action = repo.upsert(user)
 
-        mock_client.update_user.assert_not_called()
-        assert result.id == "uuid-123"
+        # Always PATCH when user exists
+        mock_client.update_user.assert_called_once()
+        assert action == "updated"
+        assert result_user.id == "uuid-123"
 
 
 class TestClearCache:

@@ -203,29 +203,62 @@ class BillUserRepositoryImpl(BillUserRepository):
         """
         return self.delete(user_id)
 
-    def upsert(self, user: BillUser) -> BillUser:
+    def upsert(self, user: BillUser) -> tuple[BillUser, str]:
         """
         Create or update a user based on email lookup.
+
+        Handles the "User already exists" error gracefully by retrying lookup.
 
         Args:
             user: User data
 
         Returns:
-            Created or updated user
+            Tuple of (BillUser, action) where action is 'created', 'updated', or 'skipped'
         """
         # Look up existing user by email
         existing = self.get_by_email(user.email)
 
         if existing:
-            # Check if update is needed
-            if user.needs_update(existing):
-                user.id = existing.id
-                return self.update(user)
-            else:
-                logger.debug(f"No changes for S&E user: {user.email}")
-                return existing
-        else:
-            return self.create(user)
+            # Update existing user
+            user.id = existing.id
+            updated = self.update(user)
+            return (updated, "updated")
+
+        # Try to create new user
+        try:
+            created = self.create(user)
+            return (created, "created")
+        except Exception as e:
+            error_msg = str(e).lower()
+            response_body = ""
+            if hasattr(e, "response_body") and e.response_body:
+                response_body = str(e.response_body).lower()
+            combined_error = error_msg + " " + response_body
+
+            # Handle "User already exists" error
+            if "already exists" in combined_error:
+                logger.warning(
+                    f"User {user.email} already exists (API error), retrying lookup..."
+                )
+                # Clear cache and try to find the user
+                self.clear_cache()
+                existing = self.get_by_email(user.email)
+
+                if existing:
+                    logger.info(f"Found user {user.email} on retry, updating...")
+                    user.id = existing.id
+                    updated = self.update(user)
+                    return (updated, "updated")
+                else:
+                    # User exists but we can't fetch - skip (cannot update without ID)
+                    logger.warning(
+                        f"User {user.email} exists in BILL but cannot be fetched. "
+                        f"Skipping update (user data remains unchanged in BILL)."
+                    )
+                    return (user, "skipped")
+
+            # Re-raise other errors
+            raise
 
     def upsert_from_employee(
         self,

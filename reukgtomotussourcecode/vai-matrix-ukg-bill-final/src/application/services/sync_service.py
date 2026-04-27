@@ -99,12 +99,6 @@ class SyncService(EmployeeSyncService):
                     details={"employee_number": employee.employee_number},
                 )
 
-            # Check if user already exists in BILL
-            existing_user = self.bill_user_repo.get_by_email(employee.email)
-            logger.info(
-                f"User lookup for {employee.email}: exists={existing_user is not None}"
-            )
-
             # Resolve supervisor email
             supervisor_email = self.resolve_supervisor_email(employee)
 
@@ -126,12 +120,8 @@ class SyncService(EmployeeSyncService):
                     f"cost_center={employee.cost_center} -> budget={budget or '(empty)'}"
                 )
 
-            if existing_user:
-                # Update existing user
-                return self._update_user(existing_user, bill_user, employee)
-            else:
-                # Create new user
-                return self._create_user(bill_user, employee)
+            # Use repository's upsert which handles "already exists" gracefully
+            return self._upsert_user(bill_user, employee)
 
         except Exception as e:
             # Log Bill API 400 errors as warning (e.g., "Invalid last name") to avoid batch exit confusion
@@ -155,132 +145,51 @@ class SyncService(EmployeeSyncService):
                 },
             )
 
-    def _create_user(self, bill_user: BillUser, employee: Employee) -> SyncResult:
-        """Create a new BILL user."""
+    def _upsert_user(self, bill_user: BillUser, employee: Employee) -> SyncResult:
+        """Create or update a BILL user using repository's upsert."""
         try:
             logger.info(
-                f"Creating BILL user: {bill_user.email}, "
+                f"Syncing BILL user: {bill_user.email}, "
                 f"role={bill_user.role.value if bill_user.role else 'None'}, "
                 f"cost_center={bill_user.cost_center}"
             )
-            created = self.bill_user_repo.create(bill_user)
+
+            # Use repository's upsert which handles "already exists" gracefully
+            result_user, action = self.bill_user_repo.upsert(bill_user)
+
             logger.info(
-                f"Employee synced: {employee.employee_number} → {created.email} "
-                f"(action=create, id={created.id})"
+                f"Employee synced: {employee.employee_number} → {result_user.email} "
+                f"(action={action}, id={result_user.id})"
             )
+
             return SyncResult(
                 success=True,
-                action="create",
-                entity_id=created.id,
-                message=f"Created user {created.email}",
+                action=action,
+                entity_id=result_user.id or employee.employee_id,
+                message=f"User {action}: {result_user.email}",
                 details={
                     "employee_number": employee.employee_number,
-                    "role": created.role.value if created.role else None,
+                    "role": result_user.role.value if result_user.role else None,
                 },
             )
+
         except Exception as e:
-            error_msg = str(e).lower()
-            # Also check response_body if available (for ApiError exceptions)
-            response_body = ""
-            if hasattr(e, 'response_body') and e.response_body:
-                response_body = str(e.response_body).lower()
-
-            combined_error = error_msg + " " + response_body
-
-            # Handle "User already exists" error - fall back to update
-            if "already exists" in combined_error or "user already exists" in combined_error:
-                logger.warning(
-                    f"User {bill_user.email} already exists (detected from API error), falling back to update"
-                )
-                # Clear cache and re-fetch to ensure we get fresh data
-                self.bill_user_repo.clear_cache()
-                existing_user = self.bill_user_repo.get_by_email(bill_user.email)
-                if existing_user:
-                    logger.info(f"Found existing user {bill_user.email} with ID {existing_user.id}")
-                    return self._update_user(existing_user, bill_user, employee)
-                else:
-                    # User exists in BILL but we can't fetch - count as updated since user is already in system
-                    logger.info(
-                        f"User {bill_user.email} already exists in BILL (confirmed by API). Counting as updated."
-                    )
-                    return SyncResult(
-                        success=True,
-                        action="update",
-                        entity_id=employee.employee_id,
-                        message=f"User already exists in BILL - no changes needed",
-                        details={"email": bill_user.email},
-                    )
-
-            # Log Bill API 400 errors as warning (e.g., "Invalid last name") to avoid batch exit confusion
+            # Log Bill API 400 errors as warning to avoid batch exit confusion
             if isinstance(e, ApiError) and e.status_code == 400:
                 logger.warning(
                     f"Bill API validation error for user {bill_user.email}: {e}"
                 )
             else:
                 logger.error(
-                    f"Failed to create user {bill_user.email}: {e}",
+                    f"Failed to sync user {bill_user.email}: {e}",
                     exc_info=True,
                 )
             return SyncResult(
                 success=False,
                 action="error",
                 entity_id=employee.employee_id,
-                message=f"Failed to create user: {e}",
+                message=f"Failed to sync user: {e}",
                 details={"email": bill_user.email},
-            )
-
-    def _update_user(
-        self,
-        existing: BillUser,
-        updated: BillUser,
-        employee: Employee,
-    ) -> SyncResult:
-        """Update an existing BILL user."""
-        try:
-            # Preserve existing ID
-            updated.id = existing.id
-
-            # Log field changes
-            changes = self._get_changes(existing, updated)
-            changes_str = ", ".join(
-                f"{field}: '{change['old']}' → '{change['new']}'"
-                for field, change in changes.items()
-            )
-            logger.info(f"Changes detected for {existing.email}: {changes_str}")
-
-            # Update user
-            result = self.bill_user_repo.update(updated)
-            logger.info(
-                f"Employee synced: {employee.employee_number} → {result.email} "
-                f"(action=update, id={result.id})"
-            )
-            return SyncResult(
-                success=True,
-                action="update",
-                entity_id=result.id,
-                message=f"Updated user {result.email}",
-                details={
-                    "employee_number": employee.employee_number,
-                    "changes": changes,
-                },
-            )
-        except Exception as e:
-            # Log Bill API 400 errors as warning (e.g., "Invalid last name") to avoid batch exit confusion
-            if isinstance(e, ApiError) and e.status_code == 400:
-                logger.warning(
-                    f"Bill API validation error for user {existing.email}: {e}"
-                )
-            else:
-                logger.error(
-                    f"Failed to update user {existing.email}: {e}",
-                    exc_info=True,
-                )
-            return SyncResult(
-                success=False,
-                action="error",
-                entity_id=existing.id,
-                message=f"Failed to update user: {e}",
-                details={"email": existing.email},
             )
 
     def _users_match(self, existing: BillUser, updated: BillUser) -> bool:
@@ -404,11 +313,11 @@ class SyncService(EmployeeSyncService):
                     sync_result = future.result()
                     result.results.append(sync_result)
 
-                    if sync_result.action == "create":
+                    if sync_result.action in ("create", "created"):
                         result.created += 1
-                    elif sync_result.action == "update":
+                    elif sync_result.action in ("update", "updated"):
                         result.updated += 1
-                    elif sync_result.action == "skip":
+                    elif sync_result.action in ("skip", "skipped"):
                         result.skipped += 1
                     elif sync_result.action == "error":
                         result.errors += 1
