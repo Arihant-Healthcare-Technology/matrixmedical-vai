@@ -127,14 +127,32 @@ class SyncService(EmployeeSyncService):
             return self._upsert_user(bill_user, employee)
 
         except Exception as e:
+            # Build detailed error context
+            error_context = (
+                f"employee_number={employee.employee_number}, "
+                f"email={employee.email}, "
+                f"employee_id={employee.employee_id}, "
+                f"first_name={employee.first_name}, "
+                f"last_name={employee.last_name}, "
+                f"cost_center={employee.cost_center}, "
+                f"status={employee.status.value if employee.status else 'None'}"
+            )
+
             # Log Bill API 400 errors as warning (e.g., "Invalid last name") to avoid batch exit confusion
             if isinstance(e, ApiError) and e.status_code == 400:
+                response_body = getattr(e, 'response_body', 'N/A')
                 logger.warning(
-                    f"Bill API validation error for employee {employee.employee_number} ({employee.email}): {e}"
+                    f"SYNC FAILED - Bill API 400 validation error:\n"
+                    f"  Context: {error_context}\n"
+                    f"  Error: {e}\n"
+                    f"  Response: {response_body}"
                 )
             else:
                 logger.error(
-                    f"Employee sync failed: {employee.employee_number} ({employee.email}): {e}",
+                    f"SYNC FAILED - Unexpected error:\n"
+                    f"  Context: {error_context}\n"
+                    f"  Error Type: {type(e).__name__}\n"
+                    f"  Error: {e}",
                     exc_info=True,
                 )
             return SyncResult(
@@ -145,6 +163,7 @@ class SyncService(EmployeeSyncService):
                 details={
                     "employee_number": employee.employee_number,
                     "email": employee.email,
+                    "error_type": type(e).__name__,
                 },
             )
 
@@ -177,14 +196,30 @@ class SyncService(EmployeeSyncService):
             )
 
         except Exception as e:
+            # Build detailed error context
+            error_context = (
+                f"email={bill_user.email}, "
+                f"external_id={bill_user.external_id}, "
+                f"employee_number={employee.employee_number}, "
+                f"role={bill_user.role.value if bill_user.role else 'None'}, "
+                f"cost_center={bill_user.cost_center}"
+            )
+
             # Log Bill API 400 errors as warning to avoid batch exit confusion
             if isinstance(e, ApiError) and e.status_code == 400:
+                response_body = getattr(e, 'response_body', 'N/A')
                 logger.warning(
-                    f"Bill API validation error for user {bill_user.email}: {e}"
+                    f"UPSERT FAILED - Bill API 400 validation error:\n"
+                    f"  Context: {error_context}\n"
+                    f"  Error: {e}\n"
+                    f"  Response: {response_body}"
                 )
             else:
                 logger.error(
-                    f"Failed to sync user {bill_user.email}: {e}",
+                    f"UPSERT FAILED - Unexpected error:\n"
+                    f"  Context: {error_context}\n"
+                    f"  Error Type: {type(e).__name__}\n"
+                    f"  Error: {e}",
                     exc_info=True,
                 )
             return SyncResult(
@@ -192,7 +227,11 @@ class SyncService(EmployeeSyncService):
                 action="error",
                 entity_id=employee.employee_id,
                 message=f"Failed to sync user: {e}",
-                details={"email": bill_user.email},
+                details={
+                    "email": bill_user.email,
+                    "external_id": bill_user.external_id,
+                    "error_type": type(e).__name__,
+                },
             )
 
     def _create_bill_user(
@@ -271,13 +310,29 @@ class SyncService(EmployeeSyncService):
             )
 
         except Exception as e:
+            # Build detailed error context for CREATE operation
+            error_context = (
+                f"email={employee.email}, "
+                f"employee_number={employee.employee_number}, "
+                f"first_name={employee.first_name}, "
+                f"last_name={employee.last_name}, "
+                f"cost_center={employee.cost_center}"
+            )
+
             if isinstance(e, ApiError) and e.status_code == 400:
+                response_body = getattr(e, 'response_body', 'N/A')
                 logger.warning(
-                    f"Bill API validation error creating user {employee.email}: {e}"
+                    f"CREATE FAILED - Bill API 400 validation error:\n"
+                    f"  Context: {error_context}\n"
+                    f"  Error: {e}\n"
+                    f"  Response: {response_body}"
                 )
             else:
                 logger.error(
-                    f"Failed to create user {employee.email}: {e}",
+                    f"CREATE FAILED - Unexpected error:\n"
+                    f"  Context: {error_context}\n"
+                    f"  Error Type: {type(e).__name__}\n"
+                    f"  Error: {e}",
                     exc_info=True,
                 )
             return SyncResult(
@@ -285,7 +340,11 @@ class SyncService(EmployeeSyncService):
                 action="error",
                 entity_id=employee.employee_id,
                 message=f"Failed to create user: {e}",
-                details={"email": employee.email},
+                details={
+                    "email": employee.email,
+                    "employee_number": employee.employee_number,
+                    "error_type": type(e).__name__,
+                },
             )
 
     def _update_bill_user(
@@ -369,13 +428,30 @@ class SyncService(EmployeeSyncService):
             )
 
         except Exception as e:
+            # Build detailed error context for UPDATE operation
+            error_context = (
+                f"email={employee.email}, "
+                f"bill_user_id={bill_user_id}, "
+                f"employee_number={employee.employee_number}, "
+                f"first_name={employee.first_name}, "
+                f"last_name={employee.last_name}, "
+                f"cost_center={employee.cost_center}"
+            )
+
             if isinstance(e, ApiError) and e.status_code == 400:
+                response_body = getattr(e, 'response_body', 'N/A')
                 logger.warning(
-                    f"Bill API validation error updating user {employee.email}: {e}"
+                    f"UPDATE FAILED - Bill API 400 validation error:\n"
+                    f"  Context: {error_context}\n"
+                    f"  Error: {e}\n"
+                    f"  Response: {response_body}"
                 )
             else:
                 logger.error(
-                    f"Failed to update user {employee.email}: {e}",
+                    f"UPDATE FAILED - Unexpected error:\n"
+                    f"  Context: {error_context}\n"
+                    f"  Error Type: {type(e).__name__}\n"
+                    f"  Error: {e}",
                     exc_info=True,
                 )
             return SyncResult(
@@ -383,7 +459,12 @@ class SyncService(EmployeeSyncService):
                 action="error",
                 entity_id=employee.employee_id,
                 message=f"Failed to update user: {e}",
-                details={"email": employee.email, "bill_user_id": bill_user_id},
+                details={
+                    "email": employee.email,
+                    "bill_user_id": bill_user_id,
+                    "employee_number": employee.employee_number,
+                    "error_type": type(e).__name__,
+                },
             )
 
     def _users_match(self, existing: BillUser, updated: BillUser) -> bool:

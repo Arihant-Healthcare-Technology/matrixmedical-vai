@@ -69,7 +69,7 @@ class SpendExpenseClient(BillClient):
         params = {"page": page, "pageSize": page_size}
         response = self._http.get("/users", params=params)
         data = self._handle_response(response)
-        return self._extract_items(data, ["users", "items", "data"])
+        return self._extract_items(data, ["results", "users", "items", "data"])
 
     def get_user(self, user_id: str) -> Dict[str, Any]:
         """
@@ -106,7 +106,7 @@ class SpendExpenseClient(BillClient):
             response = self._http.get("/users", params=params)
             if response.status_code == 200:
                 data = self._handle_response(response)
-                items = self._extract_items(data, ["users", "items", "data"])
+                items = self._extract_items(data, ["results", "users", "items", "data"])
                 if items:
                     # Return first matching user
                     for user in items:
@@ -118,7 +118,7 @@ class SpendExpenseClient(BillClient):
 
         # Strategy 2: Paginate through all users
         logger.debug(f"Searching for {email} via pagination...")
-        for user in self._paginate("/users", item_keys=["users"]):
+        for user in self._paginate("/users", item_keys=["results", "users"]):
             if user.get("email", "").lower().strip() == email_lower:
                 logger.info(f"Found user via pagination: {email}")
                 return user
@@ -142,7 +142,7 @@ class SpendExpenseClient(BillClient):
             response = self._http.get("/users", params=params)
             if response.status_code == 200:
                 data = self._handle_response(response)
-                items = self._extract_items(data, ["users", "items", "data"])
+                items = self._extract_items(data, ["results", "users", "items", "data"])
                 if items:
                     for user in items:
                         if user.get("externalId") == external_id:
@@ -152,7 +152,7 @@ class SpendExpenseClient(BillClient):
             logger.debug(f"ExternalId search failed: {e}")
 
         # Fallback: paginate through all users
-        for user in self._paginate("/users", item_keys=["users"]):
+        for user in self._paginate("/users", item_keys=["results", "users"]):
             if user.get("externalId") == external_id:
                 return user
 
@@ -169,18 +169,23 @@ class SpendExpenseClient(BillClient):
             Created user dict
         """
         email = payload.get("email", "unknown")
+        external_id = payload.get("externalId", "N/A")
         role = payload.get("role", "N/A")
         cost_center = payload.get("costCenter", "N/A")
+        first_name = payload.get("firstName", "N/A")
+        last_name = payload.get("lastName", "N/A")
+
         logger.info(
-            f"API request: POST /users, email={email}, role={role}, "
-            f"cost_center={cost_center}"
+            f"API CREATE REQUEST: POST /users\n"
+            f"  email={email}, external_id={external_id}, role={role}\n"
+            f"  name={first_name} {last_name}, cost_center={cost_center}"
         )
         response = self._http.post("/users", json=payload, timeout=BATCH_TIMEOUT)
         result = self._handle_response(response, [200, 201], request_payload=payload)
         user_id = result.get("uuid") or result.get("id")
         logger.info(
-            f"API response: status={response.status_code}, "
-            f"user_id={user_id}, email={email}"
+            f"API CREATE SUCCESS: email={email}, bill_user_id={user_id}, "
+            f"status={response.status_code}"
         )
         return result
 
@@ -196,15 +201,20 @@ class SpendExpenseClient(BillClient):
             Updated user dict
         """
         fields = list(payload.keys())
+        email = payload.get("email", "N/A")
+        external_id = payload.get("externalId", "N/A")
+
         logger.info(
-            f"API request: PATCH /users/{user_id}, fields={fields}"
+            f"API UPDATE REQUEST: PATCH /users/{user_id}\n"
+            f"  email={email}, external_id={external_id}\n"
+            f"  fields_to_update={fields}"
         )
         response = self._http.patch(f"/users/{user_id}", json=payload)
         result = self._handle_response(response, [200, 204], request_payload=payload)
         response_id = result.get("uuid") or result.get("id") if result else user_id
         logger.info(
-            f"API response: status={response.status_code}, "
-            f"user_id={response_id}, updated_fields={fields}"
+            f"API UPDATE SUCCESS: email={email}, bill_user_id={response_id}, "
+            f"status={response.status_code}, updated_fields={fields}"
         )
         return result
 
@@ -220,12 +230,11 @@ class SpendExpenseClient(BillClient):
         Returns:
             True if retired successfully
         """
-        logger.info(f"API request: DELETE /users/{user_id}")
+        logger.info(f"API RETIRE REQUEST: DELETE /users/{user_id}")
         response = self._http.delete(f"/users/{user_id}")
         self._handle_response(response, [200, 204])
         logger.info(
-            f"API response: status={response.status_code}, "
-            f"user_id={user_id}, action=retired"
+            f"API RETIRE SUCCESS: bill_user_id={user_id}, status={response.status_code}"
         )
         return True
 
@@ -270,9 +279,23 @@ class SpendExpenseClient(BillClient):
             response = self._http.get("/users", params=params)
             data = self._handle_response(response)
 
-            # Extract results from response
-            results = data.get("results", [])
+            # Log response structure on first page for debugging
+            if page_count == 1:
+                response_keys = list(data.keys()) if isinstance(data, dict) else "not a dict"
+                logger.info(f"BILL.com /users response keys: {response_keys}")
+
+            # Extract results from response - handle various API response formats
+            # BILL.com may return users under "results", "users", "items", or "data" keys
+            results = self._extract_items(data, ["results", "users", "items", "data"])
             all_users.extend(results)
+
+            # Log sample user structure on first page for debugging
+            if page_count == 1 and results:
+                sample_user_keys = list(results[0].keys()) if isinstance(results[0], dict) else "not a dict"
+                logger.info(f"Sample user keys: {sample_user_keys}")
+                sample_email = results[0].get("email", "NO EMAIL KEY")
+                sample_id = results[0].get("id") or results[0].get("uuid", "NO ID KEY")
+                logger.info(f"Sample user: email={sample_email}, id={sample_id}")
 
             logger.info(
                 f"Page {page_count}: fetched {len(results)} users "

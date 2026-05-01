@@ -102,14 +102,31 @@ class BillClient:
         error_data = safe_json(response)
         error_message = self._extract_error_message(error_data)
 
-        # Log detailed request/response for 400 Bad Request errors
-        if response.status_code == 400:
-            logger.error(
-                f"BILL API 400 Bad Request Error:\n"
+        # Log detailed request/response for error status codes
+        if response.status_code >= 400:
+            # Extract email from payload for context if available
+            payload_email = request_payload.get("email", "N/A") if request_payload else "N/A"
+            payload_ext_id = request_payload.get("externalId", "N/A") if request_payload else "N/A"
+
+            log_msg = (
+                f"BILL API {response.status_code} Error:\n"
                 f"  URL: {response.url}\n"
-                f"  Request Payload: {request_payload}\n"
+                f"  Method: {response.request.method if hasattr(response, 'request') else 'UNKNOWN'}\n"
+                f"  Email: {payload_email}\n"
+                f"  ExternalId: {payload_ext_id}\n"
+                f"  Error Message: {error_message}\n"
                 f"  Response Body: {error_data}"
             )
+
+            if response.status_code == 400:
+                # 400 errors often contain actionable info (validation errors, "already exists")
+                logger.error(f"BAD REQUEST - {log_msg}")
+            elif response.status_code == 429:
+                logger.warning(f"RATE LIMITED - {log_msg}")
+            elif response.status_code >= 500:
+                logger.error(f"SERVER ERROR - {log_msg}")
+            else:
+                logger.error(log_msg)
 
         if response.status_code == 401:
             raise AuthenticationError(

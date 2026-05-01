@@ -216,14 +216,33 @@ class BillUserRepositoryImpl(BillUserRepository):
         Returns:
             Tuple of (BillUser, action) where action is 'created', 'updated', or 'skipped'
         """
+        email_lower = user.email.lower().strip() if user.email else ""
+        cache_size = len(self._email_cache)
+        in_cache = email_lower in self._email_cache
+
+        logger.debug(
+            f"UPSERT START: email={user.email}, external_id={user.external_id}, "
+            f"role={user.role.value if user.role else 'None'}, "
+            f"cache_size={cache_size}, in_cache={in_cache}"
+        )
+
         # Look up existing user by email
         existing = self.get_by_email(user.email)
 
         if existing:
             # Update existing user
+            logger.debug(
+                f"UPSERT: Found existing user {user.email} with id={existing.id}, "
+                f"proceeding with UPDATE (PATCH)"
+            )
             user.id = existing.id
             updated = self.update(user)
             return (updated, "updated")
+
+        logger.debug(
+            f"UPSERT: User {user.email} not found in BILL.com, "
+            f"proceeding with CREATE (POST)"
+        )
 
         # Try to create new user
         try:
@@ -239,35 +258,53 @@ class BillUserRepositoryImpl(BillUserRepository):
             # Handle "User already exists" error
             if "already exists" in combined_error:
                 logger.warning(
-                    f"User {user.email} already exists (API error), retrying lookup..."
+                    f"CREATE FAILED - 'User already exists' error for {user.email}. "
+                    f"This indicates a cache/lookup mismatch. "
+                    f"Details: external_id={user.external_id}, cache_size={cache_size}, "
+                    f"was_in_cache={in_cache}, error={str(e)[:200]}"
                 )
                 # Clear cache and try to find the user
                 self.clear_cache()
+                logger.info(f"Cache cleared, retrying email lookup for {user.email}...")
                 existing = self.get_by_email(user.email)
 
                 # Fallback: try to find by external ID if email lookup fails
                 if not existing and user.external_id:
                     logger.info(
-                        f"Email lookup failed, trying external ID: {user.external_id}"
+                        f"Email lookup failed for {user.email}, "
+                        f"trying external_id lookup: {user.external_id}"
                     )
                     data = self._client.search_user_by_external_id(user.external_id)
                     if data:
                         existing = BillUser.from_bill_api(data)
+                        logger.info(
+                            f"Found user by external_id: {user.external_id} -> "
+                            f"bill_id={existing.id}, bill_email={existing.email}"
+                        )
 
                 if existing:
-                    logger.info(f"Found user {user.email} on retry, updating...")
+                    logger.info(
+                        f"RECOVERY SUCCESS: Found user {user.email} on retry "
+                        f"(bill_id={existing.id}), proceeding with UPDATE"
+                    )
                     user.id = existing.id
                     updated = self.update(user)
                     return (updated, "updated")
                 else:
                     # User exists but we can't fetch - skip (cannot update without ID)
-                    logger.warning(
-                        f"User {user.email} exists in BILL but cannot be fetched. "
-                        f"Skipping update (user data remains unchanged in BILL)."
+                    logger.error(
+                        f"RECOVERY FAILED: User {user.email} exists in BILL.com "
+                        f"(per API error) but cannot be fetched via email or external_id. "
+                        f"external_id={user.external_id}. "
+                        f"User data will NOT be synced. Manual intervention may be required."
                     )
                     return (user, "skipped")
 
-            # Re-raise other errors
+            # Re-raise other errors with context
+            logger.error(
+                f"CREATE FAILED for {user.email}: {str(e)}. "
+                f"external_id={user.external_id}, role={user.role.value if user.role else 'None'}"
+            )
             raise
 
     def upsert_from_employee(
@@ -320,18 +357,46 @@ class BillUserRepositoryImpl(BillUserRepository):
         self._full_user_cache.clear()
 
         cached_count = 0
+        skipped_no_email = 0
+        skipped_no_id = 0
+
         for data in all_users:
             email = data.get("email", "").lower().strip()
-            user_id = data.get("id") or data.get("uuid")
-            if email and user_id:
-                self._email_cache[email] = user_id
-                self._full_user_cache[email] = data
-                cached_count += 1
+            # Use uuid (e.g., "usr_xxx") for API operations, fallback to id
+            user_id = data.get("uuid") or data.get("id")
+
+            if not email:
+                skipped_no_email += 1
+                continue
+            if not user_id:
+                skipped_no_id += 1
+                logger.debug(f"User with email {email} has no ID, skipping cache")
+                continue
+
+            self._email_cache[email] = user_id
+            self._full_user_cache[email] = data
+            cached_count += 1
 
         logger.info(
             f"Email cache built: {cached_count} users cached "
-            f"(from {len(all_users)} total users)"
+            f"(from {len(all_users)} total users, "
+            f"skipped: {skipped_no_email} no email, {skipped_no_id} no id)"
         )
+
+        # Warn if cache is empty but users were fetched
+        if len(all_users) > 0 and cached_count == 0:
+            logger.warning(
+                "WARNING: Fetched users from BILL.com but cache is empty! "
+                "Check if response format has changed (email/id fields missing)"
+            )
+
+        # Warn if no users were fetched at all
+        if len(all_users) == 0:
+            logger.warning(
+                "WARNING: No users fetched from BILL.com! "
+                "All employees will be categorized as 'to create'"
+            )
+
         return self._full_user_cache
 
     def categorize_employees(
@@ -358,8 +423,15 @@ class BillUserRepositoryImpl(BillUserRepository):
         if not self._email_cache:
             self.build_email_cache()
 
+        logger.info(f"Categorizing {len(ukg_employees)} UKG employees against {len(self._email_cache)} cached BILL users")
+
         employees_to_create: List[Employee] = []
         employees_to_update: List[Tuple[Employee, str]] = []
+
+        # Log first few cached emails for debugging
+        if self._email_cache:
+            sample_cached = list(self._email_cache.keys())[:5]
+            logger.debug(f"Sample cached emails: {sample_cached}")
 
         for employee in ukg_employees:
             if not employee.email:
@@ -380,5 +452,15 @@ class BillUserRepositoryImpl(BillUserRepository):
             f"Categorization complete: {len(employees_to_create)} to create (POST), "
             f"{len(employees_to_update)} to update (PATCH)"
         )
+
+        # Warn if all employees are being created (suspicious if cache has users)
+        if len(employees_to_create) > 0 and len(employees_to_update) == 0 and len(self._email_cache) > 0:
+            # Log a sample of emails being created vs cached for debugging
+            sample_create = [e.email.lower().strip() for e in employees_to_create[:3] if e.email]
+            sample_cached = list(self._email_cache.keys())[:3]
+            logger.warning(
+                f"WARNING: All employees categorized as 'create' but cache has {len(self._email_cache)} users! "
+                f"Sample UKG emails: {sample_create}, Sample cached emails: {sample_cached}"
+            )
 
         return employees_to_create, employees_to_update

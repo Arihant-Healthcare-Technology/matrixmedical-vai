@@ -336,8 +336,10 @@ class BillUser:
         Returns:
             BillUser instance
         """
+        # Use uuid (e.g., "usr_xxx") for API operations, fallback to id
+        # BILL.com API operations (PATCH, DELETE) require the uuid format
         return cls(
-            id=data.get("id") or data.get("uuid"),
+            id=data.get("uuid") or data.get("id"),
             email=data.get("email", ""),
             first_name=data.get("firstName", ""),
             last_name=data.get("lastName", ""),
