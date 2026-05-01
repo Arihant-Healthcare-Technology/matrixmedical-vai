@@ -15,7 +15,8 @@ class TestUKGSettingsDaysToProcess:
         from src.infrastructure.config.settings import UKGSettings
 
         with patch.dict(os.environ, {}, clear=True):
-            settings = UKGSettings()
+            # Disable reading from .env file to test true defaults
+            settings = UKGSettings(_env_file=None)
 
             assert settings.days_to_process is None
 
@@ -95,12 +96,13 @@ class TestSettingsDaysToProcessAccess:
 
     def test_days_to_process_none_when_not_set(self):
         """Should return None when UKG_DAYS_TO_PROCESS not set."""
-        from src.infrastructure.config.settings import Settings
+        from src.infrastructure.config.settings import UKGSettings
 
         with patch.dict(os.environ, {}, clear=True):
-            settings = Settings()
+            # Disable reading from .env file to test true defaults
+            settings = UKGSettings(_env_file=None)
 
-            assert settings.ukg.days_to_process is None
+            assert settings.days_to_process is None
 
 
 class TestGetSettingsCachingWithDaysToProcess:
@@ -170,7 +172,8 @@ class TestDaysToProcessIntegration:
         from src.application.services.sync_service import SyncService
 
         with patch.dict(os.environ, {}, clear=True):
-            ukg_settings = UKGSettings()
+            # Disable reading from .env file to test true defaults
+            ukg_settings = UKGSettings(_env_file=None)
             days = ukg_settings.days_to_process
 
             service = SyncService(
@@ -180,3 +183,62 @@ class TestDaysToProcessIntegration:
             )
 
             assert service.days_to_process is None
+
+
+class TestJobCodeFilterSettings:
+    """Tests for JOB_CODE_FILTER setting."""
+
+    def test_job_code_filter_defaults_to_empty(self):
+        """Should default job_code_filter to empty string when not set."""
+        from src.infrastructure.config.settings import UKGSettings
+
+        with patch.dict(os.environ, {}, clear=True):
+            settings = UKGSettings(_env_file=None)
+
+            assert settings.job_code_filter == ""
+            assert settings.qualified_job_codes == set()
+
+    def test_job_code_filter_reads_from_env(self):
+        """Should read job_code_filter from JOB_CODE_FILTER env var."""
+        from src.infrastructure.config.settings import UKGSettings
+
+        with patch.dict(os.environ, {"JOB_CODE_FILTER": "1122,1103,4214"}, clear=True):
+            settings = UKGSettings(_env_file=None)
+
+            assert settings.job_code_filter == "1122,1103,4214"
+
+    def test_qualified_job_codes_parses_to_set(self):
+        """Should parse job_code_filter to a set of codes."""
+        from src.infrastructure.config.settings import UKGSettings
+
+        with patch.dict(os.environ, {"JOB_CODE_FILTER": "1122,1103,4214,4053"}, clear=True):
+            settings = UKGSettings(_env_file=None)
+
+            assert settings.qualified_job_codes == {"1122", "1103", "4214", "4053"}
+
+    def test_qualified_job_codes_strips_whitespace(self):
+        """Should strip whitespace from job codes."""
+        from src.infrastructure.config.settings import UKGSettings
+
+        with patch.dict(os.environ, {"JOB_CODE_FILTER": " 1122 , 1103 , 4214 "}, clear=True):
+            settings = UKGSettings(_env_file=None)
+
+            assert settings.qualified_job_codes == {"1122", "1103", "4214"}
+
+    def test_qualified_job_codes_handles_empty_values(self):
+        """Should handle empty values in job code list."""
+        from src.infrastructure.config.settings import UKGSettings
+
+        with patch.dict(os.environ, {"JOB_CODE_FILTER": "1122,,1103,,"}, clear=True):
+            settings = UKGSettings(_env_file=None)
+
+            assert settings.qualified_job_codes == {"1122", "1103"}
+
+    def test_qualified_job_codes_single_value(self):
+        """Should handle single job code without comma."""
+        from src.infrastructure.config.settings import UKGSettings
+
+        with patch.dict(os.environ, {"JOB_CODE_FILTER": "1122"}, clear=True):
+            settings = UKGSettings(_env_file=None)
+
+            assert settings.qualified_job_codes == {"1122"}

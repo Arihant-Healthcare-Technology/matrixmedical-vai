@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional
 from src.domain.exceptions import ValidationError
 
 
+# Module-level storage for qualified job codes (loaded from config at startup)
+_QUALIFIED_JOB_CODES: set = set()
+
+
 class EmployeeStatus(str, Enum):
     """Employee employment status."""
 
@@ -147,6 +151,7 @@ class Employee:
     # Classification
     employee_type: Optional[EmployeeType] = None
     employee_type_code: str = ""  # UKG employeeTypeCode (PRD, FTC, HRC)
+    job_code: str = ""  # UKG primaryJobCode or jobCode
     full_or_part_time: str = ""  # UKG fullOrPartTime (Full Time, Part Time)
     pay_frequency: str = ""  # UKG payFrequency (Hourly/Salaried)
     cost_center: str = ""
@@ -209,22 +214,45 @@ class Employee:
             return True  # Default to True if not specified
         return self.full_or_part_time.lower().strip() in ("full time", "fulltime", "full", "ft", "f")
 
+    @classmethod
+    def set_qualified_job_codes(cls, job_codes: set) -> None:
+        """
+        Set the qualified job codes for BILL.com sync filtering.
+
+        Args:
+            job_codes: Set of job codes that qualify for BILL.com sync
+        """
+        global _QUALIFIED_JOB_CODES
+        _QUALIFIED_JOB_CODES = set(str(code).strip() for code in job_codes if code)
+
+    @classmethod
+    def get_qualified_job_codes(cls) -> set:
+        """Get the current set of qualified job codes."""
+        return _QUALIFIED_JOB_CODES.copy()
+
     @property
     def should_sync_to_bill(self) -> bool:
         """
         Check if employee should be synced to BILL.com.
 
         Criteria:
-        - PRD employees: must be Full Time (fullTimeOrPartTimeCode = "F")
-        - FTC and HRC employees: all (no full-time filter)
+        - Employee's job code (primaryJobCode/jobCode) must be in the qualified job codes set
+        - Qualified job codes are loaded from JOB_CODE_FILTER in .env at startup
 
-        Note: Company filtering is done at the UKG API level via --company-id parameter.
+        Note:
+        - Active status filtering is done separately (employeeStatusCode == "A")
+        - Company filtering is done at the UKG API level via --company-id parameter
         """
-        if self.employee_type_code == "PRD":
-            return self.is_full_time
-        elif self.employee_type_code in ("FTC", "HRC"):
-            return True
-        return False
+        if not _QUALIFIED_JOB_CODES:
+            # Fallback to old logic if no job codes configured
+            if self.employee_type_code == "PRD":
+                return self.is_full_time
+            elif self.employee_type_code in ("FTC", "HRC"):
+                return True
+            return False
+
+        # Check if employee's job code is in the qualified set
+        return str(self.job_code).strip() in _QUALIFIED_JOB_CODES
 
     def validate(self) -> List[str]:
         """
@@ -292,6 +320,7 @@ class Employee:
             "company_id": self.company_id,
             "address": self.address.to_dict(),
             "employee_type_code": self.employee_type_code,
+            "job_code": self.job_code,
             "full_or_part_time": self.full_or_part_time,
             "is_full_time": self.is_full_time,
             "should_sync_to_bill": self.should_sync_to_bill,

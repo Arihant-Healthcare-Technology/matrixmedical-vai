@@ -40,6 +40,7 @@ def map_employee_to_bill_user(
     employee: Employee,
     role: Optional[BillRole] = None,
     manager_email: Optional[str] = None,
+    formatted_cost_center: Optional[str] = None,
 ) -> BillUser:
     """
     Map Employee domain model to BillUser for S&E provisioning.
@@ -48,15 +49,23 @@ def map_employee_to_bill_user(
         employee: Source Employee
         role: Optional role override (defaults to MEMBER)
         manager_email: Optional manager email override
+        formatted_cost_center: Optional formatted cost center string
+            (format: "primaryProjectCode - code - description" from org-levels lookup)
 
     Returns:
         BillUser domain model
     """
-    return BillUser.from_employee(
+    bill_user = BillUser.from_employee(
         employee,
         role=role,
         manager_email=manager_email,
     )
+
+    # Override cost_center with formatted version if provided
+    if formatted_cost_center:
+        bill_user.cost_center = formatted_cost_center
+
+    return bill_user
 
 
 def build_bill_user_csv_row(user: BillUser) -> Dict[str, str]:

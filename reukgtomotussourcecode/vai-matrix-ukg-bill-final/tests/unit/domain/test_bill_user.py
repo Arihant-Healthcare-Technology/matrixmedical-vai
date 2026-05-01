@@ -195,6 +195,24 @@ class TestBillUser:
         payload = user.to_api_payload()
         assert "phone" not in payload
         assert "externalId" not in payload
+        assert "manager" not in payload
+        assert "costCenter" not in payload
+
+    def test_to_api_payload_with_manager_and_cost_center(self):
+        """Test API payload includes manager and cost center fields."""
+        user = BillUser(
+            email="john@example.com",
+            first_name="John",
+            last_name="Doe",
+            role=BillRole.MEMBER,
+            manager_email="boss@example.com",
+            cost_center="CC001",
+            external_id="EMP123",
+        )
+        payload = user.to_api_payload()
+        assert payload["manager"] == "boss@example.com"
+        assert payload["costCenter"] == "CC001"
+        assert payload["externalId"] == "EMP123"
 
     def test_to_csv_row(self):
         """Test conversion to CSV row."""

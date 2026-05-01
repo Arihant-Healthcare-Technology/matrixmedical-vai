@@ -59,6 +59,20 @@ class UKGSettings(BaseSettings):
         description="Only process employees changed within this many days. None = no filter.",
     )
 
+    # Job code filter for BILL.com sync
+    job_code_filter: str = Field(
+        default="",
+        description="Comma-separated list of job codes qualified for BILL.com sync",
+        alias="JOB_CODE_FILTER",
+    )
+
+    @property
+    def qualified_job_codes(self) -> set:
+        """Parse job_code_filter into a set of job codes."""
+        if not self.job_code_filter:
+            return set()
+        return {code.strip() for code in self.job_code_filter.split(",") if code.strip()}
+
     @field_validator("base_url")
     @classmethod
     def validate_base_url(cls, v: str) -> str:

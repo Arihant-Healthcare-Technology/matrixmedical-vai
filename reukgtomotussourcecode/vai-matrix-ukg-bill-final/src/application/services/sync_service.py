@@ -105,11 +105,19 @@ class SyncService(EmployeeSyncService):
             # Resolve supervisor email
             supervisor_email = self.resolve_supervisor_email(employee)
 
+            # Format cost center using org-levels lookup
+            formatted_cost_center = None
+            if employee.cost_center:
+                formatted_cost_center = self.employee_repo._client.format_cost_center(
+                    employee.cost_center
+                )
+
             # Map employee to BILL user
             bill_user = map_employee_to_bill_user(
                 employee,
                 role=default_role,
                 manager_email=supervisor_email,
+                formatted_cost_center=formatted_cost_center,
             )
 
             # Resolve budget from cost center using department client
@@ -271,11 +279,19 @@ class SyncService(EmployeeSyncService):
             # Resolve supervisor email
             supervisor_email = self.resolve_supervisor_email(employee)
 
+            # Format cost center using org-levels lookup
+            formatted_cost_center = None
+            if employee.cost_center:
+                formatted_cost_center = self.employee_repo._client.format_cost_center(
+                    employee.cost_center
+                )
+
             # Map employee to Bill user
             bill_user = map_employee_to_bill_user(
                 employee,
                 role=default_role,
                 manager_email=supervisor_email,
+                formatted_cost_center=formatted_cost_center,
             )
 
             # Resolve budget from cost center
@@ -386,11 +402,19 @@ class SyncService(EmployeeSyncService):
             # Resolve supervisor email
             supervisor_email = self.resolve_supervisor_email(employee)
 
+            # Format cost center using org-levels lookup
+            formatted_cost_center = None
+            if employee.cost_center:
+                formatted_cost_center = self.employee_repo._client.format_cost_center(
+                    employee.cost_center
+                )
+
             # Map employee to Bill user
             bill_user = map_employee_to_bill_user(
                 employee,
                 role=default_role,
                 manager_email=supervisor_email,
+                formatted_cost_center=formatted_cost_center,
             )
 
             # Set the ID from cache - skip get_by_email lookup
@@ -561,6 +585,11 @@ class SyncService(EmployeeSyncService):
         logger.info("Pre-populating BILL.com email cache (cursor pagination)...")
         self.bill_user_repo.build_email_cache()
         logger.info("Email cache populated.")
+
+        # Pre-build org-levels cache for cost center formatting
+        logger.info("Pre-populating UKG org-levels cache for cost center formatting...")
+        self.employee_repo._client.build_org_levels_cache()
+        logger.info("Org-levels cache populated.")
 
         # Pre-fetch departments for budget resolution
         if self.department_client:

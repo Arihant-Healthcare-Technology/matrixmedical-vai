@@ -64,55 +64,144 @@ class TestGetById:
 
 
 class TestGetByEmail:
-    """Tests for get_by_email method."""
+    """Tests for get_by_email method using cache-first approach.
 
-    def test_returns_user_when_found(self):
-        """Test returns user when found by email."""
+    NOTE: BILL.com S&E API does NOT support email as a query parameter.
+    The implementation now uses cache-first approach:
+    1. Check cache first
+    2. If cache empty, build cache via get_all_users (paginated)
+    3. Return from cache or None if not found
+    """
+
+    def test_returns_from_cache_if_present(self):
+        """Should return user from cache without API call."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.return_value = {
-            "id": "uuid-123",
+
+        repo = BillUserRepositoryImpl(mock_client)
+        # Pre-populate both caches
+        repo._email_cache["john@example.com"] = "uuid-123"
+        repo._full_user_cache["john@example.com"] = {
+            "uuid": "uuid-123",
             "email": "john@example.com",
             "firstName": "John",
             "lastName": "Doe",
         }
 
-        repo = BillUserRepositoryImpl(mock_client)
         result = repo.get_by_email("john@example.com")
 
         assert result is not None
         assert result.email == "john@example.com"
+        assert result.id == "uuid-123"
+        # Should NOT call any API methods
+        assert mock_client.get_all_users.call_count == 0
+        assert mock_client.get_user.call_count == 0
 
-    def test_uses_cache_on_second_call(self):
-        """Test uses cache on second call."""
+    def test_builds_cache_if_empty_then_returns(self):
+        """Should build cache if empty, then return user."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.return_value = {
-            "id": "uuid-123",
-            "email": "john@example.com",
-        }
-        mock_client.get_user.return_value = {
-            "id": "uuid-123",
-            "email": "john@example.com",
-        }
+        mock_client.get_all_users.return_value = [
+            {"uuid": "uuid-123", "email": "john@example.com", "firstName": "John"},
+            {"uuid": "uuid-456", "email": "jane@example.com", "firstName": "Jane"},
+        ]
 
         repo = BillUserRepositoryImpl(mock_client)
+        # Cache starts empty
+        assert len(repo._email_cache) == 0
 
-        # First call
-        result1 = repo.get_by_email("john@example.com")
-        # Second call - should use cache
-        result2 = repo.get_by_email("John@Example.com")
+        result = repo.get_by_email("john@example.com")
 
-        # get_user_by_email should only be called once
-        assert mock_client.get_user_by_email.call_count == 1
+        assert result is not None
+        assert result.email == "john@example.com"
+        # Should have called get_all_users to build cache
+        assert mock_client.get_all_users.call_count == 1
 
-    def test_returns_none_when_not_found(self):
-        """Test returns None when user not found."""
+    def test_returns_none_if_not_in_cache_after_build(self):
+        """Should return None if user not found after cache build."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.return_value = None
+        mock_client.get_all_users.return_value = [
+            {"uuid": "uuid-123", "email": "other@example.com"},
+        ]
 
         repo = BillUserRepositoryImpl(mock_client)
-        result = repo.get_by_email("unknown@example.com")
+        result = repo.get_by_email("notfound@example.com")
 
         assert result is None
+        # Should have attempted to build cache
+        assert mock_client.get_all_users.call_count == 1
+
+    def test_uses_full_user_cache_for_response(self):
+        """Should use _full_user_cache to construct response with all fields."""
+        mock_client = MagicMock()
+
+        repo = BillUserRepositoryImpl(mock_client)
+        repo._email_cache["john@example.com"] = "uuid-123"
+        repo._full_user_cache["john@example.com"] = {
+            "uuid": "uuid-123",
+            "email": "john@example.com",
+            "firstName": "John",
+            "lastName": "Doe",
+            "role": "ADMIN",
+            "phone": "555-1234",
+        }
+
+        result = repo.get_by_email("john@example.com")
+
+        assert result is not None
+        assert result.first_name == "John"
+        assert result.last_name == "Doe"
+        assert result.role.value == "ADMIN"
+
+    def test_falls_back_to_get_by_id_if_no_full_data(self):
+        """Should call get_by_id if _full_user_cache missing."""
+        mock_client = MagicMock()
+        mock_client.get_user.return_value = {
+            "uuid": "uuid-123",
+            "email": "john@example.com",
+            "firstName": "John",
+        }
+
+        repo = BillUserRepositoryImpl(mock_client)
+        # Populate _email_cache only (no _full_user_cache entry)
+        repo._email_cache["john@example.com"] = "uuid-123"
+        # Don't populate _full_user_cache
+
+        result = repo.get_by_email("john@example.com")
+
+        assert result is not None
+        # Should have called get_user (get_by_id) with cached user_id
+        mock_client.get_user.assert_called_once_with("uuid-123")
+
+    def test_case_insensitive_cache_lookup(self):
+        """Should match email case-insensitively from cache."""
+        mock_client = MagicMock()
+
+        repo = BillUserRepositoryImpl(mock_client)
+        repo._email_cache["john@example.com"] = "uuid-123"
+        repo._full_user_cache["john@example.com"] = {
+            "uuid": "uuid-123",
+            "email": "john@example.com",
+        }
+
+        # Search with different case
+        result = repo.get_by_email("JOHN@EXAMPLE.COM")
+
+        assert result is not None
+        assert result.id == "uuid-123"
+
+    def test_does_not_rebuild_cache_if_already_populated(self):
+        """Should not rebuild cache if already has entries."""
+        mock_client = MagicMock()
+
+        repo = BillUserRepositoryImpl(mock_client)
+        # Pre-populate with some entries
+        repo._email_cache["other@example.com"] = "uuid-other"
+
+        # Search for user not in cache (but cache is not empty)
+        result = repo.get_by_email("notfound@example.com")
+
+        assert result is None
+        # Should NOT have called get_all_users since cache is not empty
+        assert mock_client.get_all_users.call_count == 0
 
 
 class TestGetActiveUsers:
@@ -290,14 +379,19 @@ class TestRetireUser:
 
 
 class TestUpsert:
-    """Tests for upsert method."""
+    """Tests for upsert method.
+
+    NOTE: Uses cache-first approach - tests pre-populate _email_cache
+    and _full_user_cache instead of mocking get_user_by_email client method.
+    """
 
     def test_creates_new_user(self):
-        """Test creates new user when not found."""
+        """Test creates new user when not found in cache."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.return_value = None
+        # Mock get_all_users to return empty list (cache will be empty)
+        mock_client.get_all_users.return_value = []
         mock_client.create_user.return_value = {
-            "id": "new-uuid",
+            "uuid": "new-uuid",
             "email": "new@example.com",
         }
 
@@ -310,22 +404,25 @@ class TestUpsert:
         mock_client.create_user.assert_called_once()
 
     def test_updates_existing_user(self):
-        """Test updates user when found - always PATCHes."""
+        """Test updates user when found in cache - always PATCHes."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.return_value = {
-            "id": "uuid-123",
-            "email": "user@example.com",
-            "firstName": "Old",
-            "lastName": "Name",
-        }
         mock_client.update_user.return_value = {
-            "id": "uuid-123",
+            "uuid": "uuid-123",
             "email": "user@example.com",
             "firstName": "New",
             "lastName": "Name",
         }
 
         repo = BillUserRepositoryImpl(mock_client)
+        # Pre-populate cache with existing user
+        repo._email_cache["user@example.com"] = "uuid-123"
+        repo._full_user_cache["user@example.com"] = {
+            "uuid": "uuid-123",
+            "email": "user@example.com",
+            "firstName": "Old",
+            "lastName": "Name",
+        }
+
         user = BillUser(email="user@example.com", first_name="New", last_name="Name")
         result_user, action = repo.upsert(user)
 
@@ -333,17 +430,10 @@ class TestUpsert:
         mock_client.update_user.assert_called_once()
 
     def test_always_patches_existing_user(self):
-        """Test always PATCHes when user exists (even with same data)."""
+        """Test always PATCHes when user exists in cache (even with same data)."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.return_value = {
-            "id": "uuid-123",
-            "email": "user@example.com",
-            "firstName": "Same",
-            "lastName": "User",
-            "role": "MEMBER",
-        }
         mock_client.update_user.return_value = {
-            "id": "uuid-123",
+            "uuid": "uuid-123",
             "email": "user@example.com",
             "firstName": "Same",
             "lastName": "User",
@@ -351,6 +441,16 @@ class TestUpsert:
         }
 
         repo = BillUserRepositoryImpl(mock_client)
+        # Pre-populate cache with existing user
+        repo._email_cache["user@example.com"] = "uuid-123"
+        repo._full_user_cache["user@example.com"] = {
+            "uuid": "uuid-123",
+            "email": "user@example.com",
+            "firstName": "Same",
+            "lastName": "User",
+            "role": "MEMBER",
+        }
+
         user = BillUser(
             email="user@example.com",
             first_name="Same",
@@ -382,21 +482,27 @@ class TestClearCache:
 
 
 class TestUpsertExceptionHandling:
-    """Tests for upsert method exception handling."""
+    """Tests for upsert method exception handling.
+
+    NOTE: Uses cache-first approach for lookups.
+    """
 
     def test_handles_user_already_exists_error_with_retry(self):
-        """Should handle 'user already exists' error and retry lookup."""
+        """Should handle 'user already exists' error and retry lookup via cache rebuild."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.side_effect = [
-            None,  # First call - not found
-            {"id": "existing-uuid", "email": "test@example.com"},  # Retry call - found
+
+        # Initial cache is empty, get_all_users returns empty on first call
+        # After cache clear, get_all_users returns the user on retry
+        mock_client.get_all_users.side_effect = [
+            [],  # First call - cache build returns empty
+            [{"uuid": "existing-uuid", "email": "test@example.com"}],  # Retry after cache clear
         ]
 
         # Create fails with "already exists" error
         error = Exception("User already exists in the system")
         mock_client.create_user.side_effect = error
         mock_client.update_user.return_value = {
-            "id": "existing-uuid",
+            "uuid": "existing-uuid",
             "email": "test@example.com",
         }
 
@@ -410,9 +516,11 @@ class TestUpsertExceptionHandling:
         mock_client.update_user.assert_called_once()
 
     def test_handles_already_exists_with_external_id_fallback(self):
-        """Should try external ID lookup when email lookup fails."""
+        """Should try external ID lookup when email lookup fails after cache rebuild."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.return_value = None  # Email lookup fails
+
+        # Cache always returns empty (user not found by email)
+        mock_client.get_all_users.return_value = []
 
         # Create fails with "already exists"
         error = Exception("User already exists")
@@ -420,12 +528,12 @@ class TestUpsertExceptionHandling:
 
         # External ID search finds user
         mock_client.search_user_by_external_id.return_value = {
-            "id": "existing-uuid",
+            "uuid": "existing-uuid",
             "email": "test@example.com",
             "externalId": "EXT001",
         }
         mock_client.update_user.return_value = {
-            "id": "existing-uuid",
+            "uuid": "existing-uuid",
             "email": "test@example.com",
         }
 
@@ -443,9 +551,11 @@ class TestUpsertExceptionHandling:
         mock_client.search_user_by_external_id.assert_called_once_with("EXT001")
 
     def test_handles_already_exists_user_cannot_be_fetched(self):
-        """Should skip when user exists but cannot be fetched."""
+        """Should skip when user exists but cannot be fetched via cache or external ID."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.return_value = None  # Email lookup fails
+
+        # Cache returns empty (user not found by email)
+        mock_client.get_all_users.return_value = []
 
         # Create fails with "already exists" (with response_body attribute)
         error = Exception("Create failed")
@@ -472,7 +582,9 @@ class TestUpsertExceptionHandling:
     def test_re_raises_non_already_exists_errors(self):
         """Should re-raise errors that are not 'already exists'."""
         mock_client = MagicMock()
-        mock_client.get_user_by_email.return_value = None
+
+        # Cache returns empty
+        mock_client.get_all_users.return_value = []
 
         # Create fails with different error
         error = Exception("API rate limit exceeded")
@@ -494,9 +606,9 @@ class TestBuildEmailCache:
         """Test pre-populates cache from all users."""
         mock_client = MagicMock()
         mock_client.get_all_users.return_value = [
-            {"id": "uuid-1", "email": "user1@example.com"},
-            {"id": "uuid-2", "email": "user2@example.com"},
-            {"uuid": "uuid-3", "email": "user3@example.com"},  # alternate id key
+            {"uuid": "uuid-1", "email": "user1@example.com"},
+            {"uuid": "uuid-2", "email": "user2@example.com"},
+            {"uuid": "uuid-3", "email": "user3@example.com"},
         ]
 
         repo = BillUserRepositoryImpl(mock_client)
@@ -511,15 +623,63 @@ class TestBuildEmailCache:
         """Test skips entries without email."""
         mock_client = MagicMock()
         mock_client.get_all_users.return_value = [
-            {"id": "uuid-1", "email": "valid@example.com"},
-            {"id": "uuid-2"},  # No email
-            {"id": "uuid-3", "email": ""},  # Empty email
+            {"uuid": "uuid-1", "email": "valid@example.com"},
+            {"uuid": "uuid-2"},  # No email
+            {"uuid": "uuid-3", "email": ""},  # Empty email
         ]
 
         repo = BillUserRepositoryImpl(mock_client)
         repo.build_email_cache()
 
         assert len(repo._email_cache) == 1
+
+    def test_prioritizes_uuid_over_id(self):
+        """Should use uuid (not Base64 id) for cache value.
+
+        BILL.com API returns both 'id' (Base64 encoded) and 'uuid'.
+        The uuid format (e.g., 'usr_xxx') is required for API operations.
+        """
+        mock_client = MagicMock()
+        mock_client.get_all_users.return_value = [
+            {
+                "id": "VXNlcjoxMjM=",  # Base64 encoded - should NOT be used
+                "uuid": "usr_abc123",   # UUID format - should be used
+                "email": "user@example.com",
+            },
+        ]
+
+        repo = BillUserRepositoryImpl(mock_client)
+        repo.build_email_cache()
+
+        # Should use uuid, not id
+        assert repo._email_cache["user@example.com"] == "usr_abc123"
+
+    def test_falls_back_to_id_if_no_uuid(self):
+        """Should fall back to id if uuid not present."""
+        mock_client = MagicMock()
+        mock_client.get_all_users.return_value = [
+            {"id": "fallback-id", "email": "user@example.com"},
+        ]
+
+        repo = BillUserRepositoryImpl(mock_client)
+        repo.build_email_cache()
+
+        assert repo._email_cache["user@example.com"] == "fallback-id"
+
+    def test_skips_entries_without_id(self):
+        """Should skip entries without uuid or id."""
+        mock_client = MagicMock()
+        mock_client.get_all_users.return_value = [
+            {"email": "valid@example.com", "uuid": "uuid-1"},
+            {"email": "no-id@example.com"},  # No uuid or id
+        ]
+
+        repo = BillUserRepositoryImpl(mock_client)
+        repo.build_email_cache()
+
+        assert len(repo._email_cache) == 1
+        assert "valid@example.com" in repo._email_cache
+        assert "no-id@example.com" not in repo._email_cache
 
 
 class TestFullUserCacheInit:

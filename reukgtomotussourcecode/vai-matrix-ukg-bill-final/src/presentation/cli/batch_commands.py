@@ -16,6 +16,7 @@ from typing import List, Optional
 from src.domain.models.employee import Employee, EmployeeStatus
 from src.domain.models.bill_user import BillRole, BillUser
 from src.infrastructure.adapters.ukg.mappers import map_employee_from_ukg
+from src.infrastructure.adapters.bill.mappers import map_employee_to_bill_user
 from src.presentation.cli.container import Container
 from src.presentation.cli.utils import (
     load_json_file,
@@ -133,6 +134,13 @@ def run_sync_all(
             cache_size = len(bill_user_repo._email_cache)
             logger.info(f"BILL.com cache ready: {cache_size} users cached")
 
+            # Pre-build org-levels cache for cost center formatting
+            logger.info("=" * 60)
+            logger.info("BUILDING UKG ORG-LEVELS CACHE")
+            logger.info("=" * 60)
+            employee_repo._client.build_org_levels_cache()
+            logger.info("Org-levels cache ready")
+
             logger.info("=" * 60)
             logger.info("PROCESSING EMPLOYEES")
             logger.info("=" * 60)
@@ -175,7 +183,17 @@ def run_sync_all(
                     full_user_data = bill_user_repo._full_user_cache.get(email_lower, {})
                     existing = BillUser.from_bill_api(full_user_data) if full_user_data else None
                     if existing:
-                        bill_user = BillUser.from_employee(emp, role=role)
+                        # Format cost center using org-levels lookup
+                        formatted_cost_center = None
+                        if emp.cost_center:
+                            formatted_cost_center = employee_repo._client.format_cost_center(
+                                emp.cost_center
+                            )
+                        bill_user = map_employee_to_bill_user(
+                            emp,
+                            role=role,
+                            formatted_cost_center=formatted_cost_center,
+                        )
                         if bill_user.needs_update(existing):
                             update_list.append(emp)
                         else:
@@ -410,21 +428,33 @@ def run_export_csv(
             logger.warning("No employees found")
             return 0
 
-        # STEP 3: Convert and write CSV
+        # STEP 3: Build org-levels cache for cost center formatting
         logger.info("=" * 60)
-        logger.info("STEP 3: Converting and writing CSV")
+        logger.info("STEP 3: Building UKG org-levels cache")
         logger.info("=" * 60)
+        employee_repo._client.build_org_levels_cache()
+        logger.info("Org-levels cache ready")
 
-        from src.infrastructure.adapters.bill.mappers import map_employee_to_bill_user
+        # STEP 4: Convert and write CSV
+        logger.info("=" * 60)
+        logger.info("STEP 4: Converting and writing CSV")
+        logger.info("=" * 60)
 
         bill_users = []
         for emp in employees:
             try:
                 supervisor_email = emp.supervisor_email or ""
+                # Format cost center using org-levels lookup
+                formatted_cost_center = None
+                if emp.cost_center:
+                    formatted_cost_center = employee_repo._client.format_cost_center(
+                        emp.cost_center
+                    )
                 user = map_employee_to_bill_user(
                     emp,
                     role=BillRole.MEMBER,
                     manager_email=supervisor_email if include_managers else None,
+                    formatted_cost_center=formatted_cost_center,
                 )
                 bill_users.append(user)
             except Exception as e:
@@ -439,18 +469,16 @@ def run_export_csv(
             fieldnames.append("manager")
 
         with open(output_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
             writer.writeheader()
 
             for user in bill_users:
                 row = user.to_csv_row()
-                if not include_managers and "manager" in row:
-                    del row["manager"]
                 writer.writerow(row)
 
-        # STEP 4: Export Complete
+        # STEP 5: Export Complete
         logger.info("=" * 60)
-        logger.info("STEP 4: Export Complete")
+        logger.info("STEP 5: Export Complete")
         logger.info("=" * 60)
         logger.info(f"  Exported {len(bill_users)} users to {output_path}")
         return 0

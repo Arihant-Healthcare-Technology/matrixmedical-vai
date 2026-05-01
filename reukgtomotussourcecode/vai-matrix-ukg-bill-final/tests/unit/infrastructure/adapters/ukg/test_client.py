@@ -508,3 +508,184 @@ class TestContextManager:
             with client:
                 pass
             mock_close.assert_called_once()
+
+
+class TestOrgLevelsIntegration:
+    """Tests for org-levels API integration."""
+
+    def test_get_org_levels_success(self):
+        """Test fetching org-levels from API."""
+        import base64
+        token = base64.b64encode(b"user:pass").decode()
+        client = UKGClient(
+            base_url="https://service4.ultipro.com",
+            basic_auth_token=token,
+            customer_api_key="test-api-key",
+        )
+
+        mock_response = [
+            {"glSegment": "100", "code": "ADMIN", "description": "Administration"},
+            {"glSegment": "200", "code": "SALES", "description": "Sales Department"},
+        ]
+
+        with patch.object(client, '_get_data', return_value=mock_response):
+            result = client.get_org_levels()
+
+            assert len(result) == 2
+            assert result[0]["glSegment"] == "100"
+            assert result[1]["code"] == "SALES"
+
+        client.close()
+
+    def test_build_org_levels_cache(self):
+        """Test building org-levels cache."""
+        import base64
+        token = base64.b64encode(b"user:pass").decode()
+        client = UKGClient(
+            base_url="https://service4.ultipro.com",
+            basic_auth_token=token,
+            customer_api_key="test-api-key",
+        )
+
+        mock_response = [
+            {"glSegment": "100", "code": "ADMIN", "description": "Administration"},
+            {"glSegment": "200", "code": "SALES", "description": "Sales Department"},
+        ]
+
+        with patch.object(client, 'get_org_levels', return_value=mock_response):
+            cache = client.build_org_levels_cache()
+
+            assert "100" in cache
+            assert cache["100"]["code"] == "ADMIN"
+            assert cache["100"]["description"] == "Administration"
+            assert "200" in cache
+            assert cache["200"]["code"] == "SALES"
+
+        client.close()
+
+    def test_get_department_by_gl_segment(self):
+        """Test looking up department by glSegment."""
+        import base64
+        token = base64.b64encode(b"user:pass").decode()
+        client = UKGClient(
+            base_url="https://service4.ultipro.com",
+            basic_auth_token=token,
+            customer_api_key="test-api-key",
+        )
+
+        # Pre-populate cache
+        client._org_levels_cache = {
+            "100": {"code": "ADMIN", "description": "Administration"},
+            "200": {"code": "SALES", "description": "Sales Department"},
+        }
+
+        result = client.get_department_by_gl_segment("100")
+
+        assert result["code"] == "ADMIN"
+        assert result["description"] == "Administration"
+
+        client.close()
+
+    def test_get_department_by_gl_segment_not_found(self):
+        """Test looking up non-existent glSegment returns None."""
+        import base64
+        token = base64.b64encode(b"user:pass").decode()
+        client = UKGClient(
+            base_url="https://service4.ultipro.com",
+            basic_auth_token=token,
+            customer_api_key="test-api-key",
+        )
+
+        client._org_levels_cache = {
+            "100": {"code": "ADMIN", "description": "Administration"},
+        }
+
+        result = client.get_department_by_gl_segment("999")
+
+        assert result is None
+
+        client.close()
+
+
+class TestCostCenterFormatting:
+    """Tests for cost center formatting."""
+
+    def test_format_cost_center_full_format(self):
+        """Test formatting cost center as 'primaryProjectCode - code - description'."""
+        import base64
+        token = base64.b64encode(b"user:pass").decode()
+        client = UKGClient(
+            base_url="https://service4.ultipro.com",
+            basic_auth_token=token,
+            customer_api_key="test-api-key",
+        )
+
+        # Pre-populate cache
+        client._org_levels_cache = {
+            "100": {"code": "ADMIN", "description": "Administration"},
+        }
+
+        result = client.format_cost_center("100")
+
+        assert result == "100 - ADMIN - Administration"
+
+        client.close()
+
+    def test_format_cost_center_not_in_cache(self):
+        """Test formatting cost center when gl_segment not in cache returns original."""
+        import base64
+        token = base64.b64encode(b"user:pass").decode()
+        client = UKGClient(
+            base_url="https://service4.ultipro.com",
+            basic_auth_token=token,
+            customer_api_key="test-api-key",
+        )
+
+        # Pre-populate cache with some data but not the requested gl_segment
+        client._org_levels_cache = {
+            "100": {"code": "ADMIN", "description": "Administration"},
+        }
+
+        result = client.format_cost_center("999")
+
+        # Should return original when not found in cache
+        assert result == "999"
+
+        client.close()
+
+    def test_format_cost_center_empty_input(self):
+        """Test formatting empty cost center returns empty string."""
+        import base64
+        token = base64.b64encode(b"user:pass").decode()
+        client = UKGClient(
+            base_url="https://service4.ultipro.com",
+            basic_auth_token=token,
+            customer_api_key="test-api-key",
+        )
+
+        result = client.format_cost_center("")
+
+        assert result == ""
+
+        client.close()
+
+    def test_format_cost_center_builds_cache_if_empty(self):
+        """Test format_cost_center builds cache if not present."""
+        import base64
+        token = base64.b64encode(b"user:pass").decode()
+        client = UKGClient(
+            base_url="https://service4.ultipro.com",
+            basic_auth_token=token,
+            customer_api_key="test-api-key",
+        )
+
+        mock_org_levels = [
+            {"glSegment": "100", "code": "ADMIN", "description": "Administration"},
+        ]
+
+        with patch.object(client, 'get_org_levels', return_value=mock_org_levels):
+            result = client.format_cost_center("100")
+
+            assert result == "100 - ADMIN - Administration"
+
+        client.close()

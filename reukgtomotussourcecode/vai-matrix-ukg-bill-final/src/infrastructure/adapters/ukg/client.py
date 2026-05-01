@@ -329,17 +329,15 @@ class UKGClient:
         """
         all_employees = self.list_employees(company_id, page, page_size)
 
-        # Filter to active employees - DISABLED for debugging
-        # TODO: Re-enable this filter after debugging
-        # active = []
-        # for emp in all_employees:
-        #     status_code = str(emp.get("employeeStatusCode", "")).strip().upper()
-        #     if status_code == "A":
-        #         active.append(emp)
-        # return active
+        # Filter to active employees only (employeeStatusCode == "A")
+        active = []
+        for emp in all_employees:
+            status_code = str(emp.get("employeeStatusCode", "")).strip().upper()
+            if status_code == "A":
+                active.append(emp)
 
-        # Return all employees (no status filter)
-        return all_employees
+        logger.info(f"Filtered to {len(active)} active employees (from {len(all_employees)} total)")
+        return active
 
     # =========================================================================
     # Supervisor Resolution
@@ -449,6 +447,92 @@ class UKGClient:
                                 return email
 
         return None
+
+    # =========================================================================
+    # Organization / Configuration
+    # =========================================================================
+
+    def get_org_levels(self) -> List[Dict[str, Any]]:
+        """
+        Get organization levels from UKG configuration API.
+
+        Fetches data from /configuration/v1/org-levels which contains
+        department/cost center mapping with glSegment codes.
+
+        Returns:
+            List of org level records with code, description, glSegment
+        """
+        logger.info("UKG fetching org-levels configuration...")
+        data = self._get_data("/configuration/v1/org-levels")
+        items = self._extract_list(data)
+        logger.info(f"UKG org-levels fetched: {len(items)} records")
+        return items
+
+    def build_org_levels_cache(self) -> Dict[str, Dict[str, str]]:
+        """
+        Build cache mapping glSegment to org level details.
+
+        Returns:
+            Dict mapping glSegment -> {"code": str, "description": str}
+        """
+        if hasattr(self, "_org_levels_cache") and self._org_levels_cache:
+            return self._org_levels_cache
+
+        org_levels = self.get_org_levels()
+        self._org_levels_cache: Dict[str, Dict[str, str]] = {}
+
+        for level in org_levels:
+            gl_segment = str(level.get("glSegment", "")).strip()
+            if gl_segment:
+                self._org_levels_cache[gl_segment] = {
+                    "code": str(level.get("code", "")),
+                    "description": str(level.get("description", "")),
+                }
+
+        logger.info(f"UKG org-levels cache built: {len(self._org_levels_cache)} glSegments mapped")
+        return self._org_levels_cache
+
+    def get_department_by_gl_segment(self, gl_segment: str) -> Optional[Dict[str, str]]:
+        """
+        Look up department info by glSegment (primaryProjectCode).
+
+        Args:
+            gl_segment: The glSegment/primaryProjectCode to look up
+
+        Returns:
+            Dict with "code" and "description", or None if not found
+        """
+        if not hasattr(self, "_org_levels_cache") or not self._org_levels_cache:
+            self.build_org_levels_cache()
+
+        return self._org_levels_cache.get(str(gl_segment).strip())
+
+    def format_cost_center(self, primary_project_code: str) -> str:
+        """
+        Format cost center string from primaryProjectCode using org-levels lookup.
+
+        Format: "primaryProjectCode - code - description"
+        Example: "691 - 37273 - VBC - SNF@Home - Indirect"
+
+        Args:
+            primary_project_code: The primaryProjectCode from employee data
+
+        Returns:
+            Formatted cost center string, or just primaryProjectCode if no match
+        """
+        if not primary_project_code:
+            return ""
+
+        dept_info = self.get_department_by_gl_segment(primary_project_code)
+        if dept_info:
+            code = dept_info.get("code", "")
+            description = dept_info.get("description", "")
+            if code and description:
+                return f"{primary_project_code} - {code} - {description}"
+            elif code:
+                return f"{primary_project_code} - {code}"
+
+        return primary_project_code
 
     # =========================================================================
     # Convenience Methods

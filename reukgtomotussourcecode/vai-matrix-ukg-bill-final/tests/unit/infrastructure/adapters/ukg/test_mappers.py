@@ -370,3 +370,69 @@ class TestExtractSupervisorInfo:
         assert info["supervisor_email"] == ""
         assert info["supervisor_id"] == ""
         assert info["supervisor_number"] == ""
+
+
+class TestJobCodeMapping:
+    """Tests for job_code extraction in employee mapping."""
+
+    def test_maps_primary_job_code(self):
+        """Should extract primaryJobCode from employment data."""
+        employment_data = {
+            "employeeId": "abc-123",
+            "employeeNumber": "12345",
+            "primaryJobCode": "1122",
+        }
+
+        emp = map_employee_from_ukg(employment_data)
+
+        assert emp.job_code == "1122"
+
+    def test_maps_job_code_fallback(self):
+        """Should fall back to jobCode if primaryJobCode not present."""
+        employment_data = {
+            "employeeId": "abc-123",
+            "employeeNumber": "12345",
+            "jobCode": "4214",
+        }
+
+        emp = map_employee_from_ukg(employment_data)
+
+        assert emp.job_code == "4214"
+
+    def test_primary_job_code_takes_precedence(self):
+        """Should use primaryJobCode over jobCode if both present."""
+        employment_data = {
+            "employeeId": "abc-123",
+            "employeeNumber": "12345",
+            "primaryJobCode": "1122",
+            "jobCode": "4214",  # Should be ignored
+        }
+
+        emp = map_employee_from_ukg(employment_data)
+
+        assert emp.job_code == "1122"
+
+    def test_job_code_from_employee_employment_data(self):
+        """Should extract job code from employee_employment_data."""
+        employment_data = {
+            "employeeId": "abc-123",
+            "employeeNumber": "12345",
+        }
+        emp_emp_data = {
+            "primaryJobCode": "4053",
+        }
+
+        emp = map_employee_from_ukg(employment_data, employee_employment_data=emp_emp_data)
+
+        assert emp.job_code == "4053"
+
+    def test_job_code_empty_when_not_present(self):
+        """Should have empty job_code when not present in any source."""
+        employment_data = {
+            "employeeId": "abc-123",
+            "employeeNumber": "12345",
+        }
+
+        emp = map_employee_from_ukg(employment_data)
+
+        assert emp.job_code == ""

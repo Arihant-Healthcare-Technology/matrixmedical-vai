@@ -428,16 +428,129 @@ class TestEmployee:
         )
         assert emp.should_sync_to_bill is False
 
-    def test_should_sync_to_bill_non_cchn_company(self):
-        """Test should_sync_to_bill returns False for non-CCHN company (J9A6Y)."""
+    def test_should_sync_to_bill_company_filtering_via_cli(self):
+        """Test that should_sync_to_bill does NOT filter by company_id.
+
+        Company filtering is done at UKG API level via --company-id CLI parameter,
+        not in should_sync_to_bill(). This test verifies a PRD full-time employee
+        passes should_sync_to_bill regardless of company_id.
+        """
         emp = Employee(
             employee_id="EMP001",
             employee_number="12345",
             first_name="John",
             last_name="Doe",
             email="john@example.com",
-            company_id="OTHER",  # Non-CCHN company (J9A6Y is CCHN)
+            company_id="OTHER",  # Company filtering is via CLI, not here
             employee_type_code="PRD",
             full_or_part_time="Full Time",
         )
+        # should_sync_to_bill only checks employee_type_code + full_time
+        # Company filtering is done at UKG API level via --company-id
+        assert emp.should_sync_to_bill is True
+
+
+class TestJobCodeFiltering:
+    """Tests for job code based BILL.com sync filtering."""
+
+    def setup_method(self):
+        """Clear qualified job codes before each test."""
+        Employee.set_qualified_job_codes(set())
+
+    def teardown_method(self):
+        """Clear qualified job codes after each test."""
+        Employee.set_qualified_job_codes(set())
+
+    def test_set_qualified_job_codes(self):
+        """Test setting qualified job codes."""
+        Employee.set_qualified_job_codes({"1122", "1103", "4214"})
+
+        assert Employee.get_qualified_job_codes() == {"1122", "1103", "4214"}
+
+    def test_should_sync_with_matching_job_code(self):
+        """Test employee with matching job code should sync."""
+        Employee.set_qualified_job_codes({"1122", "1103", "4214"})
+
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            job_code="1122",
+        )
+        assert emp.should_sync_to_bill is True
+
+    def test_should_not_sync_with_non_matching_job_code(self):
+        """Test employee with non-matching job code should not sync."""
+        Employee.set_qualified_job_codes({"1122", "1103", "4214"})
+
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            job_code="9999",  # Not in qualified list
+        )
+        assert emp.should_sync_to_bill is False
+
+    def test_should_not_sync_with_empty_job_code(self):
+        """Test employee with empty job code should not sync when filter is set."""
+        Employee.set_qualified_job_codes({"1122", "1103", "4214"})
+
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            job_code="",
+        )
+        assert emp.should_sync_to_bill is False
+
+    def test_fallback_to_legacy_filter_when_no_job_codes(self):
+        """Test fallback to employee_type_code filter when no job codes configured."""
+        # No job codes set - should use legacy PRD/FTC/HRC filter
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            employee_type_code="PRD",
+            full_or_part_time="Full Time",
+        )
+        assert emp.should_sync_to_bill is True
+
+    def test_job_code_with_whitespace(self):
+        """Test job code matching handles whitespace."""
+        Employee.set_qualified_job_codes({"1122", "1103"})
+
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            job_code=" 1122 ",  # With whitespace
+        )
+        assert emp.should_sync_to_bill is True
+
+    def test_job_code_overrides_employee_type(self):
+        """Test job code filter takes precedence over employee_type_code."""
+        Employee.set_qualified_job_codes({"1122"})
+
+        # Employee with PRD type but non-matching job code
+        emp = Employee(
+            employee_id="EMP001",
+            employee_number="12345",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com",
+            employee_type_code="PRD",
+            full_or_part_time="Full Time",
+            job_code="9999",  # Not in qualified list
+        )
+        # When job code filter is set, it takes precedence
         assert emp.should_sync_to_bill is False

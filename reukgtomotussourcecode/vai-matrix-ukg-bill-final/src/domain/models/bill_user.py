@@ -186,14 +186,17 @@ class BillUser:
         if self.cost_center:
             payload["costCenter"] = self.cost_center
 
+        if self.manager_email:
+            payload["manager"] = self.manager_email
+
         return payload
 
     def to_csv_row(self) -> Dict[str, str]:
         """
         Convert to CSV row for BILL.com bulk import.
 
-        The CSV import supports the manager field which is not
-        available via API.
+        Note: Manager and cost center fields are also sent via API
+        in to_api_payload().
 
         Returns:
             Dictionary with CSV column headers as keys

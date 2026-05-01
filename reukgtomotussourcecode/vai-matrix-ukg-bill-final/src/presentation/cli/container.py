@@ -11,6 +11,7 @@ import threading
 from typing import Any, Callable, Dict, Optional
 
 from src.infrastructure.config.settings import Settings, get_settings, validate_and_log_settings
+from src.domain.models.employee import Employee
 
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,18 @@ class Container:
                 logger.warning(
                     f"Configuration has {len(self._config_results['errors'])} error(s). "
                     "Some operations may fail."
+                )
+
+            # Load qualified job codes for BILL.com sync filtering
+            qualified_job_codes = self.settings.ukg.qualified_job_codes
+            if qualified_job_codes:
+                Employee.set_qualified_job_codes(qualified_job_codes)
+                logger.info(
+                    f"Loaded {len(qualified_job_codes)} qualified job codes for BILL.com sync filtering"
+                )
+            else:
+                logger.warning(
+                    "No JOB_CODE_FILTER configured - using legacy employee type filtering"
                 )
 
     def _get_or_create(self, key: str, factory: Callable) -> Any:

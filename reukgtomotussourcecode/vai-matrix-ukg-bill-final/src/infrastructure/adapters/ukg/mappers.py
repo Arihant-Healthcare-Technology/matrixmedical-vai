@@ -194,6 +194,14 @@ def map_employee_from_ukg(
         or emp_emp.get("employeeTypeCode")
         or ""
     )
+    # Job code - used for BILL.com sync filtering
+    job_code = (
+        employment_data.get("primaryJobCode")
+        or employment_data.get("jobCode")
+        or emp_emp.get("primaryJobCode")
+        or emp_emp.get("jobCode")
+        or ""
+    )
     # Full/Part Time - try multiple possible field names
     full_or_part_time = (
         employment_data.get("fullOrPartTime")
@@ -242,6 +250,7 @@ def map_employee_from_ukg(
         company_id=company_id,
         address=address,
         employee_type_code=employee_type_code,
+        job_code=job_code,
         full_or_part_time=full_or_part_time,
         pay_frequency=pay_frequency,
         cost_center=cost_center,
