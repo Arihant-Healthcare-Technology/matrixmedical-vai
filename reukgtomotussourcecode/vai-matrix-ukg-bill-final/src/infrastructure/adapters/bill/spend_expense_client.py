@@ -86,11 +86,12 @@ class SpendExpenseClient(BillClient):
 
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """
-        Find S&E user by email.
+        Find S&E user by email by searching through all users.
 
-        Tries multiple strategies:
-        1. Direct email filter query (if API supports it)
-        2. Paginate through all users as fallback
+        NOTE: BILL.com S&E API does NOT support email as a query parameter.
+        This method paginates through all users and filters client-side.
+        For better performance, use build_email_cache() at repository level
+        and lookup from cache instead of calling this method directly.
 
         Args:
             email: User email
@@ -100,35 +101,22 @@ class SpendExpenseClient(BillClient):
         """
         email_lower = email.lower().strip()
 
-        # Strategy 1: Try direct email filter (some BILL APIs support this)
-        try:
-            params = {"email": email_lower}
-            response = self._http.get("/users", params=params)
-            if response.status_code == 200:
-                data = self._handle_response(response)
-                items = self._extract_items(data, ["results", "users", "items", "data"])
-                if items:
-                    # Return first matching user
-                    for user in items:
-                        if user.get("email", "").lower().strip() == email_lower:
-                            logger.info(f"Found user by email filter: {email}")
-                            return user
-        except Exception as e:
-            logger.debug(f"Email filter search failed: {e}")
-
-        # Strategy 2: Paginate through all users
-        logger.debug(f"Searching for {email} via pagination...")
+        # BILL.com doesn't support email filter - paginate through all users
+        logger.debug(f"Searching for {email} via pagination (no email filter support)...")
         for user in self._paginate("/users", item_keys=["results", "users"]):
             if user.get("email", "").lower().strip() == email_lower:
-                logger.info(f"Found user via pagination: {email}")
+                logger.debug(f"Found user via pagination: {email}")
                 return user
 
-        logger.warning(f"User not found in BILL: {email}")
+        logger.debug(f"User not found in BILL: {email}")
         return None
 
     def search_user_by_external_id(self, external_id: str) -> Optional[Dict[str, Any]]:
         """
         Find S&E user by external ID (employee number).
+
+        NOTE: BILL.com S&E API does NOT support externalId as a query parameter.
+        This method paginates through all users and filters client-side.
 
         Args:
             external_id: External ID (employee number)
@@ -136,26 +124,14 @@ class SpendExpenseClient(BillClient):
         Returns:
             User dict or None if not found
         """
-        # Try direct externalId filter
-        try:
-            params = {"externalId": external_id}
-            response = self._http.get("/users", params=params)
-            if response.status_code == 200:
-                data = self._handle_response(response)
-                items = self._extract_items(data, ["results", "users", "items", "data"])
-                if items:
-                    for user in items:
-                        if user.get("externalId") == external_id:
-                            logger.debug(f"Found user by externalId: {external_id}")
-                            return user
-        except Exception as e:
-            logger.debug(f"ExternalId search failed: {e}")
-
-        # Fallback: paginate through all users
+        # BILL.com doesn't support externalId filter - paginate through all users
+        logger.debug(f"Searching for externalId={external_id} via pagination...")
         for user in self._paginate("/users", item_keys=["results", "users"]):
             if user.get("externalId") == external_id:
+                logger.debug(f"Found user by externalId: {external_id}")
                 return user
 
+        logger.debug(f"User with externalId={external_id} not found in BILL")
         return None
 
     def create_user(self, payload: Dict[str, Any]) -> Dict[str, Any]:

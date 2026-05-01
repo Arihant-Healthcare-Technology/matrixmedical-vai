@@ -123,8 +123,18 @@ def run_sync_all(
             update_list = []
             no_change_list = []
 
+            # Pre-fetch all BILL.com users into cache (single API call with pagination)
+            # BILL.com S&E API does NOT support email/externalId as query parameters
+            # so we must fetch all users and filter client-side
             logger.info("=" * 60)
-            logger.info("PROCESSING EMPLOYEES ONE BY ONE")
+            logger.info("FETCHING BILL.COM USERS (building cache)")
+            logger.info("=" * 60)
+            bill_user_repo.build_email_cache()
+            cache_size = len(bill_user_repo._email_cache)
+            logger.info(f"BILL.com cache ready: {cache_size} users cached")
+
+            logger.info("=" * 60)
+            logger.info("PROCESSING EMPLOYEES")
             logger.info("=" * 60)
 
             for idx, emp_data in enumerate(raw_employees, 1):
@@ -156,16 +166,25 @@ def run_sync_all(
                     continue
                 total_eligible += 1
 
-                # Check against BILL.com
-                logger.info(f"[{idx}/{total_from_ukg}] Checking {emp.first_name} {emp.last_name} ({emp.email})")
-                existing = bill_user_repo.get_by_email(emp.email)
-                if existing:
-                    bill_user = BillUser.from_employee(emp, role=role)
-                    if bill_user.needs_update(existing):
-                        update_list.append(emp)
+                # Check against BILL.com cache (NO API call - uses pre-built cache)
+                email_lower = emp.email.lower().strip() if emp.email else ""
+                bill_user_id = bill_user_repo._email_cache.get(email_lower)
+
+                if bill_user_id:
+                    # User exists in BILL.com - check if update needed
+                    full_user_data = bill_user_repo._full_user_cache.get(email_lower, {})
+                    existing = BillUser.from_bill_api(full_user_data) if full_user_data else None
+                    if existing:
+                        bill_user = BillUser.from_employee(emp, role=role)
+                        if bill_user.needs_update(existing):
+                            update_list.append(emp)
+                        else:
+                            no_change_list.append(emp)
                     else:
-                        no_change_list.append(emp)
+                        # Has ID but no cached data - assume update needed
+                        update_list.append(emp)
                 else:
+                    # User not in BILL.com cache - needs creation
                     create_list.append(emp)
 
             # Log filter breakdown

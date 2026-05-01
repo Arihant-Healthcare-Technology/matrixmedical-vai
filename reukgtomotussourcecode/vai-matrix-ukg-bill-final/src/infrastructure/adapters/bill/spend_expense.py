@@ -53,7 +53,11 @@ class BillUserRepositoryImpl(BillUserRepository):
 
     def get_by_email(self, email: str) -> Optional[BillUser]:
         """
-        Get user by email address.
+        Get user by email address using cache-first approach.
+
+        NOTE: BILL.com S&E API does NOT support email as a query parameter.
+        This method uses the pre-built email cache. If cache is empty,
+        it will build the cache first (single paginated API call).
 
         Args:
             email: User email
@@ -61,24 +65,35 @@ class BillUserRepositoryImpl(BillUserRepository):
         Returns:
             BillUser if found, None otherwise
         """
-        # Check cache first
         email_lower = email.lower().strip()
+
+        # Check cache first
         if email_lower in self._email_cache:
             user_id = self._email_cache[email_lower]
             logger.debug(f"Email cache hit: {email} → user_id={user_id}")
+            # Return full user data from cache if available
+            full_data = self._full_user_cache.get(email_lower)
+            if full_data:
+                return BillUser.from_bill_api(full_data)
+            # Fallback to API lookup by ID if full data not cached
             return self.get_by_id(user_id)
 
-        # Search via API
-        logger.debug(f"Email cache miss: {email}, searching API")
-        data = self._client.get_user_by_email(email)
-        if data:
-            user = BillUser.from_bill_api(data)
-            if user.id:
-                self._email_cache[email_lower] = user.id
-                logger.debug(f"Email cache populated: {email} → {user.id}")
-            return user
+        # Cache miss - if cache is empty, build it first
+        if not self._email_cache:
+            logger.info(f"Email cache empty, building cache before lookup for {email}")
+            self.build_email_cache()
 
-        logger.debug(f"User not found in BILL.com: {email}")
+            # Check cache again after building
+            if email_lower in self._email_cache:
+                user_id = self._email_cache[email_lower]
+                logger.debug(f"Email cache hit (after build): {email} → user_id={user_id}")
+                full_data = self._full_user_cache.get(email_lower)
+                if full_data:
+                    return BillUser.from_bill_api(full_data)
+                return self.get_by_id(user_id)
+
+        # User not in cache - they don't exist in BILL.com
+        logger.debug(f"User not found in BILL.com cache: {email}")
         return None
 
     def get_active_users(self) -> List[BillUser]:
