@@ -4,7 +4,8 @@ Unit tests for BILL.com API base client.
 import pytest
 import responses
 import re
-from unittest.mock import MagicMock, patch
+import time
+from unittest.mock import MagicMock, patch, call
 
 from src.domain.exceptions import (
     ApiError,
@@ -527,14 +528,15 @@ class TestSpendExpenseClientUserOperations:
         assert result is True
         client._http.delete.assert_called_once_with("/users/uuid-123")
 
-    def test_get_all_users(self):
-        """Test get_all_users method."""
+    @patch("time.sleep")
+    def test_get_all_users(self, mock_sleep):
+        """Test get_all_users method (uses cursor pagination)."""
         client = self._create_client()
 
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "users": [{"id": "1"}, {"id": "2"}]
+            "results": [{"id": "1"}, {"id": "2"}]  # Cursor pagination uses "results" key
         }
         client._http.get = MagicMock(return_value=mock_response)
 
@@ -1041,3 +1043,463 @@ class TestAccountsPayableClientPaymentOperations:
         result = client.get_payments_for_bill("bill-123")
 
         assert len(result) == 2
+
+
+class TestSpendExpenseClientCursorPagination:
+    """Tests for cursor-based pagination in SpendExpenseClient."""
+
+    def _create_client(self):
+        """Create a client for testing."""
+        from src.infrastructure.adapters.bill.client import SpendExpenseClient
+
+        with patch("src.infrastructure.adapters.bill.base_client.BillHttpClient"):
+            return SpendExpenseClient(
+                api_base="https://api.bill.com/v3",
+                api_token="test_token",
+            )
+
+    @patch("time.sleep")
+    def test_single_page_no_next_cursor(self, mock_sleep):
+        """Single page response without nextPage cursor."""
+        client = self._create_client()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": [
+                {"id": "uuid-1", "email": "user1@example.com"},
+                {"id": "uuid-2", "email": "user2@example.com"},
+            ]
+            # No nextPage - indicates last page
+        }
+        client._http.get = MagicMock(return_value=mock_response)
+
+        result = client.get_all_users_with_cursor_pagination()
+
+        assert len(result) == 2
+        assert client._http.get.call_count == 1
+
+    @patch("time.sleep")
+    def test_multi_page_follows_next_cursor(self, mock_sleep):
+        """Multiple pages following nextPage cursor until null."""
+        client = self._create_client()
+
+        # First page with nextPage cursor
+        mock_response1 = MagicMock()
+        mock_response1.status_code = 200
+        mock_response1.json.return_value = {
+            "nextPage": "YXJyYXljb25uZWN0aW9uOjk5",
+            "results": [
+                {"id": "uuid-1", "email": "user1@example.com"},
+                {"id": "uuid-2", "email": "user2@example.com"},
+            ]
+        }
+
+        # Second page with another cursor
+        mock_response2 = MagicMock()
+        mock_response2.status_code = 200
+        mock_response2.json.return_value = {
+            "nextPage": "YXJyYXljb25uZWN0aW9uOjE5OQ",
+            "results": [
+                {"id": "uuid-3", "email": "user3@example.com"},
+            ]
+        }
+
+        # Third page - no nextPage (last page)
+        mock_response3 = MagicMock()
+        mock_response3.status_code = 200
+        mock_response3.json.return_value = {
+            "results": [
+                {"id": "uuid-4", "email": "user4@example.com"},
+            ]
+        }
+
+        client._http.get = MagicMock(
+            side_effect=[mock_response1, mock_response2, mock_response3]
+        )
+
+        result = client.get_all_users_with_cursor_pagination()
+
+        assert len(result) == 4
+        assert client._http.get.call_count == 3
+
+    @patch("time.sleep")
+    def test_max_parameter_in_request(self, mock_sleep):
+        """Should include max=100 in query params."""
+        client = self._create_client()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"results": []}
+        client._http.get = MagicMock(return_value=mock_response)
+
+        client.get_all_users_with_cursor_pagination(max_per_page=100)
+
+        call_kwargs = client._http.get.call_args.kwargs
+        assert call_kwargs["params"]["max"] == 100
+
+    @patch("time.sleep")
+    def test_next_page_cursor_in_subsequent_requests(self, mock_sleep):
+        """Should include nextPage cursor in follow-up requests."""
+        client = self._create_client()
+
+        # First page with cursor
+        mock_response1 = MagicMock()
+        mock_response1.status_code = 200
+        mock_response1.json.return_value = {
+            "nextPage": "cursor123",
+            "results": [{"id": "1"}]
+        }
+
+        # Second page - last
+        mock_response2 = MagicMock()
+        mock_response2.status_code = 200
+        mock_response2.json.return_value = {
+            "results": [{"id": "2"}]
+        }
+
+        client._http.get = MagicMock(side_effect=[mock_response1, mock_response2])
+
+        client.get_all_users_with_cursor_pagination()
+
+        # First call should not have nextPage
+        first_call_kwargs = client._http.get.call_args_list[0].kwargs
+        assert "nextPage" not in first_call_kwargs["params"]
+
+        # Second call should have nextPage
+        second_call_kwargs = client._http.get.call_args_list[1].kwargs
+        assert second_call_kwargs["params"]["nextPage"] == "cursor123"
+
+    @patch("time.sleep")
+    def test_extracts_results_from_response(self, mock_sleep):
+        """Should extract users from 'results' key."""
+        client = self._create_client()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": [
+                {"id": "uuid-1", "email": "user1@example.com", "firstName": "User", "lastName": "One"},
+            ],
+            "otherData": "ignored"
+        }
+        client._http.get = MagicMock(return_value=mock_response)
+
+        result = client.get_all_users_with_cursor_pagination()
+
+        assert len(result) == 1
+        assert result[0]["id"] == "uuid-1"
+        assert result[0]["email"] == "user1@example.com"
+
+    @patch("time.sleep")
+    def test_aggregates_users_across_pages(self, mock_sleep):
+        """Should combine users from all pages."""
+        client = self._create_client()
+
+        # Create 3 pages with 2 users each
+        responses = []
+        for page in range(3):
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "nextPage": f"cursor{page}" if page < 2 else None,
+                "results": [
+                    {"id": f"uuid-{page*2}", "email": f"user{page*2}@example.com"},
+                    {"id": f"uuid-{page*2+1}", "email": f"user{page*2+1}@example.com"},
+                ]
+            }
+            responses.append(mock_response)
+
+        client._http.get = MagicMock(side_effect=responses)
+
+        result = client.get_all_users_with_cursor_pagination()
+
+        assert len(result) == 6  # 3 pages * 2 users
+
+    @patch("time.sleep")
+    def test_returns_empty_list_for_empty_response(self, mock_sleep):
+        """Should return empty list when no users."""
+        client = self._create_client()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": []
+        }
+        client._http.get = MagicMock(return_value=mock_response)
+
+        result = client.get_all_users_with_cursor_pagination()
+
+        assert result == []
+
+    def test_rate_limiting_delay_between_pages(self):
+        """Should have 5-second delay between page requests."""
+        client = self._create_client()
+
+        # Two pages
+        mock_response1 = MagicMock()
+        mock_response1.status_code = 200
+        mock_response1.json.return_value = {
+            "nextPage": "cursor",
+            "results": [{"id": "1"}]
+        }
+
+        mock_response2 = MagicMock()
+        mock_response2.status_code = 200
+        mock_response2.json.return_value = {
+            "results": [{"id": "2"}]
+        }
+
+        client._http.get = MagicMock(side_effect=[mock_response1, mock_response2])
+
+        with patch("time.sleep") as mock_sleep:
+            client.get_all_users_with_cursor_pagination()
+
+            # Should sleep before each page request
+            assert mock_sleep.call_count == 2
+            mock_sleep.assert_called_with(5)
+
+    @patch("time.sleep")
+    def test_logs_pagination_progress(self, mock_sleep, caplog):
+        """Should log page count and user totals."""
+        import logging
+        client = self._create_client()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": [{"id": "1"}, {"id": "2"}]
+        }
+        client._http.get = MagicMock(return_value=mock_response)
+
+        with caplog.at_level(logging.INFO):
+            client.get_all_users_with_cursor_pagination()
+
+        # Check that pagination logging occurred
+        log_messages = [record.message for record in caplog.records]
+        assert any("page" in msg.lower() for msg in log_messages)
+
+
+class TestGetAllUsersUpdated:
+    """Tests for get_all_users using cursor pagination."""
+
+    def _create_client(self):
+        """Create a client for testing."""
+        from src.infrastructure.adapters.bill.client import SpendExpenseClient
+
+        with patch("src.infrastructure.adapters.bill.base_client.BillHttpClient"):
+            return SpendExpenseClient(
+                api_base="https://api.bill.com/v3",
+                api_token="test_token",
+            )
+
+    @patch("time.sleep")
+    def test_calls_cursor_pagination_method(self, mock_sleep):
+        """Should delegate to get_all_users_with_cursor_pagination."""
+        client = self._create_client()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": [{"id": "uuid-1", "email": "user@example.com"}]
+        }
+        client._http.get = MagicMock(return_value=mock_response)
+
+        # Patch the cursor pagination method to verify it's called
+        with patch.object(
+            client, "get_all_users_with_cursor_pagination", return_value=[{"id": "uuid-1"}]
+        ) as mock_cursor:
+            result = client.get_all_users()
+
+            mock_cursor.assert_called_once()
+            assert result == [{"id": "uuid-1"}]
+
+
+class TestSearchUserByExternalId:
+    """Tests for search_user_by_external_id method."""
+
+    def _create_client(self):
+        """Create a client for testing."""
+        from src.infrastructure.adapters.bill.client import SpendExpenseClient
+
+        with patch("src.infrastructure.adapters.bill.base_client.BillHttpClient"):
+            return SpendExpenseClient(
+                api_base="https://api.bill.com/v3",
+                api_token="test_token",
+            )
+
+    def test_finds_user_by_external_id(self):
+        """Should find user by external ID."""
+        client = self._create_client()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "users": [{"id": "uuid-1", "externalId": "EXT-001"}]
+        }
+        client._http.get = MagicMock(return_value=mock_response)
+
+        result = client.search_user_by_external_id("EXT-001")
+
+        assert result is not None
+        assert result["externalId"] == "EXT-001"
+
+    def test_returns_none_when_not_found(self):
+        """Should return None when user not found."""
+        client = self._create_client()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"users": []}
+        client._http.get = MagicMock(return_value=mock_response)
+
+        result = client.search_user_by_external_id("NONEXISTENT")
+
+        assert result is None
+
+    def test_falls_back_to_pagination_on_error(self):
+        """Should fall back to pagination when direct search fails."""
+        client = self._create_client()
+
+        # First call raises exception, second (pagination) returns results
+        mock_response_error = MagicMock()
+        mock_response_error.status_code = 500
+        mock_response_error.json.side_effect = Exception("API Error")
+
+        mock_response_success = MagicMock()
+        mock_response_success.status_code = 200
+        mock_response_success.json.return_value = {
+            "users": [{"id": "uuid-1", "externalId": "EXT-001"}]
+        }
+
+        client._http.get = MagicMock(side_effect=[mock_response_error, mock_response_success])
+
+        result = client.search_user_by_external_id("EXT-001")
+
+        # Should find via pagination fallback
+        assert result["externalId"] == "EXT-001"
+
+
+class TestGetUserByEmailFallback:
+    """Tests for get_user_by_email pagination fallback."""
+
+    def _create_client(self):
+        """Create a client for testing."""
+        from src.infrastructure.adapters.bill.client import SpendExpenseClient
+
+        with patch("src.infrastructure.adapters.bill.base_client.BillHttpClient"):
+            return SpendExpenseClient(
+                api_base="https://api.bill.com/v3",
+                api_token="test_token",
+            )
+
+    def test_falls_back_to_pagination_when_filter_fails(self):
+        """Should fall back to pagination when email filter fails."""
+        client = self._create_client()
+
+        # First call (email filter) raises exception
+        mock_response_error = MagicMock()
+        mock_response_error.status_code = 500
+        mock_response_error.json.side_effect = Exception("Filter not supported")
+
+        # Second call (pagination) returns user
+        mock_response_success = MagicMock()
+        mock_response_success.status_code = 200
+        mock_response_success.json.return_value = {
+            "users": [{"id": "uuid-1", "email": "target@example.com"}]
+        }
+
+        client._http.get = MagicMock(side_effect=[mock_response_error, mock_response_success])
+
+        result = client.get_user_by_email("target@example.com")
+
+        assert result is not None
+        assert result["email"] == "target@example.com"
+
+    def test_finds_via_pagination_when_filter_returns_empty(self):
+        """Should find user via pagination when filter returns no matches."""
+        client = self._create_client()
+
+        # First call returns empty (filter doesn't match)
+        mock_response_empty = MagicMock()
+        mock_response_empty.status_code = 200
+        mock_response_empty.json.return_value = {"users": []}
+
+        # Second call (pagination) returns user
+        mock_response_with_user = MagicMock()
+        mock_response_with_user.status_code = 200
+        mock_response_with_user.json.return_value = {
+            "users": [{"id": "uuid-1", "email": "target@example.com"}]
+        }
+
+        client._http.get = MagicMock(side_effect=[mock_response_empty, mock_response_with_user])
+
+        result = client.get_user_by_email("target@example.com")
+
+        assert result is not None
+        assert result["email"] == "target@example.com"
+
+    def test_logs_debug_when_email_filter_fails(self):
+        """Should log debug message when email filter search fails (covers line 116-117)."""
+        client = self._create_client()
+
+        # First call (email filter) raises exception
+        # Second call (pagination) returns empty to end the pagination loop
+        call_count = [0]
+
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise Exception("Connection error")
+            # Return empty for pagination
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"users": []}
+            return mock_response
+
+        client._http.get = MagicMock(side_effect=side_effect)
+
+        # Should fall through to pagination and return None
+        result = client.get_user_by_email("test@example.com")
+
+        # Should return None since user not found after fallback
+        assert result is None
+
+
+class TestSearchUserByExternalIdExceptionHandling:
+    """Tests for exception handling in search_user_by_external_id."""
+
+    def _create_client(self):
+        """Create a client for testing."""
+        from src.infrastructure.adapters.bill.client import SpendExpenseClient
+
+        with patch("src.infrastructure.adapters.bill.base_client.BillHttpClient"):
+            return SpendExpenseClient(
+                api_base="https://api.bill.com/v3",
+                api_token="test_token",
+            )
+
+    def test_logs_debug_when_external_id_search_fails(self):
+        """Should log debug and fall back when externalId search fails (covers line 151-152)."""
+        client = self._create_client()
+
+        # First call (direct search) raises exception
+        # Second call (pagination fallback) returns empty
+        call_count = [0]
+
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise Exception("ExternalId search not supported")
+            # Return empty for pagination fallback
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"users": []}
+            return mock_response
+
+        client._http.get = MagicMock(side_effect=side_effect)
+
+        # Should fall back to pagination and return None
+        result = client.search_user_by_external_id("EXT-001")
+
+        assert result is None

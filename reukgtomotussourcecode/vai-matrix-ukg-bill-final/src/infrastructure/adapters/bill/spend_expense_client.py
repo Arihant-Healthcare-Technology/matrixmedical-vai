@@ -5,6 +5,7 @@ This module provides the S&E API client for user management.
 """
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from src.infrastructure.adapters.bill.base_client import BillClient
@@ -229,5 +230,62 @@ class SpendExpenseClient(BillClient):
         return True
 
     def get_all_users(self) -> List[Dict[str, Any]]:
-        """Get all S&E users (paginated)."""
-        return self._paginate("/users", item_keys=["users"])
+        """Get all S&E users using cursor-based pagination."""
+        return self.get_all_users_with_cursor_pagination()
+
+    def get_all_users_with_cursor_pagination(
+        self, max_per_page: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch all S&E users using cursor-based pagination.
+
+        Bill S&E API uses nextPage cursor instead of page numbers.
+        Uses `max` query param for page size and `nextPage` for cursor.
+
+        Args:
+            max_per_page: Maximum users per page (Bill API max is 100)
+
+        Returns:
+            List of all user dicts
+        """
+        all_users: List[Dict[str, Any]] = []
+        next_page_cursor: Optional[str] = None
+        page_count = 0
+
+        while True:
+            # Rate limiting delay before each request
+            time.sleep(5)
+            page_count += 1
+
+            # Build query params
+            params: Dict[str, Any] = {"max": max_per_page}
+            if next_page_cursor:
+                params["nextPage"] = next_page_cursor
+
+            logger.info(
+                f"Fetching Bill users page {page_count} "
+                f"(cursor={next_page_cursor or 'initial'})"
+            )
+
+            response = self._http.get("/users", params=params)
+            data = self._handle_response(response)
+
+            # Extract results from response
+            results = data.get("results", [])
+            all_users.extend(results)
+
+            logger.info(
+                f"Page {page_count}: fetched {len(results)} users "
+                f"(total: {len(all_users)})"
+            )
+
+            # Check for next page cursor
+            next_page_cursor = data.get("nextPage")
+            if not next_page_cursor:
+                break  # No more pages
+
+        logger.info(
+            f"Pagination complete: {len(all_users)} total users "
+            f"from {page_count} pages"
+        )
+        return all_users

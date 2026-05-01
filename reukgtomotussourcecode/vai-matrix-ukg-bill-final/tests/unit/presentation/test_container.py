@@ -263,6 +263,7 @@ class TestContainer:
         mock_settings.bill_api_token = "token123"
         mock_settings.bill_org_id = "org123"
         mock_settings.rate_limit_calls_per_minute = 60
+        mock_settings.ukg.days_to_process = None
         container = Container(settings=mock_settings)
 
         with patch("src.infrastructure.adapters.ukg.client.UKGClient"), \
@@ -272,6 +273,84 @@ class TestContainer:
             service = container.sync_service()
 
             MockService.assert_called_once()
+
+    def test_sync_service_passes_days_to_process_none(self):
+        """Test sync_service passes days_to_process=None when not set."""
+        from src.presentation.cli.container import Container
+
+        mock_settings = MagicMock()
+        mock_settings.ukg_api_base = "https://ukg.example.com"
+        mock_settings.ukg_username = "user"
+        mock_settings.ukg_password = "pass"
+        mock_settings.ukg_api_key = "key123"
+        mock_settings.bill_api_base = "https://bill.example.com"
+        mock_settings.bill_api_token = "token123"
+        mock_settings.bill_org_id = "org123"
+        mock_settings.rate_limit_calls_per_minute = 60
+        mock_settings.ukg.days_to_process = None
+        container = Container(settings=mock_settings)
+
+        with patch("src.infrastructure.adapters.ukg.client.UKGClient"), \
+             patch("src.infrastructure.adapters.ukg.repository.UKGEmployeeRepository"), \
+             patch("src.infrastructure.adapters.bill.spend_expense.SpendExpenseClient"), \
+             patch("src.application.services.sync_service.SyncService") as MockService:
+            container.sync_service()
+
+            # Verify days_to_process=None is passed
+            call_kwargs = MockService.call_args[1]
+            assert call_kwargs["days_to_process"] is None
+
+    def test_sync_service_passes_days_to_process_value(self):
+        """Test sync_service passes days_to_process when set."""
+        from src.presentation.cli.container import Container
+
+        mock_settings = MagicMock()
+        mock_settings.ukg_api_base = "https://ukg.example.com"
+        mock_settings.ukg_username = "user"
+        mock_settings.ukg_password = "pass"
+        mock_settings.ukg_api_key = "key123"
+        mock_settings.bill_api_base = "https://bill.example.com"
+        mock_settings.bill_api_token = "token123"
+        mock_settings.bill_org_id = "org123"
+        mock_settings.rate_limit_calls_per_minute = 60
+        mock_settings.ukg.days_to_process = 7  # Set to 7 days
+        container = Container(settings=mock_settings)
+
+        with patch("src.infrastructure.adapters.ukg.client.UKGClient"), \
+             patch("src.infrastructure.adapters.ukg.repository.UKGEmployeeRepository"), \
+             patch("src.infrastructure.adapters.bill.spend_expense.SpendExpenseClient"), \
+             patch("src.application.services.sync_service.SyncService") as MockService:
+            container.sync_service()
+
+            # Verify days_to_process=7 is passed
+            call_kwargs = MockService.call_args[1]
+            assert call_kwargs["days_to_process"] == 7
+
+    def test_sync_service_passes_days_to_process_zero(self):
+        """Test sync_service passes days_to_process=0."""
+        from src.presentation.cli.container import Container
+
+        mock_settings = MagicMock()
+        mock_settings.ukg_api_base = "https://ukg.example.com"
+        mock_settings.ukg_username = "user"
+        mock_settings.ukg_password = "pass"
+        mock_settings.ukg_api_key = "key123"
+        mock_settings.bill_api_base = "https://bill.example.com"
+        mock_settings.bill_api_token = "token123"
+        mock_settings.bill_org_id = "org123"
+        mock_settings.rate_limit_calls_per_minute = 60
+        mock_settings.ukg.days_to_process = 0  # Today only
+        container = Container(settings=mock_settings)
+
+        with patch("src.infrastructure.adapters.ukg.client.UKGClient"), \
+             patch("src.infrastructure.adapters.ukg.repository.UKGEmployeeRepository"), \
+             patch("src.infrastructure.adapters.bill.spend_expense.SpendExpenseClient"), \
+             patch("src.application.services.sync_service.SyncService") as MockService:
+            container.sync_service()
+
+            # Verify days_to_process=0 is passed
+            call_kwargs = MockService.call_args[1]
+            assert call_kwargs["days_to_process"] == 0
 
     def test_vendor_service_creates_instance(self):
         """Test vendor_service creates VendorService."""

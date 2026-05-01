@@ -216,11 +216,19 @@ class Container:
         """Get employee sync service."""
         def factory():
             from src.application.services.sync_service import SyncService
-            logger.info("Creating sync service with employee and BILL user repositories")
+            days_to_process = self.settings.ukg.days_to_process
+            if days_to_process is not None:
+                logger.info(
+                    f"Creating sync service with days_to_process={days_to_process} "
+                    "(will filter UKG employees by dateTimeChanged)"
+                )
+            else:
+                logger.info("Creating sync service with employee and BILL user repositories")
             return SyncService(
                 employee_repository=self.employee_repository(),
                 bill_user_repository=self.bill_user_repository(),
                 rate_limiter=self.rate_limiter().acquire,
+                days_to_process=days_to_process,
             )
         return self._get_or_create("sync_service", factory)
 

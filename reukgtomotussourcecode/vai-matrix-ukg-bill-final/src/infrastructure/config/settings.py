@@ -53,6 +53,12 @@ class UKGSettings(BaseSettings):
     # Company configuration
     company_id: str = Field(default="", description="UKG company identifier")
 
+    # Employee change filtering
+    days_to_process: Optional[int] = Field(
+        default=None,
+        description="Only process employees changed within this many days. None = no filter.",
+    )
+
     @field_validator("base_url")
     @classmethod
     def validate_base_url(cls, v: str) -> str:

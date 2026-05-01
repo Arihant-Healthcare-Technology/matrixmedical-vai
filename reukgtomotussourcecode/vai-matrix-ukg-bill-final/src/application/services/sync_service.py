@@ -12,7 +12,7 @@ import logging
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Callable
 
 from src.domain.interfaces.services import (
@@ -47,6 +47,7 @@ class SyncService(EmployeeSyncService):
         rate_limiter: Optional[Callable[[], None]] = None,
         person_cache: Optional[Dict[str, Dict[str, Any]]] = None,
         department_client: Optional[DepartmentClient] = None,
+        days_to_process: Optional[int] = None,
     ):
         """
         Initialize sync service.
@@ -57,12 +58,14 @@ class SyncService(EmployeeSyncService):
             rate_limiter: Optional rate limiter callable.
             person_cache: Optional cache for person details.
             department_client: Optional client for resolving budget from cost center.
+            days_to_process: Only process employees changed within this many days. None = no filter.
         """
         self.employee_repo = employee_repository
         self.bill_user_repo = bill_user_repository
         self.rate_limiter = rate_limiter
         self.person_cache = person_cache or {}
         self.department_client = department_client
+        self.days_to_process = days_to_process
 
     def sync_employee(
         self,
@@ -192,6 +195,197 @@ class SyncService(EmployeeSyncService):
                 details={"email": bill_user.email},
             )
 
+    def _create_bill_user(
+        self,
+        employee: Employee,
+        default_role: BillRole = BillRole.MEMBER,
+    ) -> SyncResult:
+        """
+        Create a new Bill user (POST) - no lookup needed.
+
+        Used when we know the user doesn't exist in Bill based on
+        prior categorization using the email cache.
+
+        Args:
+            employee: Employee to create in Bill.
+            default_role: Default role for new users.
+
+        Returns:
+            SyncResult with creation details.
+        """
+        # Rate limiting delay
+        time.sleep(5)
+        if self.rate_limiter:
+            self.rate_limiter()
+
+        try:
+            # Validate email
+            if not employee.email:
+                return SyncResult(
+                    success=False,
+                    action="error",
+                    entity_id=employee.employee_id,
+                    message="Employee missing email address",
+                    details={"employee_number": employee.employee_number},
+                )
+
+            # Resolve supervisor email
+            supervisor_email = self.resolve_supervisor_email(employee)
+
+            # Map employee to Bill user
+            bill_user = map_employee_to_bill_user(
+                employee,
+                role=default_role,
+                manager_email=supervisor_email,
+            )
+
+            # Resolve budget from cost center
+            if self.department_client and employee.cost_center:
+                budget = self.department_client.get_budget_from_cost_center(
+                    employee.cost_center
+                )
+                bill_user.budget = budget
+
+            logger.info(
+                f"Creating BILL user (POST): {bill_user.email}, "
+                f"role={bill_user.role.value if bill_user.role else 'None'}"
+            )
+
+            # Create user directly (no lookup)
+            created_user = self.bill_user_repo.create(bill_user)
+
+            logger.info(
+                f"User created: {employee.employee_number} → {created_user.email} "
+                f"(id={created_user.id})"
+            )
+
+            return SyncResult(
+                success=True,
+                action="created",
+                entity_id=created_user.id or employee.employee_id,
+                message=f"User created: {created_user.email}",
+                details={
+                    "employee_number": employee.employee_number,
+                    "role": created_user.role.value if created_user.role else None,
+                },
+            )
+
+        except Exception as e:
+            if isinstance(e, ApiError) and e.status_code == 400:
+                logger.warning(
+                    f"Bill API validation error creating user {employee.email}: {e}"
+                )
+            else:
+                logger.error(
+                    f"Failed to create user {employee.email}: {e}",
+                    exc_info=True,
+                )
+            return SyncResult(
+                success=False,
+                action="error",
+                entity_id=employee.employee_id,
+                message=f"Failed to create user: {e}",
+                details={"email": employee.email},
+            )
+
+    def _update_bill_user(
+        self,
+        employee: Employee,
+        bill_user_id: str,
+        default_role: BillRole = BillRole.MEMBER,
+    ) -> SyncResult:
+        """
+        Update existing Bill user (PATCH) - use cached ID, skip lookup.
+
+        Used when we know the user exists in Bill and have their ID
+        from prior categorization using the email cache.
+
+        Args:
+            employee: Employee data to update.
+            bill_user_id: Existing Bill user ID from cache.
+            default_role: Default role for users.
+
+        Returns:
+            SyncResult with update details.
+        """
+        # Rate limiting delay
+        time.sleep(5)
+        if self.rate_limiter:
+            self.rate_limiter()
+
+        try:
+            # Validate email
+            if not employee.email:
+                return SyncResult(
+                    success=False,
+                    action="error",
+                    entity_id=employee.employee_id,
+                    message="Employee missing email address",
+                    details={"employee_number": employee.employee_number},
+                )
+
+            # Resolve supervisor email
+            supervisor_email = self.resolve_supervisor_email(employee)
+
+            # Map employee to Bill user
+            bill_user = map_employee_to_bill_user(
+                employee,
+                role=default_role,
+                manager_email=supervisor_email,
+            )
+
+            # Set the ID from cache - skip get_by_email lookup
+            bill_user.id = bill_user_id
+
+            # Resolve budget from cost center
+            if self.department_client and employee.cost_center:
+                budget = self.department_client.get_budget_from_cost_center(
+                    employee.cost_center
+                )
+                bill_user.budget = budget
+
+            logger.info(
+                f"Updating BILL user (PATCH): {bill_user.email}, "
+                f"id={bill_user_id}, role={bill_user.role.value if bill_user.role else 'None'}"
+            )
+
+            # Update user directly (no lookup needed)
+            updated_user = self.bill_user_repo.update(bill_user)
+
+            logger.info(
+                f"User updated: {employee.employee_number} → {updated_user.email} "
+                f"(id={updated_user.id})"
+            )
+
+            return SyncResult(
+                success=True,
+                action="updated",
+                entity_id=updated_user.id or employee.employee_id,
+                message=f"User updated: {updated_user.email}",
+                details={
+                    "employee_number": employee.employee_number,
+                    "role": updated_user.role.value if updated_user.role else None,
+                },
+            )
+
+        except Exception as e:
+            if isinstance(e, ApiError) and e.status_code == 400:
+                logger.warning(
+                    f"Bill API validation error updating user {employee.email}: {e}"
+                )
+            else:
+                logger.error(
+                    f"Failed to update user {employee.email}: {e}",
+                    exc_info=True,
+                )
+            return SyncResult(
+                success=False,
+                action="error",
+                entity_id=employee.employee_id,
+                message=f"Failed to update user: {e}",
+                details={"email": employee.email, "bill_user_id": bill_user_id},
+            )
+
     def _users_match(self, existing: BillUser, updated: BillUser) -> bool:
         """Check if two users have matching data."""
         return (
@@ -253,6 +447,10 @@ class SyncService(EmployeeSyncService):
         """
         Sync multiple employees to BILL.com.
 
+        Uses cursor-based pagination to fetch all Bill users upfront,
+        then categorizes employees into POST (create) vs PATCH (update)
+        lists to avoid per-employee lookups.
+
         Args:
             employees: List of employees to sync.
             default_role: Default role for new users.
@@ -277,9 +475,9 @@ class SyncService(EmployeeSyncService):
             result.end_time = datetime.now()
             return result
 
-        # Pre-populate email cache to avoid repeated pagination for each employee
-        # The _paginate method now has rate limiting built-in (3s delay per request)
-        logger.info("Pre-populating BILL.com email cache (with rate limiting)...")
+        # Pre-populate email cache using cursor-based pagination
+        # This fetches ALL Bill users upfront for efficient categorization
+        logger.info("Pre-populating BILL.com email cache (cursor pagination)...")
         self.bill_user_repo.build_email_cache()
         logger.info("Email cache populated.")
 
@@ -289,20 +487,26 @@ class SyncService(EmployeeSyncService):
             departments = self.department_client.list_departments()
             logger.info(f"Departments cache populated: {len(departments)} departments")
 
-        # Process sequentially with single worker
-        total_employees = len(employees)
-        completed_count = 0
-        progress_interval = max(1, total_employees // 10)  # Log every 10%
+        # Categorize employees into POST (create) vs PATCH (update) lists
+        logger.info("Categorizing employees into create vs update lists...")
+        to_create, to_update = self.bill_user_repo.categorize_employees(employees)
 
         logger.info(
-            f"Starting batch sync: {total_employees} employees, {workers} workers "
+            f"Sync plan: {len(to_create)} new users (POST), "
+            f"{len(to_update)} existing users (PATCH) "
             f"[correlation_id={correlation_id}]"
         )
 
+        total_to_process = len(to_create) + len(to_update)
+        completed_count = 0
+        progress_interval = max(1, total_to_process // 10)  # Log every 10%
+
+        # Process creates (POST calls) - no lookup needed
+        logger.info(f"Processing {len(to_create)} new users (POST)...")
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
-                executor.submit(self.sync_employee, emp, default_role): emp
-                for emp in employees
+                executor.submit(self._create_bill_user, emp, default_role): emp
+                for emp in to_create
             }
 
             for future in as_completed(futures):
@@ -313,18 +517,14 @@ class SyncService(EmployeeSyncService):
                     sync_result = future.result()
                     result.results.append(sync_result)
 
-                    if sync_result.action in ("create", "created"):
+                    if sync_result.action == "created":
                         result.created += 1
-                    elif sync_result.action in ("update", "updated"):
-                        result.updated += 1
-                    elif sync_result.action in ("skip", "skipped"):
-                        result.skipped += 1
                     elif sync_result.action == "error":
                         result.errors += 1
 
                 except Exception as e:
                     logger.error(
-                        f"Unexpected error syncing {employee.email}: {e}",
+                        f"Unexpected error creating {employee.email}: {e}",
                         exc_info=True,
                     )
                     result.errors += 1
@@ -338,12 +538,57 @@ class SyncService(EmployeeSyncService):
                     )
 
                 # Log progress at intervals
-                if completed_count % progress_interval == 0 or completed_count == total_employees:
-                    percentage = (completed_count / total_employees) * 100
+                if completed_count % progress_interval == 0:
+                    percentage = (completed_count / total_to_process) * 100
                     logger.info(
-                        f"Sync progress: {completed_count}/{total_employees} ({percentage:.0f}%) "
-                        f"[created={result.created}, updated={result.updated}, "
-                        f"skipped={result.skipped}, errors={result.errors}]"
+                        f"Sync progress: {completed_count}/{total_to_process} ({percentage:.0f}%) "
+                        f"[created={result.created}, updated={result.updated}, errors={result.errors}]"
+                    )
+
+        # Process updates (PATCH calls) - use cached ID, skip lookup
+        logger.info(f"Processing {len(to_update)} existing users (PATCH)...")
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    self._update_bill_user, emp, bill_user_id, default_role
+                ): emp
+                for emp, bill_user_id in to_update
+            }
+
+            for future in as_completed(futures):
+                employee = futures[future]
+                completed_count += 1
+
+                try:
+                    sync_result = future.result()
+                    result.results.append(sync_result)
+
+                    if sync_result.action == "updated":
+                        result.updated += 1
+                    elif sync_result.action == "error":
+                        result.errors += 1
+
+                except Exception as e:
+                    logger.error(
+                        f"Unexpected error updating {employee.email}: {e}",
+                        exc_info=True,
+                    )
+                    result.errors += 1
+                    result.results.append(
+                        SyncResult(
+                            success=False,
+                            action="error",
+                            entity_id=employee.employee_id,
+                            message=str(e),
+                        )
+                    )
+
+                # Log progress at intervals
+                if completed_count % progress_interval == 0 or completed_count == total_to_process:
+                    percentage = (completed_count / total_to_process) * 100
+                    logger.info(
+                        f"Sync progress: {completed_count}/{total_to_process} ({percentage:.0f}%) "
+                        f"[created={result.created}, updated={result.updated}, errors={result.errors}]"
                     )
 
         result.end_time = datetime.now()
@@ -436,6 +681,10 @@ class SyncService(EmployeeSyncService):
 
         total_from_ukg = len(raw_employees)
         logger.info(f"Fetched {total_from_ukg} employees from UKG")
+
+        # Filter by dateTimeChanged if days_to_process is set
+        if self.days_to_process is not None and self.days_to_process >= 0:
+            raw_employees = self._filter_by_date_changed(raw_employees, self.days_to_process)
 
         # Log processing header
         logger.info("=" * 60)
@@ -598,3 +847,55 @@ class SyncService(EmployeeSyncService):
             )
 
         return None
+
+    def _filter_by_date_changed(
+        self,
+        employees: List[Dict[str, Any]],
+        days: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Filter employees to only those changed within the last X days.
+
+        Args:
+            employees: List of raw employee data from UKG API.
+            days: Number of days to look back.
+
+        Returns:
+            Filtered list of employees changed within the specified period.
+        """
+        cutoff_date = datetime.now() - timedelta(days=days)
+        filtered = []
+
+        for emp in employees:
+            date_changed_str = emp.get("dateTimeChanged")
+            if date_changed_str:
+                try:
+                    # Parse UKG format: "2026-04-20T13:35:31.44"
+                    # Handle with or without timezone
+                    date_changed = datetime.fromisoformat(
+                        date_changed_str.replace("Z", "+00:00")
+                    )
+                    # Make cutoff_date timezone-aware if needed
+                    if date_changed.tzinfo is not None:
+                        from datetime import timezone
+                        cutoff_aware = cutoff_date.replace(tzinfo=timezone.utc)
+                        if date_changed >= cutoff_aware:
+                            filtered.append(emp)
+                    else:
+                        if date_changed >= cutoff_date:
+                            filtered.append(emp)
+                except ValueError as e:
+                    # If parse fails, include employee to be safe
+                    logger.debug(
+                        f"Could not parse dateTimeChanged '{date_changed_str}': {e}, including employee"
+                    )
+                    filtered.append(emp)
+            else:
+                # If no dateTimeChanged, include employee to be safe
+                filtered.append(emp)
+
+        logger.info(
+            f"Filtered employees by date changed: {len(filtered)}/{len(employees)} "
+            f"(last {days} days)"
+        )
+        return filtered

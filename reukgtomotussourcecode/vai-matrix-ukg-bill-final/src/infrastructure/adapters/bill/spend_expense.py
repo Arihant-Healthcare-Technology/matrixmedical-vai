@@ -5,7 +5,7 @@ This module implements the BillUserRepository interface using the S&E API client
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.domain.interfaces.repositories import BillUserRepository
 from src.domain.models.bill_user import BillUser
@@ -30,6 +30,7 @@ class BillUserRepositoryImpl(BillUserRepository):
         """
         self._client = client
         self._email_cache: Dict[str, str] = {}  # email -> user_id
+        self._full_user_cache: Dict[str, Dict[str, Any]] = {}  # email -> full user data
 
     def get_by_id(self, entity_id: str) -> Optional[BillUser]:
         """
@@ -300,23 +301,84 @@ class BillUserRepositoryImpl(BillUserRepository):
         """Clear the email cache."""
         self._email_cache.clear()
 
-    def build_email_cache(self) -> None:
+    def build_email_cache(self) -> Dict[str, Dict[str, Any]]:
         """
-        Pre-populate email cache from all users.
+        Pre-populate email cache from all users using cursor pagination.
 
-        Useful before batch operations to reduce API calls.
+        Populates both _email_cache (email -> user_id) and
+        _full_user_cache (email -> full user data) for efficient
+        categorization of employees.
+
+        Returns:
+            Dict mapping email -> full user data
         """
-        logger.info("Building email cache from BILL.com users...")
+        logger.info("Building email cache from BILL.com users (cursor pagination)...")
         all_users = self._client.get_all_users()
+
+        # Clear existing caches
+        self._email_cache.clear()
+        self._full_user_cache.clear()
+
         cached_count = 0
         for data in all_users:
             email = data.get("email", "").lower().strip()
             user_id = data.get("id") or data.get("uuid")
             if email and user_id:
                 self._email_cache[email] = user_id
+                self._full_user_cache[email] = data
                 cached_count += 1
 
         logger.info(
             f"Email cache built: {cached_count} users cached "
             f"(from {len(all_users)} total users)"
         )
+        return self._full_user_cache
+
+    def categorize_employees(
+        self,
+        ukg_employees: List["Employee"],  # Forward reference
+    ) -> Tuple[List["Employee"], List[Tuple["Employee", str]]]:
+        """
+        Categorize UKG employees into those needing POST vs PATCH.
+
+        Compares UKG employee emails against cached Bill users to determine
+        which employees need to be created (POST) vs updated (PATCH).
+
+        Args:
+            ukg_employees: List of employees from UKG
+
+        Returns:
+            Tuple of:
+            - employees_to_create: List[Employee] not in Bill (need POST)
+            - employees_to_update: List[Tuple[Employee, bill_user_id]] in Bill (need PATCH)
+        """
+        from src.domain.models.employee import Employee
+
+        # Ensure cache is populated
+        if not self._email_cache:
+            self.build_email_cache()
+
+        employees_to_create: List[Employee] = []
+        employees_to_update: List[Tuple[Employee, str]] = []
+
+        for employee in ukg_employees:
+            if not employee.email:
+                logger.debug(
+                    f"Employee {employee.employee_number} skipped: missing email"
+                )
+                continue
+
+            email_lower = employee.email.lower().strip()
+
+            if email_lower in self._email_cache:
+                bill_user_id = self._email_cache[email_lower]
+                employees_to_update.append((employee, bill_user_id))
+            else:
+                employees_to_create.append(employee)
+
+        logger.info(
+            f"Categorization complete: {len(employees_to_create)} to create (POST), "
+            f"{len(employees_to_update)} to update (PATCH)"
+        )
+
+        return employees_to_create, employees_to_update
