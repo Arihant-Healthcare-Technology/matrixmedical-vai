@@ -131,17 +131,16 @@ class BillClient:
         if response.status_code == 401:
             raise AuthenticationError(
                 message=f"BILL API authentication failed: {error_message}",
-                auth_type="api_token",
+                provider="api_token",
             )
         elif response.status_code == 403:
             raise AuthenticationError(
                 message=f"BILL API access denied: {error_message}",
-                auth_type="api_token",
+                provider="api_token",
             )
         elif response.status_code == 404:
             raise NotFoundError(
                 message=f"Resource not found: {error_message}",
-                status_code=404,
             )
         elif response.status_code == 429:
             raise RateLimitError(
