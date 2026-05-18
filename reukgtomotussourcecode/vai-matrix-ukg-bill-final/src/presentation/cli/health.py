@@ -10,10 +10,13 @@ Usage:
 """
 
 import json
+import logging
 import os
 import sys
 from datetime import datetime
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 def check_environment_variables() -> Dict[str, Any]:
@@ -249,24 +252,26 @@ def main() -> None:
     result = check_health()
 
     if args.json:
-        print(json.dumps(result, indent=2))
+        logger.info(json.dumps(result, indent=2))
     else:
         status = result["status"].upper()
         if result["status"] == "healthy":
-            print(f"OK - {status}")
+            logger.info(f"OK - {status}")
         else:
-            print(f"FAIL - {status}")
+            logger.error(f"FAIL - {status}")
 
         if args.verbose:
-            print(f"\nTimestamp: {result['timestamp']}")
-            print(f"Service: {result['service']}")
-            print(f"Version: {result['version']}")
-            print(f"Mode: {result['mode']}")
-            print("\nChecks:")
+            logger.info(f"")
+            logger.info(f"Timestamp: {result['timestamp']}")
+            logger.info(f"Service: {result['service']}")
+            logger.info(f"Version: {result['version']}")
+            logger.info(f"Mode: {result['mode']}")
+            logger.info("")
+            logger.info("Checks:")
             for name, check in result["checks"].items():
                 healthy = check.get("healthy", True)
                 status_icon = "[OK]" if healthy else "[FAIL]"
-                print(f"  {status_icon} {name}")
+                logger.info(f"  {status_icon} {name}")
 
     sys.exit(0 if result["status"] == "healthy" else 1)
 

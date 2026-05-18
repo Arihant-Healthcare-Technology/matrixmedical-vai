@@ -139,8 +139,11 @@ class BillClient:
                 provider="api_token",
             )
         elif response.status_code == 404:
+            logger.error(f"404 NOT FOUND - Full URL: {response.url}")
+            logger.error(f"404 NOT FOUND - Response body: {error_data}")
             raise NotFoundError(
                 message=f"Resource not found: {error_message}",
+                url=response.url,
             )
         elif response.status_code == 429:
             raise RateLimitError(

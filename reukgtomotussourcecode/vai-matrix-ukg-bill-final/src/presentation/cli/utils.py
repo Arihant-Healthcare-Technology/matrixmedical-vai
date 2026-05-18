@@ -133,18 +133,19 @@ def print_preview(
         preview_items = items[:max_items]
     remaining = len(items) - len(preview_items)
 
-    print(f"\n=== Preview: {label} ({len(items)} total) ===")
+    logger.info(f"")
+    logger.info(f"=== Preview: {label} ({len(items)} total) ===")
 
     for item in preview_items:
         if formatter:
-            print(f"  - {formatter(item)}")
+            logger.info(f"  - {formatter(item)}")
         else:
-            print(f"  - {_format_item_default(item)}")
+            logger.info(f"  - {_format_item_default(item)}")
 
     if remaining > 0:
-        print(f"  ... and {remaining} more")
+        logger.info(f"  ... and {remaining} more")
 
-    print()
+    logger.info("")
 
 
 def _format_item_default(item: Any) -> str:
@@ -192,47 +193,49 @@ def print_sync_result(
         show_errors: Whether to print individual errors.
         max_errors: Maximum errors to print.
     """
-    print("\n" + "=" * 50)
-    print(title)
-    print("=" * 50)
+    logger.info("")
+    logger.info("=" * 50)
+    logger.info(title)
+    logger.info("=" * 50)
 
     # Core stats
-    print(f"Total Processed:  {result.total}")
-    print(f"Created:          {result.created}")
-    print(f"Updated:          {result.updated}")
-    print(f"Skipped:          {result.skipped}")
-    print(f"Errors:           {result.errors}")
+    logger.info(f"Total Processed:  {result.total}")
+    logger.info(f"Created:          {result.created}")
+    logger.info(f"Updated:          {result.updated}")
+    logger.info(f"Skipped:          {result.skipped}")
+    logger.info(f"Errors:           {result.errors}")
 
     # Success rate
     if hasattr(result, "success_rate"):
-        print(f"Success Rate:     {result.success_rate:.1f}%")
+        logger.info(f"Success Rate:     {result.success_rate:.1f}%")
 
     # Duration (may not always be present)
     if hasattr(result, "duration") and result.duration is not None:
-        print(f"Duration:         {result.duration:.1f}s")
+        logger.info(f"Duration:         {result.duration:.1f}s")
 
     # Correlation ID
     if hasattr(result, "correlation_id") and result.correlation_id:
-        print(f"Correlation ID:   {result.correlation_id}")
+        logger.info(f"Correlation ID:   {result.correlation_id}")
 
-    print("=" * 50 + "\n")
+    logger.info("=" * 50)
+    logger.info("")
 
-    # Print errors if any
+    # Log errors if any
     if show_errors and result.errors > 0 and hasattr(result, "results"):
-        print("Errors:")
+        logger.error("Errors:")
         error_count = 0
         for r in result.results:
             if hasattr(r, "action") and r.action == "error":
                 entity_id = getattr(r, "entity_id", "unknown")
                 message = getattr(r, "message", "No message")
-                print(f"  - {entity_id}: {message}")
+                logger.error(f"  - {entity_id}: {message}")
                 error_count += 1
                 if error_count >= max_errors:
                     remaining = result.errors - error_count
                     if remaining > 0:
-                        print(f"  ... and {remaining} more errors")
+                        logger.error(f"  ... and {remaining} more errors")
                     break
-        print()
+        logger.info("")
 
 
 def print_step_header(step_number: int, step_name: str) -> None:
@@ -243,9 +246,9 @@ def print_step_header(step_number: int, step_name: str) -> None:
         step_number: Step number.
         step_name: Step description.
     """
-    print("=" * 50)
-    print(f"Step {step_number}: {step_name}")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info(f"Step {step_number}: {step_name}")
+    logger.info("=" * 50)
 
 
 def print_summary(
@@ -259,15 +262,17 @@ def print_summary(
         results: List of (step_name, exit_code) tuples.
         title: Title for the summary.
     """
-    print("\n" + "=" * 50)
-    print(title)
-    print("=" * 50)
+    logger.info("")
+    logger.info("=" * 50)
+    logger.info(title)
+    logger.info("=" * 50)
 
     for step_name, exit_code in results:
         status = "SUCCESS" if exit_code == 0 else "FAILED"
-        print(f"  {step_name}: {status}")
+        logger.info(f"  {step_name}: {status}")
 
-    print("=" * 50 + "\n")
+    logger.info("=" * 50)
+    logger.info("")
 
 
 def format_currency(amount: float) -> str:

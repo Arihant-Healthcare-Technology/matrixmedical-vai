@@ -314,16 +314,19 @@ def main(argv: Optional[list] = None) -> int:
             # To re-enable, uncomment the code below and remove this block
             # ============================================================
             logger.warning("BILL.com Accounts Payable (AP) commands are temporarily disabled")
-            print("\n" + "=" * 60)
-            print("  BILL.com AP API calls are TEMPORARILY DISABLED")
-            print("=" * 60)
-            print("\nThe following AP commands are currently disabled:")
-            print("  - ap vendors   : Vendor synchronization")
-            print("  - ap invoices  : Invoice/bill synchronization")
-            print("  - ap payments  : Payment processing")
-            print("  - ap batch     : Full AP batch operations")
-            print("\nTo re-enable, edit: src/presentation/cli/main.py")
-            print("=" * 60 + "\n")
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info("  BILL.com AP API calls are TEMPORARILY DISABLED")
+            logger.info("=" * 60)
+            logger.info("")
+            logger.info("The following AP commands are currently disabled:")
+            logger.info("  - ap vendors   : Vendor synchronization")
+            logger.info("  - ap invoices  : Invoice/bill synchronization")
+            logger.info("  - ap payments  : Payment processing")
+            logger.info("  - ap batch     : Full AP batch operations")
+            logger.info("")
+            logger.info("To re-enable, edit: src/presentation/cli/main.py")
+            logger.info("=" * 60)
             return 0
 
             # --- DISABLED AP COMMANDS (DO NOT REMOVE) ---
@@ -395,35 +398,37 @@ def check_status(
     logger = logging.getLogger(__name__)
     settings = container.settings
 
-    print("\n=== UKG to BILL.com Integration Status ===\n")
+    logger.info("")
+    logger.info("=== UKG to BILL.com Integration Status ===")
+    logger.info("")
 
-    print("Configuration:")
-    print(f"  UKG API Base: {settings.ukg_api_base}")
-    print(f"  BILL API Base: {settings.bill_api_base}")
-    print(f"  BILL Org ID: {settings.bill_org_id}")
-    print(f"  Rate Limit: {settings.rate_limit_calls_per_minute} calls/min")
-    print()
+    logger.info("Configuration:")
+    logger.info(f"  UKG API Base: {settings.ukg_api_base}")
+    logger.info(f"  BILL API Base: {settings.bill_api_base}")
+    logger.info(f"  BILL Org ID: {settings.bill_org_id}")
+    logger.info(f"  Rate Limit: {settings.rate_limit_calls_per_minute} calls/min")
+    logger.info("")
 
     if check_auth:
-        print("Authentication Check:")
+        logger.info("Authentication Check:")
         try:
             # Test UKG auth
             ukg = container.ukg_client()
             ukg_ok = ukg.test_connection()
-            print(f"  UKG API: {'OK' if ukg_ok else 'FAILED'}")
+            logger.info(f"  UKG API: {'OK' if ukg_ok else 'FAILED'}")
         except Exception as e:
-            print(f"  UKG API: FAILED - {e}")
+            logger.error(f"  UKG API: FAILED - {e}")
 
         try:
             # Test BILL auth
             bill = container.bill_client()
             bill_ok = bill.test_connection()
-            print(f"  BILL API: {'OK' if bill_ok else 'FAILED'}")
+            logger.info(f"  BILL API: {'OK' if bill_ok else 'FAILED'}")
         except Exception as e:
-            print(f"  BILL API: FAILED - {e}")
-        print()
+            logger.error(f"  BILL API: FAILED - {e}")
+        logger.info("")
 
-    print("Status: Ready")
+    logger.info("Status: Ready")
     return 0
 
 

@@ -35,9 +35,14 @@ class SpendExpenseClient(BillClient):
         rate_limiter: Optional[Any] = None,
     ) -> None:
         """Initialize S&E client."""
+        original_base = api_base
         # Ensure we're using the S&E endpoint
         if not api_base.endswith("/spend"):
             api_base = api_base.rstrip("/") + "/spend"
+
+        logger.info(f"Initializing SpendExpenseClient:")
+        logger.info(f"  Original API base: {original_base}")
+        logger.info(f"  Final API base (with /spend): {api_base}")
 
         super().__init__(
             api_base=api_base,
@@ -67,6 +72,8 @@ class SpendExpenseClient(BillClient):
             List of user dicts
         """
         params = {"page": page, "pageSize": page_size}
+        logger.info(f"BILL API: GET /users (page={page}, pageSize={page_size})")
+        logger.info(f"  Full URL: {self._api_base}/users")
         response = self._http.get("/users", params=params)
         data = self._handle_response(response)
         return self._extract_items(data, ["results", "users", "items", "data"])
@@ -81,6 +88,8 @@ class SpendExpenseClient(BillClient):
         Returns:
             User dict
         """
+        logger.info(f"BILL API: GET /users/{user_id}")
+        logger.info(f"  Full URL: {self._api_base}/users/{user_id}")
         response = self._http.get(f"/users/{user_id}")
         return self._handle_response(response)
 
@@ -247,10 +256,14 @@ class SpendExpenseClient(BillClient):
             if next_page_cursor:
                 params["nextPage"] = next_page_cursor
 
+            # Log full URL being called for debugging
+            full_url = f"{self._api_base}/users"
             logger.info(
                 f"Fetching Bill users page {page_count} "
                 f"(cursor={next_page_cursor or 'initial'})"
             )
+            logger.info(f"  Full URL: {full_url}")
+            logger.info(f"  Query params: {params}")
 
             response = self._http.get("/users", params=params)
             data = self._handle_response(response)

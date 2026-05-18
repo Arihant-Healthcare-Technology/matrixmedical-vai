@@ -120,11 +120,11 @@ class HttpClient:
 
         # Log request
         start_time = time.time()
-        log_path = original_path if not original_path.startswith("http") else url.replace(self.base_url, "")
         payload_info = ""
         if "json" in kwargs and kwargs["json"]:
             payload_info = f" payload_keys={list(kwargs['json'].keys())}"
-        logger.debug(f"HTTP request: {method} {log_path}{payload_info}")
+        # Log full URL for debugging (helps identify 404 endpoint issues)
+        logger.info(f"HTTP request: {method} {url}{payload_info}")
 
         try:
             response = self.session.request(
@@ -135,17 +135,17 @@ class HttpClient:
                 **kwargs,
             )
 
-            # Log response
+            # Log response with full URL for debugging
             elapsed_ms = (time.time() - start_time) * 1000
             if response.status_code < 400:
-                logger.debug(f"HTTP response: {method} {log_path} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
+                logger.info(f"HTTP response: {method} {url} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
             else:
-                logger.warning(f"HTTP response: {method} {log_path} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
+                logger.warning(f"HTTP response: {method} {url} status={response.status_code} elapsed={elapsed_ms:.0f}ms")
 
             return response
         except requests.exceptions.Timeout as e:
             elapsed_ms = (time.time() - start_time) * 1000
-            logger.error(f"HTTP timeout: {method} {log_path} elapsed={elapsed_ms:.0f}ms timeout={timeout or self.timeout}s")
+            logger.error(f"HTTP timeout: {method} {url} elapsed={elapsed_ms:.0f}ms timeout={timeout or self.timeout}s")
             raise IntegrationTimeoutError(
                 message=f"Request timed out after {timeout or self.timeout}s",
                 timeout_seconds=timeout or self.timeout,
@@ -154,7 +154,7 @@ class HttpClient:
             ) from e
         except requests.exceptions.RequestException as e:
             elapsed_ms = (time.time() - start_time) * 1000
-            logger.error(f"HTTP error: {method} {log_path} elapsed={elapsed_ms:.0f}ms error={e}")
+            logger.error(f"HTTP error: {method} {url} elapsed={elapsed_ms:.0f}ms error={e}")
             raise ApiError(
                 message=f"Request failed: {str(e)}",
                 url=url,

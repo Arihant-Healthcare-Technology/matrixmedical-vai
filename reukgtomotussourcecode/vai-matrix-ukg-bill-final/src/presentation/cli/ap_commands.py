@@ -208,7 +208,7 @@ def run_payment_process(
         if dry_run:
             print_preview(invoices_to_pay, "invoices to pay")
             total = sum(float(inv.total_amount or 0) for inv in invoices_to_pay)
-            print(f"Total payment amount: {format_currency(total)}")
+            logger.info(f"Total payment amount: {format_currency(total)}")
             return 0
 
         # Process payments
