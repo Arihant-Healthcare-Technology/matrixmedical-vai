@@ -255,9 +255,30 @@ class TravelPerkClient:
         Raises:
             TravelPerkApiError: If creation fails
         """
-        payload = user.to_api_payload()
+        # Log user object details before conversion
         logger.info(
-            f"TravelPerk CREATE payload for externalId={user.external_id}:\n"
+            f"TravelPerk POST - Creating user with following details:\n"
+            f"  External ID (Employee Number): {user.external_id}\n"
+            f"  Username (Email): {user.user_name}\n"
+            f"  Name: {user.name.given_name} {user.name.family_name}\n"
+            f"  Active: {user.active}\n"
+            f"  Title: {user.title}\n"
+            f"  Phone Number: {user.phone_number}\n"
+            f"  Preferred Language: {user.preferred_language}\n"
+            f"  Locale: {user.locale}\n"
+            f"  Cost Center: {user.cost_center}\n"
+            f"  Manager ID: {user.manager_id}\n"
+            f"  Manager Display Name: {user.manager_display_name}\n"
+            f"  Gender: {user.gender}\n"
+            f"  Date of Birth: {user.date_of_birth}\n"
+            f"  Line Manager Email: {user.line_manager_email}"
+        )
+
+        payload = user.to_api_payload()
+        endpoint_url = self._build_url(TravelPerkEndpoints.SCIM_USERS)
+        logger.info(
+            f"TravelPerk POST - Endpoint: {endpoint_url}\n"
+            f"TravelPerk POST - Full payload for externalId={user.external_id}:\n"
             f"{json.dumps(payload, indent=2)}"
         )
         response = self._request_with_retry(
@@ -299,11 +320,34 @@ class TravelPerkClient:
         Raises:
             TravelPerkApiError: If update fails
         """
+        # Log user object details before conversion
+        logger.info(
+            f"TravelPerk PATCH - Updating user with following details:\n"
+            f"  TravelPerk User ID: {user_id}\n"
+            f"  External ID (Employee Number): {user.external_id}\n"
+            f"  Username (Email): {user.user_name}\n"
+            f"  Name: {user.name.given_name} {user.name.family_name}\n"
+            f"  Active: {user.active}\n"
+            f"  Title: {user.title}\n"
+            f"  Phone Number: {user.phone_number}\n"
+            f"  Preferred Language: {user.preferred_language}\n"
+            f"  Locale: {user.locale}\n"
+            f"  Cost Center: {user.cost_center}\n"
+            f"  Manager ID: {user.manager_id}\n"
+            f"  Manager Display Name: {user.manager_display_name}\n"
+            f"  Gender: {user.gender}\n"
+            f"  Date of Birth: {user.date_of_birth}\n"
+            f"  Line Manager Email: {user.line_manager_email}\n"
+            f"  Include Manager in Update: {include_manager}"
+        )
+
         patch_payload = user.to_patch_payload(include_manager=include_manager)
         path = TravelPerkEndpoints.user_by_id(user_id)
+        endpoint_url = self._build_url(path)
 
         logger.info(
-            f"TravelPerk UPDATE payload for id={user_id}, externalId={user.external_id}:\n"
+            f"TravelPerk PATCH - Endpoint: {endpoint_url}\n"
+            f"TravelPerk PATCH - Full payload for id={user_id}, externalId={user.external_id}:\n"
             f"{json.dumps(patch_payload, indent=2)}"
         )
 
