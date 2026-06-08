@@ -16,6 +16,7 @@ from src.presentation.cli.container import get_container, reset_container
 from src.presentation.cli.batch_commands import (
     run_sync_all,
     run_sync_batch,
+    run_sync_single,
     run_export_csv,
 )
 from src.presentation.cli.ap_commands import (
@@ -110,6 +111,10 @@ Examples:
     sync_parser.add_argument(
         "--employee-file",
         help="Path to JSON file with employee data",
+    )
+    sync_parser.add_argument(
+        "--employee-number",
+        help="Sync a specific employee by employee number",
     )
     sync_parser.add_argument(
         "--workers",
@@ -281,7 +286,15 @@ def main(argv: Optional[list] = None) -> int:
             company_id = args.company_id or container.settings.ukg_company_id
             # Check both global and subparser dry_run flags
             dry_run = args.dry_run or getattr(args, 'sync_dry_run', False)
-            if args.all or company_id:
+            if args.employee_number:
+                return run_sync_single(
+                    container=container,
+                    employee_number=args.employee_number,
+                    company_id=company_id,
+                    default_role=args.default_role,
+                    dry_run=dry_run,
+                )
+            elif args.all or company_id:
                 return run_sync_all(
                     container=container,
                     company_id=company_id,
@@ -298,7 +311,7 @@ def main(argv: Optional[list] = None) -> int:
                     dry_run=dry_run,
                 )
             else:
-                parser.error("sync requires --all, --company-id, or --employee-file")
+                parser.error("sync requires --all, --company-id, --employee-number, or --employee-file")
 
         elif args.command == "export":
             return run_export_csv(

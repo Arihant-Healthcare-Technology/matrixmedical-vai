@@ -6,6 +6,7 @@ Enterprise integration pipeline for synchronizing employee data from UKG Pro to 
 
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 1. [Overview](#1-overview)
 2. [Architecture](#2-architecture)
 3. [Prerequisites](#3-prerequisites)
@@ -21,6 +22,66 @@ Enterprise integration pipeline for synchronizing employee data from UKG Pro to 
 13. [Security](#13-security)
 14. [Change Log](#14-change-log)
 15. [Support](#15-support)
+
+---
+
+## Quick Start
+
+Get up and running in 5 steps:
+
+### 1. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Configure Environment
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env with your credentials
+```
+
+**Required credentials in `.env`:**
+```bash
+# UKG Pro API
+UKG_USERNAME=your_ukg_username
+UKG_PASSWORD=your_ukg_password
+UKG_CUSTOMER_API_KEY=your_ukg_api_key
+UKG_COMPANY_ID=J9A6Y
+
+# BILL.com API
+BILL_API_TOKEN=your_bill_api_token
+BILL_ORG_ID=your_bill_org_id
+```
+
+### 3. Verify Connection
+
+```bash
+python -m src status --check-auth
+```
+
+### 4. Dry Run (Preview Changes)
+
+```bash
+python -m src --dry-run sync --all --company-id J9A6Y
+```
+
+### 5. Execute Sync
+
+```bash
+python -m src sync --all --company-id J9A6Y
+```
+
+### Docker Alternative
+
+```bash
+# Build and run with Docker
+docker build -t vai-matrix-ukg-bill:latest .
+docker run --rm --env-file .env vai-matrix-ukg-bill:latest sync --all
+```
 
 ---
 

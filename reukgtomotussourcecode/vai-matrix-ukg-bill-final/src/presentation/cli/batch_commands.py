@@ -171,7 +171,7 @@ def run_sync_all(
                     continue
                 total_active += 1
 
-                # Filter 2: Employee type (PRD Full Time or FTC/HRC)
+                # Filter 2: Eligibility check (job code filter or all if no filter configured)
                 if not emp.should_sync_to_bill:
                     continue
                 total_eligible += 1
@@ -213,7 +213,7 @@ def run_sync_all(
             logger.info("=" * 60)
             logger.info(f"  Total from UKG: {total_from_ukg}")
             logger.info(f"  After ACTIVE status filter: {total_active}")
-            logger.info(f"  After employee type filter (PRD Full Time / FTC / HRC): {total_eligible}")
+            logger.info(f"  After eligibility filter (job code or all): {total_eligible}")
             logger.info("=" * 60)
 
             # Print summary
@@ -512,6 +512,171 @@ def run_export_csv(
         return 1
     except Exception as e:
         logger.error(f"Export failed: {e}", exc_info=True)
+        return 1
+
+
+def run_sync_single(
+    container: Container,
+    employee_number: str,
+    company_id: Optional[str] = None,
+    default_role: str = "MEMBER",
+    dry_run: bool = False,
+) -> int:
+    """
+    Sync a single employee from UKG to BILL.com.
+
+    Args:
+        container: DI container.
+        employee_number: Employee number to sync.
+        company_id: UKG company ID.
+        default_role: Default role for new users.
+        dry_run: If True, preview without making changes.
+
+    Returns:
+        Exit code (0 for success).
+    """
+    # Print startup banner with credential status
+    _print_startup_banner(container, "Single Employee Sync", workers=1, dry_run=dry_run)
+
+    logger.info(f"Syncing single employee: {employee_number}")
+    if company_id:
+        logger.info(f"Company ID: {company_id}")
+
+    try:
+        role = BillRole.from_string(default_role)
+
+        # STEP 2: Fetch employee from UKG
+        logger.info("=" * 60)
+        logger.info("STEP 2: Fetching employee from UKG")
+        logger.info("=" * 60)
+        logger.info(f"  Employee Number: {employee_number}")
+        if company_id:
+            logger.info(f"  Company ID: {company_id}")
+
+        employee_repo = container.employee_repository()
+
+        # Fetch the employee by employee number
+        employee = employee_repo.get_by_employee_number(employee_number, company_id)
+
+        if not employee:
+            logger.error(f"Employee not found in UKG: {employee_number}")
+            logger.error("")
+            logger.error("=" * 60)
+            logger.error("  EMPLOYEE NOT FOUND")
+            logger.error("=" * 60)
+            logger.error(f"  Employee number '{employee_number}' was not found in UKG.")
+            logger.error("  Please verify the employee number and company ID are correct.")
+            logger.error("=" * 60)
+            return 1
+
+        logger.info(f"  Found: {employee.first_name} {employee.last_name}")
+        logger.info(f"  Email: {employee.email}")
+        logger.info(f"  Status: {employee.status.value if employee.status else 'Unknown'}")
+        logger.info(f"  Employee Type: {employee.employee_type or 'Unknown'}")
+        logger.info(f"  Cost Center: {employee.cost_center or 'None'}")
+
+        # Check if employee is active
+        if employee.status != EmployeeStatus.ACTIVE:
+            logger.warning(f"Employee {employee_number} is not active (status: {employee.status.value if employee.status else 'Unknown'})")
+            logger.warning("Skipping sync for inactive employee.")
+            return 0
+
+        # Check if employee should sync to BILL
+        if not employee.should_sync_to_bill:
+            logger.warning(f"Employee {employee_number} is not eligible for BILL.com sync")
+            logger.warning("Employee does not meet eligibility criteria (check JOB_CODE_FILTER in .env).")
+            logger.info("  --- UKG Employee Data ---")
+            logger.info(f"  Job Code: {employee.job_code or 'None'}")
+            logger.info(f"  Employee Type Code: {employee.employee_type_code or 'None'}")
+            logger.info(f"  Full/Part Time: {employee.full_or_part_time or 'None'}")
+            logger.info(f"  Department: {employee.department or 'None'}")
+            logger.info(f"  Job Title: {employee.job_title or 'None'}")
+            logger.info(f"  Location: {employee.location or 'None'}")
+            logger.info(f"  Cost Center: {employee.cost_center or 'None'}")
+            logger.info(f"  Pay Frequency: {employee.pay_frequency or 'None'}")
+            logger.info(f"  Supervisor Email: {employee.supervisor_email or 'None'}")
+            return 0
+
+        if dry_run:
+            # Build org-levels cache for cost center formatting
+            logger.info("=" * 60)
+            logger.info("BUILDING UKG ORG-LEVELS CACHE")
+            logger.info("=" * 60)
+            employee_repo._client.build_org_levels_cache()
+
+            # Format cost center
+            formatted_cost_center = None
+            if employee.cost_center:
+                formatted_cost_center = employee_repo._client.format_cost_center(
+                    employee.cost_center
+                )
+
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info("DRY RUN - Employee Details")
+            logger.info("=" * 60)
+            logger.info(f"  Employee Number: {employee.employee_number}")
+            logger.info(f"  Name: {employee.first_name} {employee.last_name}")
+            logger.info(f"  Email: {employee.email}")
+            logger.info(f"  Status: {employee.status.value if employee.status else 'Unknown'}")
+            logger.info(f"  Employee Type: {employee.employee_type or 'Unknown'}")
+            logger.info(f"  Cost Center: {formatted_cost_center or employee.cost_center or 'None'}")
+            logger.info(f"  Supervisor Email: {employee.supervisor_email or 'None'}")
+            logger.info(f"  Default Role: {default_role}")
+            logger.info("=" * 60)
+            logger.info("")
+            logger.info("DRY RUN MODE - No changes were made to BILL.com")
+            return 0
+
+        # STEP 3: Sync employee to BILL.com
+        logger.info("=" * 60)
+        logger.info("STEP 3: Syncing employee to BILL.com S&E")
+        logger.info("=" * 60)
+
+        # Build org-levels cache for cost center formatting
+        employee_repo._client.build_org_levels_cache()
+
+        sync_service = container.sync_service()
+        result = sync_service.sync_employee(employee, role)
+
+        # STEP 4: Sync Complete
+        logger.info("=" * 60)
+        logger.info("STEP 4: Sync Complete")
+        logger.info("=" * 60)
+
+        if result.success:
+            logger.info(f"  Action: {result.action}")
+            logger.info(f"  Message: {result.message}")
+            logger.info(f"  Entity ID: {result.entity_id}")
+            return 0
+        else:
+            logger.error(f"  Sync failed: {result.message}")
+            if result.details:
+                for key, value in result.details.items():
+                    logger.error(f"    {key}: {value}")
+            return 1
+
+    except ValueError as e:
+        # Configuration/credential errors
+        logger.error(f"Configuration error: {e}")
+        logger.error("")
+        logger.error("=" * 60)
+        logger.error("  CONFIGURATION ERROR")
+        logger.error("=" * 60)
+        logger.error(f"{e}")
+        logger.error("")
+        logger.error("Please check your .env file and ensure all required")
+        logger.error("credentials are set correctly.")
+        logger.error("")
+        logger.error("Required environment variables:")
+        logger.error("  - UKG_USERNAME and UKG_PASSWORD (or UKG_BASIC_B64)")
+        logger.error("  - UKG_CUSTOMER_API_KEY")
+        logger.error("  - BILL_API_TOKEN")
+        logger.error("=" * 60)
+        return 1
+
+    except Exception as e:
+        logger.error(f"Sync failed: {e}", exc_info=True)
         return 1
 
 

@@ -244,12 +244,17 @@ class Employee:
         - Company filtering is done at the UKG API level via --company-id parameter
         """
         if not _QUALIFIED_JOB_CODES:
-            # Fallback to old logic if no job codes configured
-            if self.employee_type_code == "PRD":
-                return self.is_full_time
-            elif self.employee_type_code in ("FTC", "HRC"):
-                return True
-            return False
+            # No job code filter configured - sync all active employees
+            return True
+
+            # --- EMPLOYEE TYPE LOGIC (DISABLED) ---
+            # Uncomment the following block to re-enable employee type filtering:
+            # if self.employee_type_code == "PRD":
+            #     return self.is_full_time
+            # elif self.employee_type_code in ("FTC", "HRC", "TMC"):
+            #     return True
+            # return False
+            # --- END DISABLED LOGIC ---
 
         # Check if employee's job code is in the qualified set
         return str(self.job_code).strip() in _QUALIFIED_JOB_CODES
@@ -408,6 +413,7 @@ class Employee:
             company_id=data.get("companyId", "") or data.get("coid", ""),
             address=address,
             employee_type_code=data.get("employeeTypeCode", "") or "",
+            job_code=data.get("primaryJobCode", "") or data.get("jobCode", "") or "",
             full_or_part_time=data.get("fullOrPartTime", "") or data.get("fullPartTimeDescription", "") or "",
             pay_frequency=data.get("payFrequency", "") or "",
             cost_center=data.get("costCenter", "") or data.get("costCenterCode", ""),

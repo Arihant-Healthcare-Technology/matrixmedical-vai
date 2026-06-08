@@ -748,7 +748,7 @@ class SyncService(EmployeeSyncService):
             logger.debug(f"[{idx}/{total}] Skipping {emp_number}: not active")
             return (False, False, None)
 
-        # Filter 2: Employee type (PRD Full Time or FTC/HRC)
+        # Filter 2: Eligibility check (job code filter or all if no filter configured)
         if not employee.should_sync_to_bill:
             logger.debug(f"[{idx}/{total}] Skipping {emp_number}: not eligible type")
             return (True, False, None)
@@ -858,7 +858,7 @@ class SyncService(EmployeeSyncService):
         logger.info("=" * 60)
         logger.info(f"  Total from UKG: {total_from_ukg}")
         logger.info(f"  After ACTIVE status filter: {total_active}")
-        logger.info(f"  After employee type filter (PRD Full Time / FTC / HRC): {total_eligible}")
+        logger.info(f"  After eligibility filter (job code or all): {total_eligible}")
         logger.info("=" * 60)
 
         return BatchSyncResult(

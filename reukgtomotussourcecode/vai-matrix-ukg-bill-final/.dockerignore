@@ -16,8 +16,6 @@ htmlcov/
 .ruff_cache/
 
 # Virtual environments
-.env
-.env.*
 !.env.example
 .venv/
 venv/

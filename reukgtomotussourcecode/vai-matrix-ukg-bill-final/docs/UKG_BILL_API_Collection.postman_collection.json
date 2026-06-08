@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "ukg-bill-api-collection-v1",
 		"name": "UKG & BILL.com API Collection",
-		"description": "Comprehensive API collection for UKG Pro and BILL.com integration.\n\n## Overview\nThis collection contains all API endpoints used in the UKG to BILL.com integration batch job:\n- **UKG Pro API**: Employee data retrieval\n- **BILL.com Spend & Expense API**: User management\n- **BILL.com Accounts Payable API**: Vendors, Bills/Invoices, and Payments\n\n## Authentication\n- **UKG**: Basic Auth + Customer API Key\n- **BILL.com**: API Token in header\n\n## Environment Variables Required\nSet up the following variables in your Postman environment:\n- `UKG_BASE_URL`\n- `UKG_USERNAME`\n- `UKG_PASSWORD`\n- `UKG_CUSTOMER_API_KEY`\n- `BILL_BASE_URL`\n- `BILL_API_TOKEN`",
+		"description": "Comprehensive API collection for UKG Pro and BILL.com integration.\n\n## Overview\nThis collection contains all API endpoints used in the UKG to BILL.com integration batch job:\n- **UKG Pro API**: Employee data retrieval\n- **BILL.com Spend & Expense API**: User management\n- **BILL.com Accounts Payable API**: Vendors, Bills/Invoices, and Payments\n\n## Authentication\n- **UKG**: Basic Auth + Customer API Key\n- **BILL.com**: API Token in header\n\n## Environment Variables Required\nSet up the following variables in your Postman environment:\n- `UKG_BASE_URL`\n- `UKG_USERNAME`\n- `UKG_PASSWORD`\n- `UKG_BASIC_AUTH` (Base64 encoded username:password, or use UKG_BASIC_B64 pre-encoded)\n- `UKG_CUSTOMER_API_KEY`\n- `BILL_BASE_URL`\n- `BILL_API_TOKEN` (used for both S&E and AP APIs)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -18,6 +18,16 @@
 		},
 		{
 			"key": "UKG_CUSTOMER_API_KEY",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "UKG_USERNAME",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "UKG_PASSWORD",
 			"value": "",
 			"type": "string"
 		},
@@ -294,12 +304,128 @@
 							"body": "{\n  \"employeeId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"firstName\": \"John\",\n  \"middleName\": \"Robert\",\n  \"lastName\": \"Doe\",\n  \"preferredName\": \"Johnny\",\n  \"emailAddress\": \"john.doe@example.com\",\n  \"workPhone\": \"555-123-4567\",\n  \"mobilePhone\": \"555-987-6543\",\n  \"homePhone\": \"555-111-2222\",\n  \"supervisorEmailAddress\": \"supervisor@example.com\",\n  \"address1\": \"123 Main Street\",\n  \"address2\": \"Apt 4B\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"stateCode\": \"NY\",\n  \"zip\": \"10001\",\n  \"postalCode\": \"10001\",\n  \"country\": \"United States\",\n  \"countryCode\": \"US\",\n  \"dateOfBirth\": \"1985-03-15\",\n  \"gender\": \"M\",\n  \"maritalStatus\": \"Married\"\n}"
 						}
 					]
+				},
+				{
+					"name": "Get Employee Supervisor Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Basic {{UKG_BASIC_AUTH}}",
+								"description": "Base64 encoded username:password"
+							},
+							{
+								"key": "US-Customer-Api-Key",
+								"value": "{{UKG_CUSTOMER_API_KEY}}",
+								"description": "UKG Customer API Key"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{UKG_BASE_URL}}/personnel/v1/employee-supervisor-details?employeeId={{employee_id}}",
+							"host": ["{{UKG_BASE_URL}}"],
+							"path": ["personnel", "v1", "employee-supervisor-details"],
+							"query": [
+								{
+									"key": "employeeId",
+									"value": "{{employee_id}}",
+									"description": "Employee ID (UUID format) to get supervisor details for"
+								}
+							]
+						},
+						"description": "Retrieves supervisor details for an employee. Used for resolving supervisor email address when not available in employment details."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{UKG_BASE_URL}}/personnel/v1/employee-supervisor-details?employeeId=550e8400-e29b-41d4-a716-446655440000",
+									"host": ["{{UKG_BASE_URL}}"],
+									"path": ["personnel", "v1", "employee-supervisor-details"],
+									"query": [
+										{"key": "employeeId", "value": "550e8400-e29b-41d4-a716-446655440000"}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "{\n  \"employeeId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"supervisorEmployeeId\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"supervisorEmployeeNumber\": \"54321\",\n  \"supervisorEmailAddress\": \"supervisor@example.com\",\n  \"supervisorFirstName\": \"Jane\",\n  \"supervisorLastName\": \"Manager\",\n  \"supervisorJobTitle\": \"Engineering Manager\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Org Levels (Configuration)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Basic {{UKG_BASIC_AUTH}}",
+								"description": "Base64 encoded username:password"
+							},
+							{
+								"key": "US-Customer-Api-Key",
+								"value": "{{UKG_CUSTOMER_API_KEY}}",
+								"description": "UKG Customer API Key"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{UKG_BASE_URL}}/configuration/v1/org-levels",
+							"host": ["{{UKG_BASE_URL}}"],
+							"path": ["configuration", "v1", "org-levels"]
+						},
+						"description": "Retrieves organization levels configuration. Contains department/cost center mapping with glSegment codes. Used for formatting cost center strings from primaryProjectCode."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{UKG_BASE_URL}}/configuration/v1/org-levels",
+									"host": ["{{UKG_BASE_URL}}"],
+									"path": ["configuration", "v1", "org-levels"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{"key": "Content-Type", "value": "application/json"}
+							],
+							"body": "[\n  {\n    \"code\": \"37273\",\n    \"description\": \"VBC - SNF@Home - Indirect\",\n    \"glSegment\": \"691\",\n    \"level\": 1,\n    \"isActive\": true\n  },\n  {\n    \"code\": \"37274\",\n    \"description\": \"VBC - Hospice - Direct\",\n    \"glSegment\": \"692\",\n    \"level\": 1,\n    \"isActive\": true\n  },\n  {\n    \"code\": \"10001\",\n    \"description\": \"Corporate - Administration\",\n    \"glSegment\": \"100\",\n    \"level\": 1,\n    \"isActive\": true\n  }\n]"
+						}
+					]
 				}
 			]
 		},
 		{
 			"name": "BILL.com Spend & Expense API",
-			"description": "BILL.com Spend & Expense API endpoints for user management in the expense tracking system.",
+			"description": "BILL.com Spend & Expense API endpoints for user management in the expense tracking system.\n\n**IMPORTANT NOTES:**\n- This API uses **cursor-based pagination** with `max` and `nextPage` parameters (NOT page/pageSize)\n- Email filtering is **NOT supported** by the API - filtering must be done client-side\n- Response items are returned under the `results` key",
 			"item": [
 				{
 					"name": "List Users",
@@ -321,29 +447,24 @@
 							}
 						],
 						"url": {
-							"raw": "{{BILL_BASE_URL}}/spend/users?page=1&pageSize=100",
+							"raw": "{{BILL_BASE_URL}}/spend/users?max=100",
 							"host": ["{{BILL_BASE_URL}}"],
 							"path": ["spend", "users"],
 							"query": [
 								{
-									"key": "page",
-									"value": "1",
-									"description": "Page number (default 1)"
-								},
-								{
-									"key": "pageSize",
+									"key": "max",
 									"value": "100",
-									"description": "Page size (default 100)"
+									"description": "Maximum users per page (default 100, max 100)"
 								},
 								{
-									"key": "email",
+									"key": "nextPage",
 									"value": "",
-									"description": "Filter by email address",
+									"description": "Cursor for next page (returned in previous response)",
 									"disabled": true
 								}
 							]
 						},
-						"description": "Retrieves a list of all users in the Spend & Expense system. Used to check if a user already exists before creating."
+						"description": "Retrieves a list of all users in the Spend & Expense system using cursor-based pagination.\n\n**Pagination:** Uses `max` for page size and `nextPage` cursor (NOT page/pageSize). The response includes a `nextPage` value if more results exist."
 					},
 					"response": [
 						{
@@ -352,12 +473,11 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{BILL_BASE_URL}}/spend/users?page=1&pageSize=100",
+									"raw": "{{BILL_BASE_URL}}/spend/users?max=100",
 									"host": ["{{BILL_BASE_URL}}"],
 									"path": ["spend", "users"],
 									"query": [
-										{"key": "page", "value": "1"},
-										{"key": "pageSize", "value": "100"}
+										{"key": "max", "value": "100"}
 									]
 								}
 							},
@@ -367,12 +487,12 @@
 							"header": [
 								{"key": "Content-Type", "value": "application/json"}
 							],
-							"body": "{\n  \"users\": [\n    {\n      \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"email\": \"john.doe@example.com\",\n      \"firstName\": \"John\",\n      \"lastName\": \"Doe\",\n      \"role\": \"MEMBER\",\n      \"status\": \"ACTIVE\",\n      \"retired\": false,\n      \"createdAt\": \"2024-01-15T10:30:00Z\",\n      \"updatedAt\": \"2024-01-15T10:30:00Z\"\n    },\n    {\n      \"uuid\": \"usr_550e8400e29b41d4a716446655440001\",\n      \"id\": \"usr_550e8400e29b41d4a716446655440001\",\n      \"email\": \"jane.smith@example.com\",\n      \"firstName\": \"Jane\",\n      \"lastName\": \"Smith\",\n      \"role\": \"ADMIN\",\n      \"status\": \"ACTIVE\",\n      \"retired\": false,\n      \"createdAt\": \"2024-01-10T08:00:00Z\",\n      \"updatedAt\": \"2024-01-12T14:20:00Z\"\n    }\n  ],\n  \"pagination\": {\n    \"page\": 1,\n    \"pageSize\": 100,\n    \"totalCount\": 2,\n    \"totalPages\": 1\n  }\n}"
+							"body": "{\n  \"results\": [\n    {\n      \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"email\": \"john.doe@example.com\",\n      \"firstName\": \"John\",\n      \"lastName\": \"Doe\",\n      \"role\": \"MEMBER\",\n      \"status\": \"ACTIVE\",\n      \"retired\": false,\n      \"externalId\": \"12345\",\n      \"costCenter\": \"691 - 37273 - VBC - SNF@Home - Indirect\",\n      \"createdAt\": \"2024-01-15T10:30:00Z\",\n      \"updatedAt\": \"2024-01-15T10:30:00Z\"\n    },\n    {\n      \"uuid\": \"usr_550e8400e29b41d4a716446655440001\",\n      \"id\": \"usr_550e8400e29b41d4a716446655440001\",\n      \"email\": \"jane.smith@example.com\",\n      \"firstName\": \"Jane\",\n      \"lastName\": \"Smith\",\n      \"role\": \"ADMIN\",\n      \"status\": \"ACTIVE\",\n      \"retired\": false,\n      \"externalId\": \"12346\",\n      \"costCenter\": \"100 - 10001 - Corporate - Administration\",\n      \"createdAt\": \"2024-01-10T08:00:00Z\",\n      \"updatedAt\": \"2024-01-12T14:20:00Z\"\n    }\n  ],\n  \"nextPage\": \"cursor_abc123xyz\"\n}"
 						}
 					]
 				},
 				{
-					"name": "Get User by Email",
+					"name": "Get User by Email (Client-Side Filter)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -391,31 +511,31 @@
 							}
 						],
 						"url": {
-							"raw": "{{BILL_BASE_URL}}/spend/users?email=john.doe@example.com",
+							"raw": "{{BILL_BASE_URL}}/spend/users?max=100",
 							"host": ["{{BILL_BASE_URL}}"],
 							"path": ["spend", "users"],
 							"query": [
 								{
-									"key": "email",
-									"value": "john.doe@example.com",
-									"description": "Email address to search for"
+									"key": "max",
+									"value": "100",
+									"description": "Maximum users per page"
 								}
 							]
 						},
-						"description": "Search for a user by email address. Used in sync process to check if user exists before creating."
+						"description": "**IMPORTANT:** BILL.com S&E API does NOT support email as a query parameter. To find a user by email, you must:\n1. Paginate through all users using `max` and `nextPage`\n2. Filter results client-side by email address\n\nFor better performance, consider building an email cache at startup."
 					},
 					"response": [
 						{
-							"name": "User Found",
+							"name": "User Found (Client-Side Filter)",
 							"originalRequest": {
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{BILL_BASE_URL}}/spend/users?email=john.doe@example.com",
+									"raw": "{{BILL_BASE_URL}}/spend/users?max=100",
 									"host": ["{{BILL_BASE_URL}}"],
 									"path": ["spend", "users"],
 									"query": [
-										{"key": "email", "value": "john.doe@example.com"}
+										{"key": "max", "value": "100"}
 									]
 								}
 							},
@@ -425,29 +545,7 @@
 							"header": [
 								{"key": "Content-Type", "value": "application/json"}
 							],
-							"body": "{\n  \"users\": [\n    {\n      \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"email\": \"john.doe@example.com\",\n      \"firstName\": \"John\",\n      \"lastName\": \"Doe\",\n      \"role\": \"MEMBER\",\n      \"status\": \"ACTIVE\",\n      \"retired\": false\n    }\n  ]\n}"
-						},
-						{
-							"name": "User Not Found",
-							"originalRequest": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{BILL_BASE_URL}}/spend/users?email=notfound@example.com",
-									"host": ["{{BILL_BASE_URL}}"],
-									"path": ["spend", "users"],
-									"query": [
-										{"key": "email", "value": "notfound@example.com"}
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{"key": "Content-Type", "value": "application/json"}
-							],
-							"body": "{\n  \"users\": []\n}"
+							"body": "{\n  \"results\": [\n    {\n      \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n      \"email\": \"john.doe@example.com\",\n      \"firstName\": \"John\",\n      \"lastName\": \"Doe\",\n      \"role\": \"MEMBER\",\n      \"status\": \"ACTIVE\",\n      \"retired\": false,\n      \"externalId\": \"12345\",\n      \"costCenter\": \"691 - 37273 - VBC - SNF@Home - Indirect\"\n    }\n  ],\n  \"nextPage\": null\n}"
 						}
 					]
 				},
@@ -495,7 +593,7 @@
 							"header": [
 								{"key": "Content-Type", "value": "application/json"}
 							],
-							"body": "{\n  \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"email\": \"john.doe@example.com\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"role\": \"MEMBER\",\n  \"status\": \"ACTIVE\",\n  \"retired\": false,\n  \"manager\": {\n    \"uuid\": \"usr_550e8400e29b41d4a716446655440001\",\n    \"email\": \"supervisor@example.com\"\n  },\n  \"costCenter\": \"PROJ001\",\n  \"externalId\": \"12345\",\n  \"createdAt\": \"2024-01-15T10:30:00Z\",\n  \"updatedAt\": \"2024-01-15T10:30:00Z\"\n}"
+							"body": "{\n  \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"email\": \"john.doe@example.com\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"role\": \"MEMBER\",\n  \"status\": \"ACTIVE\",\n  \"retired\": false,\n  \"manager\": {\n    \"uuid\": \"usr_550e8400e29b41d4a716446655440001\",\n    \"email\": \"supervisor@example.com\"\n  },\n  \"costCenter\": \"691 - 37273 - VBC - SNF@Home - Indirect\",\n  \"externalId\": \"12345\",\n  \"createdAt\": \"2024-01-15T10:30:00Z\",\n  \"updatedAt\": \"2024-01-15T10:30:00Z\"\n}"
 						}
 					]
 				},
@@ -520,14 +618,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"new.user@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"role\": \"MEMBER\",\n  \"retired\": false,\n  \"manager_email\": \"supervisor@example.com\",\n  \"cost_center\": \"PROJ001\",\n  \"external_id\": \"12345\"\n}"
+							"raw": "{\n  \"email\": \"new.user@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"role\": \"MEMBER\",\n  \"retired\": false,\n  \"managerEmail\": \"supervisor@example.com\",\n  \"costCenter\": \"691 - 37273 - VBC - SNF@Home - Indirect\",\n  \"externalId\": \"12345\"\n}"
 						},
 						"url": {
 							"raw": "{{BILL_BASE_URL}}/spend/users",
 							"host": ["{{BILL_BASE_URL}}"],
 							"path": ["spend", "users"]
 						},
-						"description": "Creates a new user in the Spend & Expense system. Used during batch sync to create users that don't exist in BILL.com."
+						"description": "Creates a new user in the Spend & Expense system.\n\n**Request Body Fields:**\n- `email` (required): User email address\n- `firstName` (required): First name\n- `lastName` (required): Last name\n- `role`: User role (MEMBER, ADMIN, AUDITOR, BOOKKEEPER, NO_ACCESS). Default: MEMBER\n- `retired`: Whether user is retired/deactivated. Default: false\n- `managerEmail`: Email of the user's manager\n- `costCenter`: Cost center string (format: \"glSegment - code - description\")\n- `externalId`: External identifier (e.g., UKG employee number)"
 					},
 					"response": [
 						{
@@ -537,7 +635,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"email\": \"new.user@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"role\": \"MEMBER\",\n  \"retired\": false\n}"
+									"raw": "{\n  \"email\": \"new.user@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"role\": \"MEMBER\",\n  \"retired\": false,\n  \"costCenter\": \"691 - 37273 - VBC - SNF@Home - Indirect\",\n  \"externalId\": \"12345\"\n}"
 								},
 								"url": {
 									"raw": "{{BILL_BASE_URL}}/spend/users",
@@ -551,7 +649,7 @@
 							"header": [
 								{"key": "Content-Type", "value": "application/json"}
 							],
-							"body": "{\n  \"uuid\": \"usr_660e8400e29b41d4a716446655440099\",\n  \"id\": \"usr_660e8400e29b41d4a716446655440099\",\n  \"email\": \"new.user@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"role\": \"MEMBER\",\n  \"status\": \"PENDING_INVITE\",\n  \"retired\": false,\n  \"createdAt\": \"2024-02-01T14:00:00Z\",\n  \"updatedAt\": \"2024-02-01T14:00:00Z\"\n}"
+							"body": "{\n  \"uuid\": \"usr_660e8400e29b41d4a716446655440099\",\n  \"id\": \"usr_660e8400e29b41d4a716446655440099\",\n  \"email\": \"new.user@example.com\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\",\n  \"role\": \"MEMBER\",\n  \"status\": \"PENDING_INVITE\",\n  \"retired\": false,\n  \"externalId\": \"12345\",\n  \"costCenter\": \"691 - 37273 - VBC - SNF@Home - Indirect\",\n  \"createdAt\": \"2024-02-01T14:00:00Z\",\n  \"updatedAt\": \"2024-02-01T14:00:00Z\"\n}"
 						},
 						{
 							"name": "Error - User Already Exists",
@@ -599,14 +697,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe Updated\",\n  \"role\": \"MEMBER\",\n  \"retired\": false,\n  \"manager_email\": \"new.supervisor@example.com\",\n  \"cost_center\": \"PROJ002\"\n}"
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe Updated\",\n  \"role\": \"MEMBER\",\n  \"retired\": false,\n  \"managerEmail\": \"new.supervisor@example.com\",\n  \"costCenter\": \"692 - 37274 - VBC - Hospice - Direct\",\n  \"externalId\": \"12345\"\n}"
 						},
 						"url": {
 							"raw": "{{BILL_BASE_URL}}/spend/users/{{user_id}}",
 							"host": ["{{BILL_BASE_URL}}"],
 							"path": ["spend", "users", "{{user_id}}"]
 						},
-						"description": "Updates an existing user. Used during batch sync when user data has changed in UKG."
+						"description": "Updates an existing user. Used during batch sync when user data has changed in UKG.\n\n**Updatable Fields:**\n- `firstName`, `lastName`: Name updates\n- `role`: Role change (MEMBER, ADMIN, AUDITOR, BOOKKEEPER, NO_ACCESS)\n- `retired`: Retire/unretire user\n- `managerEmail`: Update manager\n- `costCenter`: Update cost center\n- `externalId`: Update external identifier"
 					},
 					"response": [
 						{
@@ -616,7 +714,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe Updated\"\n}"
+									"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe Updated\",\n  \"costCenter\": \"692 - 37274 - VBC - Hospice - Direct\"\n}"
 								},
 								"url": {
 									"raw": "{{BILL_BASE_URL}}/spend/users/usr_550e8400e29b41d4a716446655440000",
@@ -630,7 +728,7 @@
 							"header": [
 								{"key": "Content-Type", "value": "application/json"}
 							],
-							"body": "{\n  \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"email\": \"john.doe@example.com\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe Updated\",\n  \"role\": \"MEMBER\",\n  \"status\": \"ACTIVE\",\n  \"retired\": false,\n  \"updatedAt\": \"2024-02-01T15:30:00Z\"\n}"
+							"body": "{\n  \"uuid\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"id\": \"usr_550e8400e29b41d4a716446655440000\",\n  \"email\": \"john.doe@example.com\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe Updated\",\n  \"role\": \"MEMBER\",\n  \"status\": \"ACTIVE\",\n  \"retired\": false,\n  \"costCenter\": \"692 - 37274 - VBC - Hospice - Direct\",\n  \"externalId\": \"12345\",\n  \"updatedAt\": \"2024-02-01T15:30:00Z\"\n}"
 						}
 					]
 				},
