@@ -1,11 +1,12 @@
 # UKG Pro to Motus Driver Sync
 
-Enterprise integration pipeline for synchronizing employee data from UKG Pro to Motus mileage reimbursement platform.
+Enterprise integration pipeline for synchronizing employee data from UKG Pro to the Motus mileage reimbursement platform.
 
 ---
 
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 1. [Overview](#1-overview)
 2. [Architecture](#2-architecture)
 3. [Business Logic](#3-business-logic)
@@ -24,11 +25,92 @@ Enterprise integration pipeline for synchronizing employee data from UKG Pro to 
 
 ---
 
+## Quick Start
+
+Get up and running in 5 steps:
+
+### 1. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Configure Environment
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env with your credentials
+```
+
+**Required credentials in `.env`** (see [Section 5](#5-configuration) for the full list):
+```bash
+# UKG Pro API
+UKG_USERNAME=your_ukg_username
+UKG_PASSWORD=your_ukg_password
+UKG_CUSTOMER_API_KEY=your_ukg_customer_api_key
+
+# Motus API (used to mint the JWT on first call)
+MOTUS_LOGIN_ID=your_motus_login_id
+MOTUS_PASSWORD=your_motus_password
+
+# Batch
+COMPANY_ID=J9A6Y
+```
+
+### 3. Generate a Motus Token (optional)
+
+The client mints and caches a JWT automatically on first use, but you can
+pre-generate one:
+
+```bash
+python motus-get-token.py --write-env
+```
+
+### 4. Dry Run (Preview Changes)
+
+```bash
+python -m src.presentation.cli.batch_runner --company-id J9A6Y --dry-run
+```
+
+### 5. Execute Sync
+
+```bash
+python -m src.presentation.cli.batch_runner --company-id J9A6Y
+```
+
+### Test a Single Employee (Local Testing)
+
+There is no single-employee flag on the batch runner. To exercise the full
+pipeline for **one** employee, use the built-in Debug API (see
+[Section 6](#debug-api)):
+
+```bash
+# Start the debug API
+uvicorn src.presentation.api.debug_api:app --reload --port 8000
+
+# Dry-run sync one employee (no changes written to Motus)
+curl -X POST "http://localhost:8000/sync" \
+  -H "Content-Type: application/json" \
+  -d '{"employee_number": "12345", "company_id": "J9A6Y", "dry_run": true}'
+```
+
+### Docker Alternative
+
+```bash
+# Build and run with Docker
+docker build -t matrix-ukg-motus:latest .
+docker run --rm --env-file .env matrix-ukg-motus:latest --company-id J9A6Y --dry-run
+```
+
+---
+
 ## 1. Overview
 
 ### Purpose
 
-This integration automates the synchronization of employee data from UKG Pro (Ultimate Kronos Group) to Motus, a mileage reimbursement platform. It supports two reimbursement programs:
+This integration automates the synchronization of employee data from UKG Pro (Ultimate Kronos Group) to Motus, a platform that reimburses employees for business use of their personal vehicles. It keeps the Motus driver roster, status, and attributes aligned with UKG HR data across two reimbursement programs:
 
 | Program | Program ID | Description |
 |---------|------------|-------------|
@@ -37,81 +119,88 @@ This integration automates the synchronization of employee data from UKG Pro (Ul
 
 ### Key Features
 
-- **Job Code Eligibility Filtering**: Only sync employees with eligible job codes
+- **Job Code Eligibility Filtering**: Only sync employees with eligible `primaryJobCode` values
+- **Change-Window Filtering**: Only process employees changed within the last _N_ days (`--batch-run-days`)
 - **Employment Status Derivation**: Track Active, Leave, and Terminated status
-- **Manager/Supervisor Tracking**: Include supervisor name in driver payload
-- **Wave-Based Deployments**: Filter by US states for phased rollouts
-- **Parallel Processing**: ThreadPoolExecutor for high-throughput batch operations
+- **Manager/Supervisor Tracking**: Include supervisor name in the driver payload
+- **Automatic Token Refresh**: JWT is minted and cached transparently
+- **Parallel or Sequential Processing**: ThreadPoolExecutor or sequential mode for batch operations
 - **Dry-Run Mode**: Validate payloads without making API calls
+- **Debug API**: FastAPI service for single-employee troubleshooting
 
 ---
 
 ## 2. Architecture
 
+The codebase follows a Clean Architecture layout under `src/`:
+
+```
+src/
+├── domain/                        # Domain Layer (entities, interfaces)
+├── application/
+│   └── services/
+│       ├── driver_sync.py         # Batch upsert orchestration
+│       └── driver_builder.py      # UKG → Motus payload builder
+├── infrastructure/
+│   ├── config/
+│   │   └── settings.py            # UKG/Motus/Batch settings (dataclasses)
+│   └── adapters/
+│       ├── ukg/                   # UKG Pro API client
+│       └── motus/                 # Motus API client + token manager
+└── presentation/
+    ├── cli/
+    │   └── batch_runner.py        # CLI entry point (python -m ...)
+    └── api/
+        └── debug_api.py           # FastAPI debug/troubleshooting service
+```
+
+### Entry Point
+
+The supported entry point is the batch-runner module (this is also the Docker
+`ENTRYPOINT`):
+
+```bash
+python -m src.presentation.cli.batch_runner --company-id J9A6Y
+```
+
+> **Note:** The legacy top-level scripts (`run-motus-batch.py`,
+> `build-motus-driver.py`, `upsert-motus-driver.py`) have been retired to the
+> `_deprecated/` folder and are no longer the supported interface.
+> `motus-get-token.py` remains a standalone helper (see [Token Management](#token-management)).
+
 ### Data Flow
 
 ```
-┌─────────────┐     ┌──────────────────────┐     ┌─────────────────────┐     ┌─────────────┐
-│   UKG Pro   │────▶│ build-motus-driver.py│────▶│upsert-motus-driver.py│────▶│   Motus API │
-│     API     │     │   (Payload Builder)  │     │    (API Upserter)   │     │             │
-└─────────────┘     └──────────────────────┘     └─────────────────────┘     └─────────────┘
+┌─────────────┐     ┌──────────────────┐     ┌────────────────┐     ┌─────────────┐
+│   UKG Pro   │────▶│  driver_builder  │────▶│  driver_sync   │────▶│  Motus API  │
+│     API     │     │  (payload build) │     │ (POST / PUT)   │     │             │
+└─────────────┘     └──────────────────┘     └────────────────┘     └─────────────┘
+                              ▲
                               │
-                              ▼
-                    ┌──────────────────────┐
-                    │  run-motus-batch.py  │
-                    │    (Orchestrator)    │
-                    │                      │
-                    │  ┌────────────────┐  │
-                    │  │ThreadPoolExecutor│ │
-                    │  │  (12 workers)  │  │
-                    │  └────────────────┘  │
-                    └──────────────────────┘
+                    ┌──────────────────┐
+                    │   batch_runner   │
+                    │  (CLI + filters) │
+                    └──────────────────┘
 ```
 
 ### Self-Contained Repository
 
-This repository is **fully self-contained** with all dependencies included locally for easy Azure deployment:
+This repository is **fully self-contained** with shared utilities included
+locally under `common/` for easy Azure deployment:
 
 ```
 vai-matrix-ukg-motus-final/
-├── common/                   # Shared utility modules (local copy)
-│   ├── __init__.py
-│   ├── secrets_manager.py    # SOW 2.6 - Secrets management
-│   ├── rate_limiter.py       # SOW 5.1, 5.2 - Rate limiting
-│   ├── correlation.py        # SOW 7.2 - Correlation IDs & logging
-│   ├── notifications.py      # SOW 4.6 - Email notifications
-│   ├── metrics.py            # SOW 4.7, 7.3 - Metrics collection
-│   ├── report_generator.py   # SOW 4.7, 7.3, 10.4 - Report generation
-│   ├── redaction.py          # SOW 7.4, 7.5, 9.4 - PII redaction
-│   └── validators.py         # SOW 3.6, 3.7 - Input validation
-├── build-motus-driver.py     # Build Motus driver payload from UKG
-├── upsert-motus-driver.py    # Create/update Motus driver
-├── run-motus-batch.py        # Batch orchestrator
-├── motus-get-token.py        # JWT token management
+├── common/                   # Shared utility packages (local copy)
+│   ├── secrets_manager.py    # Secrets/env-file resolution
+│   ├── correlation.py        # Correlation IDs & logging config
+│   ├── rate_limiter/         # Rate limiting
+│   ├── notifications/        # Email/alert notifications
+│   └── redaction/            # PII redaction
+├── src/                      # Clean-architecture source
+├── motus-get-token.py        # Standalone JWT helper
 ├── Dockerfile                # Container definition
 └── requirements.txt          # Python dependencies
 ```
-
-All scripts import from the local `./common/` package:
-
-```python
-from common import (
-    get_secrets_manager,
-    get_rate_limiter,
-    generate_correlation_id,
-    redact_pii,
-    # ... other imports
-)
-```
-
-### Core Components
-
-| Component | File | Description |
-|-----------|------|-------------|
-| Payload Builder | `build-motus-driver.py` | Extracts UKG data and builds Motus driver payloads |
-| API Upserter | `upsert-motus-driver.py` | Handles JWT auth, POST/PUT logic, retries |
-| Batch Orchestrator | `run-motus-batch.py` | Parallel processing, state filtering, progress tracking |
-| Token Manager | `motus-get-token.py` | JWT authentication and token refresh |
 
 ---
 
@@ -119,31 +208,22 @@ from common import (
 
 ### 3.1 Job Code Eligibility (Pre-filter)
 
-Only employees with eligible job codes are synchronized to Motus:
+Only employees whose `primaryJobCode` is in the eligible set are synchronized to
+Motus. The default set is defined as `DEFAULT_JOB_IDS` in `batch_runner.py` and
+can be overridden with the `JOB_IDS` environment variable (comma-separated):
 
-| Program | Job Codes | Count |
-|---------|-----------|-------|
-| FAVR (21232) | 1103, 4165, 4166, 1102, 1106, 4197, 4196 | 7 |
-| CPM (21233) | 2817, 4121, 2157 | 3 |
-
-**Total Eligible Job Codes: 10**
+| Program | Job Codes |
+|---------|-----------|
+| FAVR (21232) | 1103, 4165, 4166, 1102, 1106, 4197, 4196 |
+| CPM (21233) | 2817, 4121, 2157 |
 
 Employees with ineligible job codes are skipped during batch processing.
 
-### 3.2 Program ID Mapping
+### 3.2 Change-Window Filter
 
-Job codes map to Motus Program IDs:
-
-```python
-JOBCODE_TO_PROGRAM = {
-    # FAVR (21232)
-    "1103": 21232, "4165": 21232, "4166": 21232,
-    "1102": 21232, "1106": 21232, "4197": 21232, "4196": 21232,
-    # CPM (21233)
-    "4154": 21233, "4152": 21233, "2817": 21233,
-    "4121": 21233, "2157": 21233,
-}
-```
+Employees are further filtered by `dateTimeChanged` — only those changed within
+the last `--batch-run-days` days (default `1`) are processed. Use
+`--batch-run-days 7` for a weekly catch-up run.
 
 ### 3.3 Employment Status Derivation
 
@@ -173,42 +253,60 @@ Manager information is fetched from UKG's supervisor-details endpoint:
 | Phone | Normalize to XXX-XXX-XXXX | `5551234567` → `555-123-4567` |
 | State | Uppercase for filtering | `fl` → `FL` |
 
-### 3.6 Wave-Based State Filtering
-
-Supports phased deployments by US state:
-
-| Wave | States | Example Start Date |
-|------|--------|-------------------|
-| 1 | FL, MS, NJ | Nov 1, 2025 |
-| 2 | GA, KY, NC | Dec 1, 2025 |
-| 3 | NY, MA, PA | Dec 15, 2025 |
-
 ---
 
 ## 4. Prerequisites
 
 ### System Requirements
 
-- Python 3.11 or higher
+- Python 3.9 or higher (`requires-python = ">=3.9"`; the Docker image uses 3.11)
 - pip (Python package manager)
 - Docker (for containerized deployment)
 
-### Dependencies
+### Local Setup on a Desktop Machine
 
+Run the integration directly on your Mac, Windows, or Linux desktop (no Docker
+required). From the project root:
+
+**macOS / Linux:**
 ```bash
+# 1. Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 2. Install dependencies
 pip install -r requirements.txt
+
+# 3. Configure credentials
+cp .env.example .env      # then edit .env with your credentials
+
+# 4. Generate a Motus token (optional — the client will mint one on demand)
+python motus-get-token.py --write-env
+
+# 5. Dry run (no changes written to Motus)
+python -m src.presentation.cli.batch_runner --company-id J9A6Y --dry-run
 ```
 
-**requirements.txt:**
-```
-requests==2.31.0
-python-dotenv==1.0.1
+**Windows (PowerShell):**
+```powershell
+# 1. Create and activate a virtual environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Configure credentials
+copy .env.example .env     # then edit .env with your credentials
+
+# 4. Dry run
+python -m src.presentation.cli.batch_runner --company-id J9A6Y --dry-run
 ```
 
 ### Access Requirements
 
 - UKG Pro API credentials (Basic Auth + Customer API Key)
-- Motus API credentials (Login ID + Password for JWT)
+- Motus API credentials (Login ID + Password for JWT generation)
 - Network access to both UKG and Motus API endpoints
 
 ---
@@ -217,31 +315,75 @@ python-dotenv==1.0.1
 
 ### Environment Variables
 
-Create a `.env` file or set environment variables:
+The fastest way to configure is to copy the template and edit it:
+
+```bash
+cp .env.example .env
+```
+
+Settings are read by explicit name (no shared prefix) in
+`src/infrastructure/config/settings.py`. The tables below list the variables
+you will most commonly set.
+
+#### UKG Pro
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `UKG_BASE_URL` | Yes | `https://service4.ultipro.com` | UKG Pro API base URL |
-| `UKG_USERNAME` | Yes | - | UKG API username |
-| `UKG_PASSWORD` | Yes | - | UKG API password |
+| `UKG_BASE_URL` | No | `https://service4.ultipro.com` | UKG Pro API base URL |
+| `UKG_USERNAME` | Yes* | - | UKG API username |
+| `UKG_PASSWORD` | Yes* | - | UKG API password |
 | `UKG_CUSTOMER_API_KEY` | Yes | - | UKG Customer API Key header |
-| `UKG_BASIC_B64` | No | - | Pre-encoded Base64 auth token |
-| `MOTUS_LOGIN_ID` | Yes | - | Motus login ID |
-| `MOTUS_PASSWORD` | Yes | - | Motus password |
-| `MOTUS_API_BASE` | Yes | - | Motus API base URL |
-| `MOTUS_JWT` | Yes | - | Motus JWT token (auto-generated) |
-| `MOTUS_ENV` | No | `dev` | Environment: `dev` or `prod` |
-| `COMPANY_ID` | Yes | `J9A6Y` | UKG Company ID |
-| `STATES` | No | - | Comma-separated state filter |
+| `UKG_BASIC_B64` | No | - | Pre-encoded Basic auth token; used instead of username/password if set |
+| `UKG_TIMEOUT` | No | `45` | Request timeout (seconds) |
+| `UKG_MAX_RETRIES` | No | `3` | Max retry attempts |
+
+\* Either `UKG_USERNAME` + `UKG_PASSWORD`, **or** `UKG_BASIC_B64`, is required.
+
+#### Motus
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MOTUS_API_BASE` | No | `https://api.motus.com/v1` | Motus API base URL |
+| `MOTUS_LOGIN_ID` | Yes** | - | Motus login ID (needed to mint the JWT) |
+| `MOTUS_PASSWORD` | Yes** | - | Motus password (needed to mint the JWT) |
+| `MOTUS_JWT` | No | - | Pre-supplied JWT; if empty it is generated and cached automatically |
+| `MOTUS_PROGRAM_ID` | No | `21233` | Default program id (CPM) |
+| `MOTUS_TOKEN_URL` | No | `https://token.motus.com/tokenservice/token/api` | Token endpoint |
+| `MOTUS_TOKEN_CACHE` | No | `.motus_token.json` | Token cache file |
+| `MOTUS_TOKEN_REFRESH_SAFETY` | No | `60` | Seconds before expiry to refresh |
+| `MOTUS_DEFAULT_TTL_SECONDS` | No | `3300` | Fallback token TTL (55 min) |
+| `MOTUS_TIMEOUT` | No | `45` | Request timeout (seconds) |
+| `MOTUS_MAX_RETRIES` | No | `3` | Max retry attempts |
+
+\*\* Required only when a JWT must be minted (i.e. `MOTUS_JWT` is not supplied).
+
+#### Batch, Logging & Other
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `COMPANY_ID` | Yes*** | - | UKG Company ID (fallback when `--company-id` is omitted) |
 | `WORKERS` | No | `12` | Thread pool size |
-| `DEBUG` | No | `0` | Enable debug logging (0/1) |
-| `DRY_RUN` | No | `0` | Validate only, no API calls (0/1) |
-| `SAVE_LOCAL` | No | `0` | Save payloads to data/ (0/1) |
-| `PROBE` | No | `0` | Check Motus before writing (0/1) |
+| `USE_SEQUENTIAL` | No | `1` | Sequential (`1`) vs threaded (`0`) processing |
+| `BATCH_RUN_DAYS` | No | `1` | Change-window look-back for `dateTimeChanged` |
+| `JOB_IDS` | No | built-in default | Eligible job codes (comma-separated) |
+| `STATES` | No | - | Optional comma-separated state filter |
+| `DRY_RUN` | No | `0` | Validate only, no API calls (`1` enables) |
+| `SAVE_LOCAL` | No | `0` | Write JSON payloads to `data/batch` |
+| `PROBE` | No | `0` | On dry-run, GET Motus to report would-insert/update |
+| `OUT_DIR` | No | `data/batch` | Output directory |
+| `LOG_LEVEL` | No | `INFO` | Logging level (`DEBUG`/`INFO`/`WARNING`/`ERROR`) |
+| `DEBUG` | No | `0` | Enable verbose debug logging (`1` enables) |
 
-### Example Configuration File
+\*\*\* Required unless passed as `--company-id`.
 
-**matrix-ukg-motus.env:**
+Environment selection (`ENV_FILE`, `ENV_NAME`) and notification/secrets-provider
+variables are documented inline in `.env.example`. Notification variables read
+by the code are `NOTIFICATIONS_ENABLED`, `NOTIFICATION_PROVIDER`,
+`NOTIFICATION_SENDER`, `ALERT_RECIPIENTS`, `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_USE_TLS`.
+
+### Minimal `.env` Example
+
 ```bash
 # UKG Configuration
 UKG_BASE_URL=https://service4.ultipro.com
@@ -249,82 +391,85 @@ UKG_USERNAME=your-username
 UKG_PASSWORD=your-password
 UKG_CUSTOMER_API_KEY=your-customer-api-key
 
-# Motus Configuration
+# Motus Configuration (JWT minted automatically if omitted)
 MOTUS_LOGIN_ID=your-login-id
 MOTUS_PASSWORD=your-password
 MOTUS_API_BASE=https://api.motus.com/v1
-MOTUS_JWT=your-jwt-token
-MOTUS_ENV=prod
 
 # Batch Configuration
 COMPANY_ID=J9A6Y
 WORKERS=12
-DEBUG=0
+BATCH_RUN_DAYS=1
+LOG_LEVEL=INFO
+```
+
+### Environment-Specific Configuration
+
+The secrets manager resolves an env file in this order:
+
+1. `ENV_FILE` environment variable (explicit override)
+2. `.env.dev` if `ENV_NAME=development`
+3. `.env.prod` if `ENV_NAME=production`
+4. `.env` (default fallback)
+5. Project-specific files (`matrix-ukg-motus.env`, etc.)
+
+```bash
+# Development
+ENV_NAME=development python -m src.presentation.cli.batch_runner --company-id J9A6Y
+
+# Production
+ENV_NAME=production python -m src.presentation.cli.batch_runner --company-id J9A6Y
 ```
 
 ---
 
 ## 6. Usage
 
-### Single Employee Processing
-
-Build a driver payload for one employee:
-
-```bash
-python build-motus-driver.py <employeeNumber> <companyID>
-
-# Example
-python build-motus-driver.py 12345 J9A6Y
-```
-
-Output is saved to `data/motus_driver_<employeeNumber>.json`.
-
 ### Batch Processing
 
-Process all eligible employees:
-
 ```bash
-# Full batch (all states)
-python run-motus-batch.py --company-id J9A6Y
-
-# Filter by states (wave deployment)
-python run-motus-batch.py --company-id J9A6Y --states FL,MS,NJ
+# Full batch
+python -m src.presentation.cli.batch_runner --company-id J9A6Y
 
 # Dry run (validate only)
-python run-motus-batch.py --company-id J9A6Y --dry-run
+python -m src.presentation.cli.batch_runner --company-id J9A6Y --dry-run
+
+# Weekly catch-up (employees changed in the last 7 days)
+python -m src.presentation.cli.batch_runner --company-id J9A6Y --batch-run-days 7
 
 # Save payloads locally
-python run-motus-batch.py --company-id J9A6Y --save-local
+python -m src.presentation.cli.batch_runner --company-id J9A6Y --save-local
 
 # Custom worker count
-python run-motus-batch.py --company-id J9A6Y --workers 24
+python -m src.presentation.cli.batch_runner --company-id J9A6Y --workers 24
 
-# Combined options
-python run-motus-batch.py --company-id J9A6Y --states FL,MS --dry-run --save-local --probe
+# Dry run with probe (reports would-insert/update)
+python -m src.presentation.cli.batch_runner --company-id J9A6Y --dry-run --probe
 ```
 
 ### CLI Options
 
 | Option | Description |
 |--------|-------------|
-| `--company-id` | UKG Company ID (required) |
-| `--states` | Comma-separated US state codes |
+| `--company-id` | UKG Company ID (falls back to `COMPANY_ID` env) |
 | `--workers` | Thread pool size |
-| `--dry-run` | Validate without API calls |
-| `--save-local` | Save JSON payloads to data/batch/ |
-| `--probe` | Check Motus state before writing |
+| `--dry-run` | Validate without POST/PUT to Motus |
+| `--save-local` | Write JSON payloads to `data/batch` |
+| `--probe` | On dry-run, GET Motus to report would-insert/update |
+| `--batch-run-days` | Filter employees changed within the last _N_ days |
+
+> **Note:** State filtering is available via the `STATES` environment variable;
+> there is no `--states` CLI flag on the batch runner.
 
 ### Token Management
 
-#### Manual Token Generation
-
-Generate a new Motus JWT token:
+Generate or refresh a Motus JWT with the standalone helper:
 
 ```bash
 # Generate token and print to stdout
 python motus-get-token.py
 
-# Generate token and write to .env file
+# Generate token and write MOTUS_JWT to the .env file
 python motus-get-token.py --write-env
 
 # Force refresh (ignore cache)
@@ -332,72 +477,18 @@ python motus-get-token.py --force --write-env
 
 # Output as JSON with expiration details
 python motus-get-token.py --json
+
+# Print an `export MOTUS_JWT=...` line for shell use
+python motus-get-token.py --print-export
 ```
 
-#### Automatic Token Refresh
-
-The `MotusClient` automatically refreshes the token when:
-- No `MOTUS_JWT` is found on initialization
-- A 401/403 authentication error is received
-
-This eliminates the need to manually refresh tokens before batch runs.
-
-```python
-# Token is auto-refreshed if missing or expired
-from src.infrastructure.adapters.motus import MotusClient
-client = MotusClient()  # Auto-refreshes token if needed
-```
-
-### Environment-Specific Configuration
-
-The system supports separate configuration files for Development and Production environments.
-
-#### Environment Files
-
-| File | Purpose | Key Settings |
-|------|---------|--------------|
-| `.env.dev` | Development | `DRY_RUN=1`, `DEBUG=1`, `WORKERS=4` |
-| `.env.prod` | Production | `DRY_RUN=0`, `DEBUG=0`, `WORKERS=12` |
-| `.env` | Default fallback | Used if no specific env file found |
-
-#### Switching Environments
-
-**Option 1: Using ENV_FILE (Recommended)**
-
-```bash
-# Development
-ENV_FILE=.env.dev python motus-get-token.py --write-env --env-path .env.dev
-ENV_FILE=.env.dev python run-motus-batch.py --company-id J9A6Y
-
-# Production
-ENV_FILE=.env.prod python motus-get-token.py --write-env --env-path .env.prod
-ENV_FILE=.env.prod python run-motus-batch.py --company-id J9A6Y
-```
-
-**Option 2: Using ENV_NAME**
-
-```bash
-# Development (auto-selects .env.dev)
-ENV_NAME=development python run-motus-batch.py --company-id J9A6Y
-
-# Production (auto-selects .env.prod)
-ENV_NAME=production python run-motus-batch.py --company-id J9A6Y
-```
-
-#### Environment Priority
-
-The secrets manager loads configuration in this order:
-1. `ENV_FILE` environment variable (explicit override)
-2. `.env.dev` if `ENV_NAME=development`
-3. `.env.prod` if `ENV_NAME=production`
-4. `.env` (default fallback)
-5. Project-specific files (`matrix-ukg-motus.env`, etc.)
+The `MotusClient` auto-refreshes the token when no `MOTUS_JWT` is present or a
+cached token has expired, so manual generation is optional.
 
 ### Debug API
 
-A FastAPI-based debug API is available for testing individual employees and troubleshooting sync issues.
-
-#### Starting the Debug API
+A FastAPI-based debug service is available for testing individual employees and
+troubleshooting sync issues — this is the recommended single-employee workflow.
 
 ```bash
 # Development
@@ -412,19 +503,20 @@ ENV_FILE=.env.prod uvicorn src.presentation.api.debug_api:app --port 8000
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Health check |
-| `/ukg/employment-details/{emp_num}` | GET | Raw UKG employment data |
-| `/ukg/person-details/{emp_id}` | GET | Raw UKG person data |
-| `/motus/driver/{emp_num}` | GET | Current Motus driver data |
+| `/ukg/employment-details/{employee_number}` | GET | Raw UKG employment data |
+| `/ukg/employee-employment-details/{employee_number}` | GET | Employment details with project codes |
+| `/ukg/person-details/{employee_id}` | GET | Raw UKG person data |
+| `/ukg/supervisor-details/{employee_id}` | GET | Supervisor/manager data |
+| `/motus/driver/{employee_id}` | GET | Current Motus driver data |
 | `/build-driver` | POST | Build driver payload without syncing |
 | `/compare` | POST | Compare UKG vs Motus data |
-| `/validate-scenario` | POST | Validate specific scenario |
-| `/sync` | POST | Sync single employee (with dry_run option) |
+| `/validate-scenario` | POST | Validate a specific scenario |
+| `/sync` | POST | Sync a single employee (with `dry_run` option) |
 
 #### Example: Debug Single Employee Sync
 
 ```bash
-# Dry run - validate without making changes
-curl -X POST "http://localhost:8000/sync?include_trace=true" \
+curl -X POST "http://localhost:8000/sync" \
   -H "Content-Type: application/json" \
   -d '{
     "employee_number": "12345",
@@ -433,14 +525,7 @@ curl -X POST "http://localhost:8000/sync?include_trace=true" \
   }'
 ```
 
-The response includes a detailed trace of:
-- All UKG API calls and responses
-- Data transformations applied
-- Motus API request and response
-
-#### Swagger Documentation
-
-Interactive API docs available at: `http://localhost:8000/docs`
+Interactive API docs are available at `http://localhost:8000/docs`.
 
 ---
 
@@ -454,7 +539,6 @@ Interactive API docs available at: `http://localhost:8000/docs`
 | `/personnel/v1/employee-employment-details` | GET | Employment details with project codes |
 | `/personnel/v1/person-details` | GET | Personal information (address, phone) |
 | `/personnel/v1/supervisor-details` | GET | Manager/supervisor information |
-| `/configuration/v1/locations/{code}` | GET | Location details |
 
 ### Motus API Endpoints
 
@@ -462,49 +546,25 @@ Interactive API docs available at: `http://localhost:8000/docs`
 |----------|--------|---------|
 | `/drivers` | POST | Create new driver |
 | `/drivers/{id}` | PUT | Update existing driver |
-| `/auth/token` | POST | Obtain JWT token |
+| token service | POST | Obtain JWT token (`MOTUS_TOKEN_URL`) |
 
-### Driver Payload Schema
+### Driver Payload Schema (abridged)
 
 ```json
 {
   "clientEmployeeId1": "12345",
-  "clientEmployeeId2": null,
   "programId": 21232,
   "firstName": "John",
   "lastName": "Doe",
   "address1": "123 Main St",
-  "address2": "Apt 456",
   "city": "Springfield",
   "stateProvince": "IL",
-  "country": "US",
   "postalCode": "62701",
   "email": "john.doe@example.com",
   "phone": "555-123-4567",
-  "alternatePhone": "555-987-6543",
   "startDate": "03/15/2024",
-  "endDate": "",
-  "leaveStartDate": "",
-  "leaveEndDate": "",
-  "annualBusinessMiles": 0,
-  "commuteDeductionType": null,
-  "commuteDeductionCap": null,
   "customVariables": [
-    {"name": "Project Code", "value": "PROJ001"},
-    {"name": "Project", "value": "Project Name"},
     {"name": "Job Code", "value": "1103"},
-    {"name": "Job", "value": "Sales Representative"},
-    {"name": "Location Code", "value": "Main Office"},
-    {"name": "Location", "value": "IL"},
-    {"name": "Org Level 1 Code", "value": "ORG1"},
-    {"name": "Org Level 2 Code", "value": "ORG2"},
-    {"name": "Org Level 3 Code", "value": "ORG3"},
-    {"name": "Org Level 4 Code", "value": "ORG4"},
-    {"name": "Full/Part Time Code", "value": "F"},
-    {"name": "Employment Type Code", "value": "REG"},
-    {"name": "Employment Status Code", "value": "A"},
-    {"name": "Last Hire", "value": "01/15/2020"},
-    {"name": "Termination Date", "value": ""},
     {"name": "Manager Name", "value": "Jane Manager"},
     {"name": "Derived Status", "value": "Active"}
   ]
@@ -519,41 +579,14 @@ Interactive API docs available at: `http://localhost:8000/docs`
 
 | Feature | Status | Implementation |
 |---------|--------|---------------|
-| Rate Limiting | Implemented | Token bucket algorithm in upserter |
-| 429 Handling | Implemented | Retry-After header support with backoff |
-| Correlation IDs | Implemented | UUID v4 for request tracing |
-| PII Redaction | Implemented | Email/phone masking in logs |
-
-### Rate Limiting
-
-The system implements a token bucket algorithm to respect API rate limits:
-
-```python
-class RateLimiter:
-    def __init__(self, calls_per_minute: int = 60):
-        self.interval = 60.0 / calls_per_minute
-        self.last_call = 0.0
-
-    def acquire(self):
-        elapsed = time.time() - self.last_call
-        if elapsed < self.interval:
-            time.sleep(self.interval - elapsed)
-        self.last_call = time.time()
-```
-
-### 429 Handling
-
-When rate limited, the system respects the `Retry-After` header:
-
-```python
-def handle_rate_limit(response):
-    retry_after = response.headers.get("Retry-After", 60)
-    time.sleep(int(retry_after))
-```
+| Rate Limiting | Implemented | Token bucket (`common/rate_limiter/`) |
+| 429 Handling | Implemented | Retry-After support with backoff |
+| Correlation IDs | Implemented | UUID v4 for request tracing (`common/correlation.py`) |
+| PII Redaction | Implemented | Email/phone masking in logs (`common/redaction/`) |
 
 ### Correlation IDs
 
-Each request includes a unique correlation ID for tracing:
+Each request is tagged with a unique correlation ID for tracing:
 
 ```python
 correlation_id = str(uuid.uuid4())
@@ -562,14 +595,8 @@ headers["X-Correlation-ID"] = correlation_id
 
 ### PII Redaction
 
-Sensitive data is redacted in logs:
-
-```python
-def redact_email(email):
-    # john.doe@example.com → jo***@example.com
-    local, domain = email.split('@')
-    return f"{local[:2]}***@{domain}"
-```
+Sensitive data is redacted in logs (email/phone masking) via a logging filter
+applied at configuration time.
 
 ---
 
@@ -579,28 +606,29 @@ def redact_email(email):
 
 ```
 tests/
-├── __init__.py
 ├── conftest.py
+├── fixtures/          # motus_mocks.py, mock_data.py, ukg_mocks.py
 ├── unit/
-│   ├── __init__.py
-│   ├── test_build_motus_driver.py
-│   ├── test_upsert_motus_driver.py
 │   ├── test_run_motus_batch.py
-│   ├── test_job_code_filter.py
 │   ├── test_manager_field.py
 │   ├── test_leave_status.py
-│   ├── test_rate_limiter.py
+│   ├── test_motus_get_token.py
+│   ├── test_upsert_motus_driver.py
+│   ├── test_job_code_filter.py
 │   └── test_notify.py
 └── integration/
-    ├── __init__.py
-    ├── test_e2e.py
-    └── test_eeids.py
+    ├── test_api_scenarios.py
+    ├── test_debug_api_e2e.py
+    ├── test_e2e_extended.py
+    ├── test_token_flow.py
+    ├── test_eeids.py
+    └── test_e2e.py
 ```
 
 ### Running Tests
 
 ```bash
-# Run all tests
+# Run all tests (coverage runs automatically via pyproject addopts)
 pytest
 
 # Run unit tests only
@@ -609,40 +637,16 @@ pytest tests/unit/ -v
 # Run integration tests only
 pytest tests/integration/ -v
 
-# Run with coverage report
-pytest --cov=. --cov-report=html
-
-# Run specific test file
+# Run a specific test file
 pytest tests/unit/test_job_code_filter.py -v
 ```
 
-### Test Coverage
+Coverage is configured on `src` (`--cov=src`) with an HTML report written to
+`htmlcov/` and a `fail_under = 90` threshold.
 
-| Component | Coverage |
-|-----------|----------|
-| Overall | 93% |
-| src/application/services | 96-99% |
-| src/domain/models | 94-100% |
-| src/infrastructure/adapters | 89-91% |
-| src/presentation/api | 89-91% |
-
-**Total Tests: 819**
-
-Run tests with coverage:
 ```bash
-python -m pytest tests/unit/ -v --cov=src --cov-report=term-missing --cov-fail-under=90
+open htmlcov/index.html
 ```
-
-### Test EEIDs
-
-Integration tests use real-world test EEIDs:
-
-| Category | EEIDs |
-|----------|-------|
-| New Hires | 28190, 28203, 28207, 28209, 28210, 28199, 28206, 28189, 28204 |
-| Terminations | 26737, 27991, 28069, 23497, 27938, 23463, 26612, 25213, 28010 |
-| Manager Changes | 28195 |
-| Address/Phone | 25336, 26421, 10858, 22299 |
 
 ---
 
@@ -656,38 +660,30 @@ Integration tests use real-world test EEIDs:
 docker build -t matrix-ukg-motus:latest .
 ```
 
-#### Dockerfile
+#### Dockerfile (as shipped)
 
 ```dockerfile
 FROM python:3.11-slim
-ENV PYTHONUNBUFFERED=1
-WORKDIR /app
-COPY . /app
-RUN pip install --no-cache-dir -r requirements.txt
-ENTRYPOINT ["python", "run-motus-batch.py"]
+# ... non-root appuser, copies src/, common/, motus-get-token.py, requirements.txt
+ENTRYPOINT ["python3", "-m", "src.presentation.cli.batch_runner"]
 CMD []
 ```
+
+Arguments (e.g. `--company-id J9A6Y --dry-run`) are appended at `docker run`.
 
 #### Run Container
 
 ```bash
 # Standard execution
 docker run --rm \
-  --env-file matrix-ukg-motus.env \
+  --env-file .env \
   -v "$(pwd)/data:/app/data" \
   matrix-ukg-motus:latest \
   --company-id J9A6Y
 
-# With state filter
-docker run --rm \
-  --env-file matrix-ukg-motus.env \
-  -v "$(pwd)/data:/app/data" \
-  matrix-ukg-motus:latest \
-  --company-id J9A6Y --states FL,MS,NJ
-
 # Dry run
 docker run --rm \
-  --env-file matrix-ukg-motus.env \
+  --env-file .env \
   matrix-ukg-motus:latest \
   --company-id J9A6Y --dry-run
 ```
@@ -695,26 +691,25 @@ docker run --rm \
 ### Azure Container Instance
 
 ```bash
-# Create container instance
 az container create \
   --resource-group rg-matrix-integrations \
   --name matrix-ukg-motus \
   --image matrixacr.azurecr.io/matrix-ukg-motus:latest \
   --environment-variables \
     COMPANY_ID=J9A6Y \
-    MOTUS_ENV=prod \
   --secure-environment-variables \
     UKG_USERNAME=$UKG_USERNAME \
     UKG_PASSWORD=$UKG_PASSWORD \
     UKG_CUSTOMER_API_KEY=$UKG_CUSTOMER_API_KEY \
-    MOTUS_JWT=$MOTUS_JWT
+    MOTUS_LOGIN_ID=$MOTUS_LOGIN_ID \
+    MOTUS_PASSWORD=$MOTUS_PASSWORD
 ```
 
 ### Scheduled Execution (Cron)
 
 ```bash
 # Daily sync at 2 AM
-0 2 * * * docker run --rm --env-file /opt/matrix/matrix-ukg-motus.env matrix-ukg-motus:latest --company-id J9A6Y >> /var/log/motus-sync.log 2>&1
+0 2 * * * docker run --rm --env-file /opt/matrix/.env matrix-ukg-motus:latest --company-id J9A6Y >> /var/log/motus-sync.log 2>&1
 ```
 
 ---
@@ -725,39 +720,28 @@ az container create \
 
 | Level | Usage |
 |-------|-------|
-| DEBUG | Detailed trace information (requires `DEBUG=1`) |
+| DEBUG | Detailed trace information (`DEBUG=1` or `LOG_LEVEL=DEBUG`) |
 | INFO | Progress updates, processing stats |
-| WARN | Validation issues, skipped records |
+| WARNING | Validation issues, skipped records |
 | ERROR | API failures, critical errors |
 
 ### Log Format
 
 ```
-[INFO] companyID=J9A6Y | states=FL,MS,NJ | workers=12 | dry_run=0
+[INFO] companyID=J9A6Y | workers=12 | dry_run=0 | batch_run_days=1
 [INFO] Total employees from UKG: 1500
 [INFO] Eligible employees (by job code): 450
 [INFO] progress: 100/450 | saved=95 | skipped=3 | errors=2
-[INFO] progress: 200/450 | saved=190 | skipped=6 | errors=4
 [INFO] done: total=450 | saved=430 | skipped=12 | errors=8
 ```
 
 ### Debug Mode
 
-Enable detailed logging with `DEBUG=1`:
+Enable detailed logging with `DEBUG=1` (or `LOG_LEVEL=DEBUG`):
 
 ```
 [DEBUG] GET https://service4.ultipro.com/personnel/v1/employment-details -> 200
-[DEBUG] list len=1500; first keys=['employeeNumber', 'employeeId', ...]
 [DEBUG] supervisor for 12345: Jane Manager
-[DEBUG] skip emp=12346 state=CA
-```
-
-### Progress Reporting
-
-Batch processing reports progress every 100 records:
-
-```
-[INFO] progress: 100/450 | saved=95 | skipped=3 | errors=2
 ```
 
 ---
@@ -768,28 +752,28 @@ Batch processing reports progress every 100 records:
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `Missing MOTUS_JWT` | JWT token not set or expired | Run `python motus-get-token.py` |
-| `Missing UKG_CUSTOMER_API_KEY` | API key not configured | Set environment variable |
-| `no employment details found` | Employee doesn't exist | Verify employeeNumber in UKG |
-| `no programId found` | Ineligible job code | Check ELIGIBLE_JOB_CODES |
+| `Missing UKG_CUSTOMER_API_KEY` | API key not configured | Set the environment variable |
+| Token/JWT errors | Motus credentials missing or expired | Run `python motus-get-token.py --force --write-env` |
+| `no employment details found` | Employee doesn't exist / outside change window | Verify employeeNumber and `--batch-run-days` |
+| `no programId found` | Ineligible job code | Check `JOB_IDS` / eligible job codes |
 | `HTTP error 401` | Authentication failed | Verify credentials |
-| `HTTP error 429` | Rate limited | System auto-retries |
+| `HTTP error 429` | Rate limited | System auto-retries with backoff |
 
 ### Debugging Steps
 
 1. **Enable debug mode**: Set `DEBUG=1`
 2. **Check connectivity**: Verify network access to UKG/Motus
-3. **Validate credentials**: Test with single employee first
-4. **Review logs**: Check for WARN/ERROR messages
+3. **Test one employee**: Use the Debug API `/sync` endpoint with `dry_run: true`
+4. **Review logs**: Check for WARNING/ERROR messages
 5. **Dry run**: Use `--dry-run` to validate payloads
 
 ### FAQ
 
 **Q: Why are employees being skipped?**
-A: Employees are skipped if they have ineligible job codes or don't match the state filter.
+A: Employees are skipped if they have ineligible job codes or fall outside the `--batch-run-days` change window.
 
 **Q: How often should the JWT be refreshed?**
-A: The system now auto-refreshes the JWT token when needed. Manual refresh is only required if you see persistent authentication errors. Run `python motus-get-token.py --write-env --force` to force a refresh.
+A: The client auto-refreshes when needed. Force a refresh only on persistent auth errors: `python motus-get-token.py --force --write-env`.
 
 **Q: Can I run multiple batches in parallel?**
 A: Not recommended. Use a single batch with increased `WORKERS` instead.
@@ -835,17 +819,9 @@ A: Not recommended. Use a single batch with increased `WORKERS` instead.
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2025-11-01 | Initial release |
-| 1.0.1 | 2025-11-15 | Added state filtering for wave deployments |
-| 1.0.2 | 2025-12-01 | Improved error handling and retry logic |
-| 1.1.0 | 2026-03-26 | Added job code eligibility filtering |
-| 1.1.0 | 2026-03-26 | Added manager/supervisor name field |
-| 1.1.0 | 2026-03-26 | Added leave of absence status derivation |
-| 1.1.0 | 2026-03-26 | Added comprehensive test suite (235 tests, 91% coverage) |
-| 1.2.0 | 2026-04-03 | Added automatic token refresh in MotusClient |
-| 1.2.0 | 2026-04-03 | Added DEV/PROD environment separation (.env.dev, .env.prod) |
-| 1.2.0 | 2026-04-03 | Added Debug API for single employee troubleshooting |
-| 1.2.0 | 2026-04-03 | Enhanced correlation ID logging throughout |
-| 1.2.0 | 2026-04-03 | Test coverage improved to 93% (819 tests) |
+| 1.1.0 | 2026-03-26 | Job code eligibility filtering; manager name field; leave-status derivation |
+| 1.2.0 | 2026-04-03 | Automatic token refresh; DEV/PROD env separation; Debug API for single-employee troubleshooting |
+| 1.3.0 | 2026-04 | Clean-architecture refactor: `python -m src.presentation.cli.batch_runner` entry point; legacy scripts moved to `_deprecated/`; change-window (`--batch-run-days`) filtering |
 
 ---
 
@@ -863,7 +839,7 @@ A: Not recommended. Use a single batch with increased `WORKERS` instead.
 
 ### Escalation Path
 
-1. Check troubleshooting section
+1. Check the troubleshooting section
 2. Review logs for error details
-3. Contact integration team
+3. Contact the integration team
 4. Escalate to platform support if needed

@@ -44,16 +44,17 @@ cp .env.example .env
 # Edit .env with your credentials
 ```
 
-**Required credentials in `.env`:**
+**Required credentials in `.env`** (see [Section 4](#4-configuration) for the full list):
 ```bash
 # UKG Pro API
 UKG_USERNAME=your_ukg_username
 UKG_PASSWORD=your_ukg_password
-UKG_CUSTOMER_API_KEY=your_ukg_api_key
+UKG_CUSTOMER_API_KEY=your_ukg_customer_api_key
 UKG_COMPANY_ID=J9A6Y
 
 # BILL.com API
 BILL_API_TOKEN=your_bill_api_token
+BILL_SE_API_TOKEN=your_bill_se_api_token
 BILL_ORG_ID=your_bill_org_id
 ```
 
@@ -73,6 +74,19 @@ python -m src --dry-run sync --all --company-id J9A6Y
 
 ```bash
 python -m src sync --all --company-id J9A6Y
+```
+
+### Run for a Single Employee (Local Testing)
+
+To sync just one employee instead of the full batch, use `--employee-number`
+with the UKG **employeeNumber**:
+
+```bash
+# Dry run for one employee
+python -m src --dry-run sync --employee-number 12345 --company-id J9A6Y
+
+# Execute for one employee
+python -m src sync --employee-number 12345 --company-id J9A6Y
 ```
 
 ### Docker Alternative
@@ -211,6 +225,54 @@ from common import (
 - pip (Python package manager)
 - Docker (for containerized deployment)
 
+### Local Setup on a Desktop Machine
+
+Run the integration directly on your Mac, Windows, or Linux desktop (no Docker
+required). From the project root:
+
+**macOS / Linux:**
+```bash
+# 1. Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+# (or, for development with test tooling)
+pip install -e ".[dev]"
+
+# 3. Configure credentials
+cp .env.example .env      # then edit .env with your credentials
+
+# 4. Verify authentication
+python -m src status --check-auth
+
+# 5. Test with a single employee (dry run — no changes written)
+python -m src --dry-run sync --employee-number 12345 --company-id J9A6Y
+```
+
+**Windows (PowerShell):**
+```powershell
+# 1. Create and activate a virtual environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Configure credentials
+copy .env.example .env     # then edit .env with your credentials
+
+# 4. Verify authentication
+python -m src status --check-auth
+
+# 5. Test with a single employee (dry run)
+python -m src --dry-run sync --employee-number 12345 --company-id J9A6Y
+```
+
+Once activated, you can use either `python -m src <command>` or the installed
+`ukg-bill <command>` console script interchangeably.
+
 ### Dependencies
 
 ```bash
@@ -235,53 +297,89 @@ pip install -e ".[dev]"
 
 ### Environment Variables
 
-Create a `.env` file or set environment variables:
+The fastest way to configure is to copy the fully-commented template and edit it:
+
+```bash
+cp .env.example .env
+```
+
+`.env.example` is the source of truth for every supported variable. The table
+below lists the ones you will most commonly set. Variable names must match
+exactly (they are read by Pydantic with the prefixes shown).
+
+#### UKG Pro (prefix `UKG_`)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `UKG_API_BASE` | Yes | `https://service4.ultipro.com` | UKG Pro API base URL |
-| `UKG_USERNAME` | Yes | - | UKG API username |
-| `UKG_PASSWORD` | Yes | - | UKG API password |
-| `UKG_API_KEY` | Yes | - | UKG Customer API Key |
-| `BILL_API_BASE` | Yes | `https://gateway.bill.com/connect/v3` | BILL.com API base URL |
-| `BILL_API_TOKEN` | Yes | - | BILL.com API token |
+| `UKG_BASE_URL` | No | `https://service4.ultipro.com` | UKG Pro API base URL |
+| `UKG_USERNAME` | Yes* | - | UKG API username |
+| `UKG_PASSWORD` | Yes* | - | UKG API password |
+| `UKG_CUSTOMER_API_KEY` | Yes | - | UKG Customer API Key |
+| `UKG_BASIC_B64` | No | - | Pre-encoded Basic auth token; used instead of username/password if set |
+| `UKG_COMPANY_ID` | No | - | Default UKG company ID (fallback when `--company-id` is omitted) |
+| `UKG_DAYS_TO_PROCESS` | No | - | Only sync employees changed within this many days |
+| `JOB_CODE_FILTER` | No | - | Comma-separated job codes eligible for BILL.com sync |
+
+\* Either `UKG_USERNAME` + `UKG_PASSWORD`, **or** `UKG_BASIC_B64`, is required.
+
+#### BILL.com (prefix `BILL_`)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BILL_API_TOKEN` | Yes | - | Shared BILL.com API token (fallback for both modules) |
+| `BILL_SE_API_TOKEN` | No | - | Spend & Expense API token (overrides shared token for S&E) |
+| `BILL_AP_API_TOKEN` | No | - | Accounts Payable API token (overrides shared token for AP) |
 | `BILL_ORG_ID` | Yes | - | BILL.com Organization ID |
-| `BILL_DEFAULT_FUNDING_ACCOUNT` | No | - | Default funding account UUID |
-| `RATE_LIMIT_CALLS_PER_MINUTE` | No | `60` | API rate limit |
-| `LOG_LEVEL` | No | `INFO` | Logging level |
-| `WORKERS` | No | `12` | Thread pool size |
+| `BILL_API_BASE` | No | staging S&E URL | BILL.com S&E API base URL |
+| `BILL_AP_API_BASE` | No | staging AP URL | BILL.com AP API base URL |
+| `BILL_PRODUCTION` | No | `false` | Set `true` to target production |
+| `BILL_DEFAULT_FUNDING_ACCOUNT` | No | - | Default funding account for AP payments |
+| `BILL_RATE_LIMIT` | No | `60` | API rate limit (calls/minute) |
+| `BILL_MAX_RETRIES` | No | `3` | Max retry attempts |
 
-### Example Configuration File
+#### Batch, Logging & Other
 
-**matrix-ukg-bill.env:**
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BATCH_WORKERS` | No | `12` | Thread pool size for batch/all syncs |
+| `BATCH_LIMIT` | No | `0` | Limit records processed (`0` = all) |
+| `LOG_LEVEL` | No | `INFO` | Logging level (`DEBUG`/`INFO`/`WARNING`/`ERROR`) |
+| `LOG_FORMAT` | No | `text` | Log format (`text` or `json`) |
+| `ENVIRONMENT` | No | `development` | Environment name |
+| `DEBUG` | No | `false` | Enable verbose debug logging |
+
+Browser-automation (`SCRAPING_*`) and email-notification (`NOTIFY_*`) variables
+are documented inline in `.env.example`.
+
+### Minimal `.env` Example
+
 ```bash
+ENVIRONMENT=development
+
 # UKG Pro API
-UKG_API_BASE=https://service4.ultipro.com
+UKG_BASE_URL=https://service4.ultipro.com
 UKG_USERNAME=your-username
 UKG_PASSWORD=your-password
-UKG_API_KEY=your-customer-api-key
+UKG_CUSTOMER_API_KEY=your-customer-api-key
+UKG_COMPANY_ID=J9A6Y
 
-# BILL.com API
-BILL_API_BASE=https://gateway.bill.com/connect/v3
-BILL_API_TOKEN=your-api-token
+# BILL.com API (staging URLs by default; set BILL_PRODUCTION=true for prod)
+BILL_API_TOKEN=your-bill-api-token
+BILL_SE_API_TOKEN=your-bill-se-api-token
 BILL_ORG_ID=your-org-id
+BILL_PRODUCTION=false
 
-# Optional: Default funding account for payments
-BILL_DEFAULT_FUNDING_ACCOUNT=account-uuid
-
-# Rate limiting
-RATE_LIMIT_CALLS_PER_MINUTE=60
-
-# Logging
+# Rate limiting & logging
+BILL_RATE_LIMIT=60
 LOG_LEVEL=INFO
 ```
 
 ### Environment URLs
 
-| Environment | URL |
-|-------------|-----|
-| Production | `https://gateway.bill.com/connect/v3` |
-| Staging | `https://gateway.stage.bill.com/connect/v3` |
+| Environment | S&E Base URL | AP Base URL |
+|-------------|--------------|-------------|
+| Production | `https://gateway.bill.com/connect/v3/spend` | `https://gateway.bill.com/connect/v3` |
+| Staging (default) | `https://gateway.stage.bill.com/connect/v3/spend` | `https://gateway.stage.bill.com/connect/v3` |
 
 ---
 
@@ -315,6 +413,28 @@ ukg-bill sync --all --company-id J9A6Y
 ukg-bill --dry-run sync --all
 ```
 
+#### Sync a Single Employee
+
+Run the pipeline for one individual employee instead of the full batch. Use the
+UKG **employeeNumber** (this is the UKG employee number, not the BILL.com id):
+
+```bash
+# Sync one employee by UKG employee number
+ukg-bill sync --employee-number 12345
+
+# Scope the lookup to a specific UKG company
+ukg-bill sync --employee-number 12345 --company-id J9A6Y
+
+# Preview only (no changes written to BILL.com)
+ukg-bill --dry-run sync --employee-number 12345 --company-id J9A6Y
+
+# Assign a non-default BILL.com role to the new user
+ukg-bill sync --employee-number 12345 --default-role MEMBER
+```
+
+If the employee number is not found in UKG, the run exits non-zero with an
+`EMPLOYEE NOT FOUND` message — verify the employee number and company ID.
+
 #### Sync from File
 
 ```bash
@@ -333,6 +453,12 @@ ukg-bill export --output people.csv
 ```
 
 ### Accounts Payable Commands
+
+> **⚠️ Note:** The Accounts Payable (`ap ...`) commands are **temporarily disabled**
+> in the current build. Running any `ap` command prints a notice and exits without
+> making API calls. To re-enable, uncomment the AP dispatch block in
+> `src/presentation/cli/main.py` (see the `TEMPORARILY DISABLED` section). The
+> commands below document the intended AP behavior once re-enabled.
 
 #### Vendor Management
 
@@ -391,7 +517,7 @@ For backward compatibility, legacy scripts are still available:
 | Legacy Script | New Command |
 |---------------|-------------|
 | `run-bill-batch.py --company-id X` | `ukg-bill sync --all --company-id X` |
-| `build-bill-entity.py 12345` | `ukg-bill sync --employee-file <file>` |
+| `build-bill-entity.py 12345` | `ukg-bill sync --employee-number 12345` |
 | `upsert-bill-entity.py` | `ukg-bill sync --all` (auto upserts) |
 | `run-ap-batch.py` | `ukg-bill ap batch` |
 

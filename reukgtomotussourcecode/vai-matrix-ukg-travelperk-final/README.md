@@ -78,46 +78,41 @@ TravelPerk implements SCIM 2.0 (RFC 7644) for user provisioning:
 
 ### Self-Contained Repository
 
-This repository is **fully self-contained** with all dependencies included locally for easy Azure deployment:
+This repository is **fully self-contained** with shared utilities included
+locally under `common/` for easy Azure deployment. The core logic lives in a
+layered `src/` package; the root-level scripts are thin wrappers that load
+`.env` and delegate into `src/presentation/cli/`:
 
 ```
 vai-matrix-ukg-travelperk-final/
-├── common/                       # Shared utility modules (local copy)
-│   ├── __init__.py
-│   ├── secrets_manager.py        # SOW 2.6 - Secrets management
-│   ├── rate_limiter.py           # SOW 5.1, 5.2 - Rate limiting
-│   ├── correlation.py            # SOW 7.2 - Correlation IDs & logging
-│   ├── notifications.py          # SOW 4.6 - Email notifications
-│   ├── metrics.py                # SOW 4.7, 7.3 - Metrics collection
-│   ├── report_generator.py       # SOW 4.7, 7.3, 10.4 - Report generation
-│   ├── redaction.py              # SOW 7.4, 7.5, 9.4 - PII redaction
-│   └── validators.py             # SOW 3.6, 3.7 - Input validation
-├── build-travelperk-user.py      # Build SCIM user payload from UKG
-├── upsert-travelperk-user.py     # Create/update TravelPerk user
-├── run-travelperk-batch.py       # Two-phase batch orchestrator
+├── common/                       # Shared utility packages (local copy)
+│   ├── secrets_manager.py        # Secrets/env-file resolution
+│   ├── correlation.py            # Correlation IDs & logging config
+│   ├── rate_limiter/             # Rate limiting
+│   ├── notifications/            # Email/alert notifications
+│   └── redaction/                # PII redaction
+├── src/
+│   ├── domain/                   # Entities, SCIM user model, interfaces
+│   ├── application/services/     # user_builder, two-phase sync
+│   ├── infrastructure/
+│   │   ├── config/settings.py    # UKG / TravelPerk / Batch settings
+│   │   └── adapters/{ukg,travelperk}/
+│   └── presentation/cli/         # batch_runner, build_user, upsert_user, health
+├── build-travelperk-user.py      # Wrapper: build one SCIM payload from UKG
+├── upsert-travelperk-user.py     # Wrapper: create/update one TravelPerk user
+├── run-travelperk-batch.py       # Wrapper: two-phase batch orchestrator (Docker ENTRYPOINT)
 ├── Dockerfile                    # Container definition
 └── requirements.txt              # Python dependencies
 ```
 
-All scripts import from the local `./common/` package:
+### Entry Points
 
-```python
-from common import (
-    get_secrets_manager,
-    get_rate_limiter,
-    generate_correlation_id,
-    redact_pii,
-    # ... other imports
-)
-```
-
-### Core Components
-
-| Component | File | Description |
-|-----------|------|-------------|
-| Payload Builder | `build-travelperk-user.py` | Builds SCIM-compliant user payloads from UKG data |
-| SCIM Upserter | `upsert-travelperk-user.py` | Handles SCIM API operations with retry logic |
-| Batch Orchestrator | `run-travelperk-batch.py` | Two-phase batch processing with parallel execution |
+| Interface | Invocation | Description |
+|-----------|------------|-------------|
+| Batch orchestrator | `python run-travelperk-batch.py ...` (or `ukg-travelperk ...` after `pip install -e .`) | Two-phase batch, parallel execution; this is the Docker `ENTRYPOINT` |
+| Single-user build | `python build-travelperk-user.py <employeeNumber> <companyID>` | Build one SCIM payload → `data/travelperk_user_<n>.json` |
+| Single-user upsert | `python upsert-travelperk-user.py <employeeNumber> [--dry-run]` | Upsert one user from that JSON file |
+| Health check | `python -m src.presentation.cli.health [--json] [--verbose]` | Env/data-dir/import checks for orchestration |
 
 ---
 
@@ -198,9 +193,18 @@ When an employee is terminated in UKG:
 
 ### System Requirements
 
-- Python 3.11 or higher
+- Python 3.9 or higher (`requires-python = ">=3.9"`; the Docker image uses 3.11)
 - pip (Python package manager)
 - Docker (for containerized deployment, optional)
+
+### Development Installation
+
+Install in editable mode to get the `ukg-travelperk` console script and test
+tooling (`pytest`, `pytest-cov`, `responses`, `mypy`, `ruff`, `black`):
+
+```bash
+pip install -e ".[dev]"
+```
 
 ### Access Requirements
 
@@ -284,20 +288,37 @@ python run-travelperk-batch.py --company-id J9A6Y
 
 | Option | Example | Description |
 |--------|---------|-------------|
-| `--company-id` | `J9A6Y` | **Required** - UKG Company ID |
+| `--company-id` | `J9A6Y` | **Required** - UKG Company ID (falls back to `COMPANY_ID` env) |
+| `--employee-id` | `12345` | Process only this employee (by `employeeNumber`) |
 | `--dry-run` | - | Validate payloads without API calls |
 | `--limit` | `10` | Process only N records (for testing) |
 | `--states` | `FL,MS,NJ` | Filter by US state codes |
-| `--employee-type-codes` | `FTC,HRC` | Filter by employee types |
+| `--employee-type-codes` | `FTC,HRC` | Filter by employee types (FTC/HRC/TMC) |
 | `--workers` | `12` | Thread pool size (default: 12) |
 | `--save-local` | - | Save JSON payloads to `data/batch/` |
-| `--insert-supervisor` | `004295` | Pre-insert supervisor(s) |
+| `--insert-supervisor` | `004295` | Pre-insert supervisor(s) by `employeeNumber` |
+
+### Run for a Single Employee (Local Testing)
+
+To sync just one employee instead of the full batch, use `--employee-id` with
+the UKG **employeeNumber**:
+
+```bash
+# Dry run for one employee (no changes written to TravelPerk)
+python run-travelperk-batch.py --company-id J9A6Y --employee-id 12345 --dry-run
+
+# Execute for one employee
+python run-travelperk-batch.py --company-id J9A6Y --employee-id 12345
+```
+
+If the employee number is not found in UKG, the run exits with an error —
+verify the employee number and company ID.
 
 ### Verify Installation
 
 ```bash
 # Check Python version
-python --version  # Should be 3.11+
+python --version  # Should be 3.9+
 
 # Verify dependencies
 pip list | grep -E "requests|python-dotenv"
@@ -316,20 +337,31 @@ Create a `matrix-ukg-tp.env` file or set environment variables:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `UKG_BASE_URL` | Yes | `https://service4.ultipro.com` | UKG Pro API base URL |
-| `UKG_USERNAME` | Yes | - | UKG API username |
-| `UKG_PASSWORD` | Yes | - | UKG API password |
+| `UKG_BASE_URL` | No | `https://service4.ultipro.com` | UKG Pro API base URL |
+| `UKG_USERNAME` | Yes* | - | UKG API username |
+| `UKG_PASSWORD` | Yes* | - | UKG API password |
 | `UKG_CUSTOMER_API_KEY` | Yes | - | UKG Customer API Key header |
-| `UKG_BASIC_B64` | No | - | Pre-encoded Base64 auth token |
-| `TRAVELPERK_API_BASE` | Yes | - | TravelPerk API base URL |
-| `TRAVELPERK_API_KEY` | Yes | - | TravelPerk API key |
-| `COMPANY_ID` | Yes | `J9A6Y` | UKG Company ID |
-| `STATES` | No | - | Comma-separated state filter |
-| `WORKERS` | No | `12` | Thread pool size |
-| `RATE_LIMIT_CALLS_PER_MINUTE` | No | `60` | API rate limit |
-| `REDACT_PII` | No | `1` | Redact PII in logs (0/1) |
-| `DEBUG` | No | `0` | Enable debug logging (0/1) |
+| `UKG_BASIC_B64` | No | - | Pre-encoded Basic auth token; used instead of username/password if set |
+| `UKG_TIMEOUT` | No | `45` | UKG request timeout (seconds) |
+| `TRAVELPERK_API_BASE` | No | `https://app.sandbox-travelperk.com` | TravelPerk SCIM API base URL |
+| `TRAVELPERK_API_KEY` | Yes | - | TravelPerk API key (sent as `Authorization: ApiKey ...`) |
+| `TRAVELPERK_TIMEOUT` | No | `60` | TravelPerk request timeout (seconds) |
+| `TRAVELPERK_RATE_LIMIT` | No | `200` | TravelPerk API rate limit (calls/minute) |
 | `MAX_RETRIES` | No | `2` | Max retry attempts |
+| `COMPANY_ID` | Yes** | - | UKG Company ID (fallback when `--company-id` omitted) |
+| `STATES` | No | - | Comma-separated state filter |
+| `EMPLOYEE_TYPE_CODES` | No | - | Comma-separated employee-type filter (FTC/HRC/TMC) |
+| `WORKERS` | No | `12` | Thread pool size |
+| `LIMIT` | No | `0` | Limit records processed (`0` = all) |
+| `LOG_LEVEL` | No | - | Logging level (`DEBUG`/`INFO`/`WARNING`/`ERROR`) |
+| `DEBUG` | No | `0` | Enable debug logging (`1` enables) |
+
+\* Either `UKG_USERNAME` + `UKG_PASSWORD`, **or** `UKG_BASIC_B64`, is required.
+&nbsp;&nbsp;\*\* Required unless passed as `--company-id`.
+
+> **Note:** PII redaction is always applied to logs via a logging filter. The
+> `REDACT_PII` variable is echoed in the startup banner but does **not** toggle
+> redaction on or off in the current build.
 
 ### Environment URLs
 
@@ -348,17 +380,15 @@ UKG_USERNAME=your-username
 UKG_PASSWORD=your-password
 UKG_CUSTOMER_API_KEY=your-customer-api-key
 
-# TravelPerk Configuration
+# TravelPerk Configuration (sandbox URL by default; use app.travelperk.com for prod)
 TRAVELPERK_API_BASE=https://app.sandbox-travelperk.com
 TRAVELPERK_API_KEY=your-api-key
-
-# Compliance Settings
-RATE_LIMIT_CALLS_PER_MINUTE=60
-REDACT_PII=1
+TRAVELPERK_RATE_LIMIT=200
 
 # Batch Configuration
 COMPANY_ID=J9A6Y
 WORKERS=12
+LOG_LEVEL=INFO
 DEBUG=0
 ```
 
@@ -368,16 +398,29 @@ DEBUG=0
 
 ### Single Employee Processing
 
-Build a SCIM payload for one employee:
+There are two ways to run for a single employee.
+
+**Option A — one batch run scoped to one employee** (recommended; runs the full
+two-phase pipeline):
 
 ```bash
-python build-travelperk-user.py <employeeNumber>
-
-# Example
-python build-travelperk-user.py 000479
+python run-travelperk-batch.py --company-id J9A6Y --employee-id 000479 --dry-run
+python run-travelperk-batch.py --company-id J9A6Y --employee-id 000479
 ```
 
-Upsert a single employee to TravelPerk:
+**Option B — build then upsert with the standalone scripts.**
+
+Build a SCIM payload for one employee (requires **both** `employeeNumber` and
+`companyID`); output is written to `data/travelperk_user_<employeeNumber>.json`:
+
+```bash
+python build-travelperk-user.py <employeeNumber> <companyID>
+
+# Example
+python build-travelperk-user.py 000479 J9A6Y
+```
+
+Upsert that employee to TravelPerk from the generated JSON file:
 
 ```bash
 python upsert-travelperk-user.py <employeeNumber> [--dry-run]
@@ -394,6 +437,9 @@ Process all employees:
 ```bash
 # Full batch
 python run-travelperk-batch.py --company-id J9A6Y
+
+# Single employee by UKG employeeNumber
+python run-travelperk-batch.py --company-id J9A6Y --employee-id 12345
 
 # Limit number of records
 python run-travelperk-batch.py --company-id J9A6Y --limit 10
@@ -418,12 +464,15 @@ python run-travelperk-batch.py --company-id J9A6Y --states FL,MS --limit 50 --dr
 
 | Option | Description |
 |--------|-------------|
-| `--company-id` | UKG Company ID (required) |
+| `--company-id` | UKG Company ID (falls back to `COMPANY_ID` env) |
+| `--employee-id` | Process only this employee (by `employeeNumber`) |
 | `--limit` | Maximum number of records to process |
 | `--states` | Comma-separated US state codes |
-| `--employee-type-codes` | Comma-separated employee type filters |
+| `--employee-type-codes` | Comma-separated employee type filters (FTC/HRC/TMC) |
+| `--workers` | Thread pool size |
+| `--save-local` | Save JSON payloads to `data/batch/` |
 | `--dry-run` | Validate without API calls |
-| `--insert-supervisor` | Insert specific supervisor first |
+| `--insert-supervisor` | Pre-insert supervisor(s) by `employeeNumber` |
 
 ### Recommended Workflow
 
@@ -498,10 +547,10 @@ GET /api/v2/scim/Users?filter=userName eq "john.doe@example.com"
 
 | Feature | Status | Implementation | Code Location |
 |---------|--------|---------------|---------------|
-| Rate Limiting | Implemented | Token bucket algorithm | `upsert-travelperk-user.py:39-54` |
-| 429 Handling | Implemented | Retry-After header support | `upsert-travelperk-user.py:60-72` |
-| Correlation IDs | Implemented | UUID v4 for request tracing | `upsert-travelperk-user.py:75-92` |
-| PII Redaction | Implemented | Email masking in logs | `upsert-travelperk-user.py:95-119` |
+| Rate Limiting | Implemented | Token bucket algorithm | `common/rate_limiter/` |
+| 429 Handling | Implemented | Retry-After header support | `src/infrastructure/adapters/travelperk/client.py` |
+| Correlation IDs | Implemented | UUID v4 for request tracing | `common/correlation.py` |
+| PII Redaction | Implemented | Email masking in logs | `common/redaction/` |
 
 ### Rate Limiting
 
@@ -583,25 +632,30 @@ def redact_email(email: str) -> str:
 
 ### Test Structure
 
+Tests mirror the `src/` layers under `tests/unit/`, plus shared-library tests
+and an `tests/integration/` suite:
+
 ```
 tests/
-├── __init__.py
 ├── conftest.py
 ├── unit/
-│   ├── __init__.py
-│   ├── test_build_travelperk_user.py
-│   ├── test_upsert_travelperk_user.py
-│   ├── test_run_travelperk_batch.py
-│   └── test_rate_limiter.py
+│   ├── application/        # test_user_builder, test_user_sync, services/test_batch_processor
+│   ├── domain/            # test_travelperk_user, exceptions/*
+│   ├── infrastructure/    # adapters/{ukg,travelperk}, config, http/*
+│   ├── presentation/      # test_batch_runner, test_build_user, test_upsert_user
+│   └── test_*.py          # common libs: correlation, redaction, secrets_manager, validators, ...
 └── integration/
-    ├── __init__.py
-    └── test_e2e.py
+    ├── test_ukg_client_integration.py
+    ├── test_travelperk_client_integration.py
+    ├── test_user_builder_integration.py
+    ├── test_two_phase_sync_integration.py
+    └── test_common_utilities_integration.py
 ```
 
 ### Running Tests
 
 ```bash
-# Run all tests
+# Run all tests (coverage runs automatically via addopts, fails under 85% of src)
 pytest
 
 # Run unit tests only
@@ -610,22 +664,15 @@ pytest tests/unit/ -v
 # Run integration tests only
 pytest tests/integration/ -v
 
-# Run with coverage report
-pytest --cov=. --cov-report=html
+# Skip integration tests
+pytest -m "not integration"
 
-# Run specific test file
-pytest tests/unit/test_rate_limiter.py -v
+# Run a specific test file
+pytest tests/unit/presentation/test_batch_runner.py -v
 ```
 
-### Test Categories
-
-| Test File | Coverage |
-|-----------|----------|
-| `test_rate_limiter.py` | Rate limiting functionality |
-| `test_build_travelperk_user.py` | SCIM payload building |
-| `test_upsert_travelperk_user.py` | SCIM API operations |
-| `test_run_travelperk_batch.py` | Batch orchestration |
-| `test_e2e.py` | End-to-end flow |
+Coverage is configured on `src` (`--cov=src`) with a `--cov-fail-under=85`
+threshold.
 
 ---
 
@@ -646,15 +693,22 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-COPY build-travelperk-user.py upsert-travelperk-user.py run-travelperk-batch.py /app/
-COPY requirements.txt /app/
-
+# Copies common/, src/, the three root scripts and requirements.txt,
+# installs deps, and runs as a non-root appuser (uid 1000).
+COPY common/ /app/common/
+COPY src/ /app/src/
+COPY build-travelperk-user.py upsert-travelperk-user.py run-travelperk-batch.py requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
-RUN mkdir -p /app/data
 
 ENTRYPOINT ["python3", "run-travelperk-batch.py"]
 CMD []
 ```
+
+An alternative Azure-oriented `docker-entrypoint.sh` is included (it builds the
+argument list from environment variables such as `EMPLOYEE_ID`,
+`INSERT_SUPERVISOR`, and `LIMIT`), plus a `docker-compose.yml` and an `azure/`
+deployment directory. The Dockerfile itself invokes `run-travelperk-batch.py`
+directly.
 
 #### Run Container
 
@@ -733,14 +787,10 @@ az container create \
 
 ### PII Redaction in Logs
 
-With `REDACT_PII=1` (default):
+PII redaction is always applied via a logging filter, so email addresses are
+masked in logs regardless of configuration:
 ```
 [DEBUG] GET /api/v2/scim/Users?filter=userName eq "jo***@example.com"
-```
-
-Without redaction (`REDACT_PII=0`):
-```
-[DEBUG] GET /api/v2/scim/Users?filter=userName eq "john.doe@example.com"
 ```
 
 ### Result Output
@@ -775,10 +825,9 @@ Each operation outputs JSON result:
 ### Debugging Steps
 
 1. **Enable debug mode**: Set `DEBUG=1`
-2. **Disable PII redaction**: Set `REDACT_PII=0` (temporarily)
-3. **Test single employee**: Use `upsert-travelperk-user.py` directly
-4. **Check correlation ID**: Trace requests through logs
-5. **Dry run**: Use `--dry-run` to validate payloads
+2. **Test single employee**: Use `--employee-id <employeeNumber> --dry-run`
+3. **Check correlation ID**: Trace requests through logs
+4. **Dry run**: Use `--dry-run` to validate payloads
 
 ### 409 Conflict Resolution
 
@@ -831,7 +880,7 @@ Authorization: ApiKey your-api-key-here
 - All secrets stored as environment variables
 - Never commit `.env` files to version control
 - Use Azure Key Vault for production deployments
-- PII redaction enabled by default (`REDACT_PII=1`)
+- PII redaction is always applied to log output
 
 ### Network Security
 
@@ -849,6 +898,7 @@ Authorization: ApiKey your-api-key-here
 | 1.0.1 | 2025-12-10 | Added state and employee type filtering |
 | 1.1.0 | 2026-03-26 | Added SOW compliance features (rate limiting, 429 handling, correlation IDs, PII redaction) |
 | 1.1.0 | 2026-03-26 | Added comprehensive test suite |
+| 1.2.0 | 2026-04 | Layered `src/` architecture; `ukg-travelperk` console script; `--employee-id` single-employee flag; `TRAVELPERK_RATE_LIMIT` config; docker-compose + Azure deployment assets |
 
 ---
 
